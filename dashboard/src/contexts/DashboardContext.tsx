@@ -9,7 +9,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { createBrowserClient } from "@/lib/supabase";
+import { createBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { Company, AgentStatus } from "@/lib/supabase";
 import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 
@@ -95,7 +95,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (!companyId) {
+    if (!companyId || !isSupabaseConfigured()) {
       setCompany(null);
       setAgentStatuses([]);
       setPendingDecisions(0);
@@ -222,6 +222,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const togglePause = useCallback(async () => {
     if (!companyId) return;
+    if (!isSupabaseConfigured()) {
+      // Toggle locally even without Supabase
+      const newStatus = isPaused ? "active" : "paused";
+      setCompany((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      return;
+    }
     const supabase = getSupabase();
     const newStatus = isPaused ? "active" : "paused";
     const actionLabel = isPaused ? "resumed" : "paused";

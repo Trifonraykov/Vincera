@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp } from "lucide-react";
-import { createBrowserClient } from "@/lib/supabase";
+import { createBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { Company } from "@/lib/supabase";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,8 @@ export default function CompanySelector({ isExpanded }: CompanySelectorProps) {
 
   // Fetch companies list
   useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+
     const supabase = createBrowserClient();
     async function fetch() {
       const { data } = await supabase

@@ -8,14 +8,32 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 function getSupabaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
+  if (!url) {
+    if (typeof window !== "undefined") {
+      console.warn("Missing NEXT_PUBLIC_SUPABASE_URL — Supabase features disabled");
+    }
+    return "";
+  }
   return url;
 }
 
 function getSupabaseAnonKey(): string {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!key) {
+    if (typeof window !== "undefined") {
+      console.warn("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase features disabled");
+    }
+    return "";
+  }
   return key;
+}
+
+/** Returns true if Supabase env vars are configured. */
+export function isSupabaseConfigured(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 }
 
 // ---------------------------------------------------------------------------
