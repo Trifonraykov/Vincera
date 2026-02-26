@@ -109,7 +109,9 @@ export default function ActivityFeed({ items, isLoading }: ActivityFeedProps) {
         )}
 
         {!isLoading &&
-          items.map((item) => <FeedRow key={item.id} item={item} />)}
+          items.map((item) => (
+            <FeedRow key={item.id} item={item} isNew={item.isNew} />
+          ))}
       </div>
     </motion.div>
   );

@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useReducedMotion } from "framer-motion";
 import type { Variants } from "framer-motion";
+
+export { useReducedMotion };
 
 // ---------------------------------------------------------------------------
 // Page-level transitions
@@ -68,7 +71,7 @@ export const pulseGlow: Variants = {
 
 export const breathe: Variants = {
   animate: {
-    scale: [1, 1.02, 1],
+    scale: [1, 1.003, 1],
     transition: { duration: 4, ease: "easeInOut", repeat: Infinity },
   },
 };
@@ -100,14 +103,26 @@ export const chatMessageIn: Variants = {
 };
 
 // ---------------------------------------------------------------------------
+// Reduced-motion instant variants
+// ---------------------------------------------------------------------------
+
+export const instantVariants: Variants = {
+  hidden: { opacity: 1 },
+  visible: { opacity: 1 },
+  exit: { opacity: 1 },
+};
+
+// ---------------------------------------------------------------------------
 // Hooks
 // ---------------------------------------------------------------------------
 
 /**
  * Animates from 0 to `target` over `duration` seconds.
  * Returns the current animated value.
+ * Respects prefers-reduced-motion — returns target instantly.
  */
 export function useNumberCountUp(target: number, duration = 1.5): number {
+  const shouldReduce = useReducedMotion();
   const [current, setCurrent] = useState(0);
   const startTimeRef = useRef<number | null>(null);
   const rafRef = useRef<number>(0);
@@ -115,6 +130,11 @@ export function useNumberCountUp(target: number, duration = 1.5): number {
   useEffect(() => {
     if (target === 0) {
       setCurrent(0);
+      return;
+    }
+
+    if (shouldReduce) {
+      setCurrent(target);
       return;
     }
 
@@ -142,7 +162,7 @@ export function useNumberCountUp(target: number, duration = 1.5): number {
     return () => {
       cancelAnimationFrame(rafRef.current);
     };
-  }, [target, duration]);
+  }, [target, duration, shouldReduce]);
 
   return current;
 }

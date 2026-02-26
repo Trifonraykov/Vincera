@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useCallback, useRef, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { AnimatePresence } from "framer-motion";
 import { DashboardProvider, useDashboard } from "@/contexts/DashboardContext";
 import Sidebar from "@/components/ui/Sidebar";
 import TopBar from "@/components/ui/TopBar";
 import PauseOverlay from "@/components/ui/PauseOverlay";
+import ParticleCanvas from "@/components/ui/ParticleCanvas";
+import type { ParticleCanvasHandle } from "@/components/ui/ParticleCanvas";
 import type { AgentStatus } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -13,6 +17,8 @@ import type { AgentStatus } from "@/lib/supabase";
 
 function DashboardShell({ children }: { children: ReactNode }) {
   const { isPaused, togglePause, agentStatuses } = useDashboard();
+  const pathname = usePathname();
+  const particleRef = useRef<ParticleCanvasHandle>(null);
 
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
@@ -25,6 +31,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
         // Already paused → resume
         await togglePause();
         setOverlayVisible(false);
+        particleRef.current?.resume();
       } else {
         // Pause
         setButtonRect(rect);
@@ -37,6 +44,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
           })
         );
         setOverlayVisible(true);
+        particleRef.current?.pause();
         await togglePause();
       }
     },
@@ -46,10 +54,12 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const handleResume = useCallback(async () => {
     await togglePause();
     setOverlayVisible(false);
+    particleRef.current?.resume();
   }, [togglePause]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-primary">
+      <ParticleCanvas ref={particleRef} />
       <Sidebar />
 
       {/* Main area — offset by collapsed sidebar width */}
@@ -57,7 +67,11 @@ function DashboardShell({ children }: { children: ReactNode }) {
         <TopBar onPause={handlePause} />
 
         {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="relative z-[10] flex-1 overflow-y-auto p-6">
+          <AnimatePresence mode="wait">
+            <div key={pathname}>{children}</div>
+          </AnimatePresence>
+        </main>
       </div>
 
       <PauseOverlay

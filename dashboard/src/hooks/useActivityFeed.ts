@@ -16,6 +16,7 @@ export interface FeedItem {
   content: string;
   severity: string;
   createdAt: string;
+  isNew?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,7 @@ export function useActivityFeed(companyId: string | null): {
   const [isLoading, setIsLoading] = useState(true);
   const supabaseRef = useRef<SupabaseClient | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   const mergeAndSort = useCallback(
     (events: FeedItem[], messages: FeedItem[]): FeedItem[] => {
@@ -51,6 +53,8 @@ export function useActivityFeed(companyId: string | null): {
       setIsLoading(false);
       return;
     }
+
+    initialLoadDoneRef.current = false;
 
     if (!supabaseRef.current) {
       supabaseRef.current = createBrowserClient();
@@ -97,6 +101,7 @@ export function useActivityFeed(companyId: string | null): {
 
       setItems(mergeAndSort(eventItems, msgItems));
       setIsLoading(false);
+      initialLoadDoneRef.current = true;
     }
 
     fetchFeed();
@@ -129,6 +134,7 @@ export function useActivityFeed(companyId: string | null): {
             content: e.message,
             severity: e.severity,
             createdAt: e.created_at,
+            isNew: initialLoadDoneRef.current,
           };
           setItems((prev) => [item, ...prev].slice(0, FEED_LIMIT));
         }
@@ -158,6 +164,7 @@ export function useActivityFeed(companyId: string | null): {
             content: m.content,
             severity: m.message_type === "alert" ? "warning" : "info",
             createdAt: m.created_at,
+            isNew: initialLoadDoneRef.current,
           };
           setItems((prev) => [item, ...prev].slice(0, FEED_LIMIT));
         }

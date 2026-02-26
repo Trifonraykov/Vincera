@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useNumberCountUp } from "@/lib/animations";
 import type { Company } from "@/lib/supabase";
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,14 @@ export default function CompanyHeader({
   automationCount,
   totalHoursSaved,
 }: CompanyHeaderProps) {
+  const animatedAgents = useNumberCountUp(agentCount, 1.0);
+  const animatedAutomations = useNumberCountUp(automationCount, 1.0);
+  const animatedHoursTenths = useNumberCountUp(
+    Math.round(totalHoursSaved * 10),
+    1.2
+  );
+  const displayHours = animatedHoursTenths / 10;
+
   if (!company) {
     return (
       <div className="rounded-t-lg border border-border-primary bg-bg-surface p-6">
@@ -96,13 +105,11 @@ export default function CompanyHeader({
 
       {/* Row 3: Stats */}
       <div className="mt-3 flex items-center gap-1 font-body text-sm text-text-secondary">
-        <span className="font-mono text-text-primary">{agentCount}</span>{" "}
+        <span className="font-mono text-text-primary">{animatedAgents}</span>{" "}
         agents &middot;{" "}
-        <span className="font-mono text-text-primary">{automationCount}</span>{" "}
+        <span className="font-mono text-text-primary">{animatedAutomations}</span>{" "}
         automations &middot;{" "}
-        <span className="font-mono text-text-primary">
-          {Math.round(totalHoursSaved * 10) / 10}
-        </span>{" "}
+        <span className="font-mono text-text-primary">{displayHours}</span>{" "}
         hrs saved
       </div>
     </div>

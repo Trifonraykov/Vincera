@@ -43,7 +43,7 @@ const config: Config = {
         },
         breathe: {
           "0%, 100%": { transform: "scale(1)" },
-          "50%": { transform: "scale(1.02)" },
+          "50%": { transform: "scale(1.003)" },
         },
       },
     },
