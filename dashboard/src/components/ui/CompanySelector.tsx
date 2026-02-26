@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronUp } from "lucide-react";
+import { ChevronUp, Settings } from "lucide-react";
+import Link from "next/link";
 import { createBrowserClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { Company } from "@/lib/supabase";
 import { useDashboard } from "@/contexts/DashboardContext";
@@ -117,6 +118,15 @@ export default function CompanySelector({ isExpanded }: CompanySelectorProps) {
                 </div>
               )}
             </div>
+            {company && (
+              <Link
+                href={`/dashboard/company/${company.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded p-1 text-text-muted transition-colors hover:text-text-primary"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </Link>
+            )}
             {companies.length > 1 && (
               <ChevronUp
                 className={cn(
