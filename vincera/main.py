@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import logging
 import os
 import signal
 import sys
@@ -107,15 +109,92 @@ def handle_run(state, settings, *, shutdown_event: threading.Event | None = None
         signal.signal(signal.SIGTERM, _signal_handler)
         signal.signal(signal.SIGINT, _signal_handler)
 
-    # Main loop (stub — agents will be added in later stages)
-    if not shutdown.is_set():
-        shutdown.wait(timeout=1 if shutdown_event else 60)
+    # Run the async agent system
+    asyncio.run(_run_async(state, settings, shutdown))
 
     # Clean shutdown
     state.save_snapshot(home_dir / "core" / "snapshot.json")
 
     if pid_path.exists():
         pid_path.unlink()
+
+
+async def _run_async(state, settings, shutdown: threading.Event) -> None:
+    """Async entry point — wires components and runs the event loop."""
+    from vincera.core.agent_factory import AgentFactory
+    from vincera.core.llm import OpenRouterClient
+    from vincera.core.message_handler import MessageHandler
+    from vincera.core.message_poller import MessagePoller
+    from vincera.knowledge.supabase_client import SupabaseManager
+    from vincera.utils.db import VinceraDB
+
+    logger = logging.getLogger(__name__)
+
+    # Build core services
+    db = VinceraDB(db_path=settings.home_dir / "core" / "vincera.db")
+    sb = SupabaseManager(
+        supabase_url=settings.supabase_url,
+        supabase_key=settings.supabase_service_key,
+        company_id=settings.company_id or "",
+    )
+    llm = OpenRouterClient(
+        api_key=settings.openrouter_api_key,
+        default_model=settings.agent_model,
+        company_name=settings.company_name,
+        agent_name=settings.agent_name,
+        db_path=settings.home_dir / "core" / "tokens.db",
+    )
+
+    # Wire everything via the factory
+    components = AgentFactory.create_all(
+        config=settings, llm=llm, supabase=sb, state=state, db=db,
+    )
+
+    orchestrator = components["orchestrator"]
+    scheduler = components["scheduler"]
+    sandbox = components["sandbox"]
+    corrections = components["corrections"]
+    agents = components["agents"]
+
+    # Initialise async components
+    await sandbox.initialize()
+    await orchestrator.initialize()
+
+    # Message handling
+    handler = MessageHandler(
+        orchestrator=orchestrator,
+        agents=agents,
+        corrections=corrections,
+        supabase=sb,
+        company_id=settings.company_id or "",
+    )
+    poller = MessagePoller(handler=handler, supabase=sb, company_id=settings.company_id or "")
+
+    # Startup message
+    sb.send_message(
+        settings.company_id or "", "system",
+        f"Vincera is online. {settings.agent_name} reporting for duty at {settings.company_name}.",
+        "chat",
+    )
+    console.print(f"[green]Vincera is online. {settings.agent_name} reporting for duty.[/green]")
+
+    # Launch background tasks
+    poller_task = asyncio.create_task(poller.start())
+    scheduler_task = asyncio.create_task(scheduler.run_loop())
+
+    # Wait for shutdown signal in a non-blocking way
+    try:
+        while not shutdown.is_set():
+            await asyncio.sleep(0.5)
+    finally:
+        logger.info("Shutdown signal received — stopping …")
+        poller.stop()
+        scheduler.stop()
+        # Give tasks a moment to finish
+        await asyncio.sleep(0.1)
+        poller_task.cancel()
+        scheduler_task.cancel()
+        await llm.close()
 
 
 # ------------------------------------------------------------------
