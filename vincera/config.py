@@ -106,6 +106,12 @@ class VinceraSettings(BaseSettings):
         path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
+    @property
+    def logs_dir(self) -> Path:
+        """Path to the logs directory inside VinceraHQ."""
+        return self.home_dir / "logs"
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> VinceraSettings:
     """Get the singleton VinceraSettings instance."""
