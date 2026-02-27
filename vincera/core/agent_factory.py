@@ -128,6 +128,30 @@ class AgentFactory:
         model_builder = CompanyModelBuilder(llm=llm)
 
         # ------------------------------------------------------------------
+        # System Observer (orchestrator's direct eyes on the machine)
+        # ------------------------------------------------------------------
+        from vincera.core.system_observer import ObserverConfig, SystemObserver
+
+        observer_config = ObserverConfig(
+            watched_directories=[
+                str(config.home_dir),
+                str(config.home_dir / "scripts"),
+                str(config.home_dir / "deployments"),
+            ],
+            log_paths=[
+                str(config.home_dir / "logs" / "vincera.log"),
+            ],
+        )
+        system_observer = SystemObserver(
+            scanner=scanner,
+            filesystem=filesystem,
+            database=database_discovery,
+            network=network,
+            platform_service=platform_service,
+            config=observer_config,
+        )
+
+        # ------------------------------------------------------------------
         # Research sub-components
         # ------------------------------------------------------------------
         researcher = BusinessResearcher(llm=llm)
@@ -192,6 +216,7 @@ class AgentFactory:
             config=config, llm=llm, supabase=supabase, state=state,
             ontology=ontology, priority_engine=priority, authority=authority,
             ghost_controller=ghost, verifier=verifier, agents=agents,
+            observer=system_observer,
         )
 
         # ------------------------------------------------------------------

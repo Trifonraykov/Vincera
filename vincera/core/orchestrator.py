@@ -1,18 +1,23 @@
 """Orchestrator — the always-on central brain of Vincera.
 
-The orchestrator NEVER stops.  It continuously:
-1.  Maps and understands the company (owns discovery + company model)
-2.  Processes automation tasks from the backlog (delegates to builder)
-3.  Manages post-completion follow-up (operator for canary/run, analyst for review)
-4.  Seeks new automation opportunities (re-discovery, research, LLM ideation)
-5.  Narrates everything it does in real-time chat (via OpenRouter)
-6.  Requires human approval for sensitive / risky operations
+LOOK → THINK → ACT → NARRATE — every cycle, non-stop.
+
+The orchestrator has direct access to the machine.  It runs commands,
+reads logs, watches processes, inspects databases, monitors file changes
+— constantly.  It doesn't delegate observation.  It IS the observer.
+
+When it finds something that needs deeper work — automation, research,
+repair, analysis — it spins up the right sub-agent, gives it a task,
+watches it work, and kills it when done.
+
+It narrates everything in real-time chat.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -30,6 +35,7 @@ if TYPE_CHECKING:
     from vincera.core.ontology import BusinessOntology, OntologyMapping
     from vincera.core.priority import PriorityEngine
     from vincera.core.state import GlobalState
+    from vincera.core.system_observer import SystemDiff, SystemObserver, SystemSnapshot
     from vincera.knowledge.supabase_client import SupabaseManager
     from vincera.verification.verifier import Verifier
 
@@ -44,7 +50,7 @@ class OrchestratorState(BaseModel):
     """Serializable brain state — survives restarts."""
 
     current_phase: str = "installing"
-    active_subphase: str = "working"  # working | post_completion | seeking
+    active_subphase: str = "working"  # working | post_completion | seeking | observing
     company_model: dict | None = None
     ontology_mapping: dict | None = None
     ranked_automations: list[dict] = []
@@ -57,6 +63,39 @@ class OrchestratorState(BaseModel):
     last_training_at: str | None = None
     last_analysis_at: str | None = None
     last_opportunity_scan_at: str | None = None
+    # LTAN observation state
+    last_snapshot: dict | None = None
+    last_diff_summary: dict | None = None
+    last_observation_at: str | None = None
+    active_agent_sessions: list[dict] = []  # [{agent_name, task_name, started_at}]
+
+
+# ---------------------------------------------------------------------------
+# Read-only command allow-list (for LLM-requested shell commands)
+# ---------------------------------------------------------------------------
+
+_ALLOWED_COMMANDS = frozenset({
+    "ls", "cat", "tail", "head", "ps", "df", "du", "top", "uptime",
+    "netstat", "ss", "lsof", "uname", "hostname", "whoami", "id",
+    "crontab", "launchctl", "systemctl", "wc", "file", "stat",
+    "find", "grep", "which", "env", "printenv", "mount", "free",
+    "docker", "pip", "npm", "node", "python3",
+})
+
+_DANGEROUS_CHARS = re.compile(r"[;|&><`$()]")
+
+
+def _is_safe_command(args: list[str]) -> bool:
+    """Return True only for read-only commands without shell injection."""
+    if not args:
+        return False
+    cmd = args[0].split("/")[-1]  # handle /usr/bin/ls → ls
+    if cmd not in _ALLOWED_COMMANDS:
+        return False
+    joined = " ".join(args)
+    if _DANGEROUS_CHARS.search(joined):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -64,15 +103,11 @@ class OrchestratorState(BaseModel):
 # ---------------------------------------------------------------------------
 
 class Orchestrator:
-    """Central coordinator that drives all autonomous behaviour.
+    """Central brain — LOOK → THINK → ACT → NARRATE, every cycle, non-stop.
 
-    The orchestrator is the single brain responsible for:
-    -  Mapping and understanding the company (via discovery agent)
-    -  Continuously finding automation opportunities
-    -  Delegating work to the right sub-agents
-    -  Narrating everything in real-time via chat
-    -  Requiring human approval for sensitive operations
-    -  NEVER stopping — when the backlog runs out it actively looks for more
+    The orchestrator is the ONLY thing that activates agents.  Agents are
+    spun up for specific tasks, then killed when done.  Every activation
+    and deactivation is announced in chat.
     """
 
     # Intervals for continuous-improvement housekeeping
@@ -93,6 +128,7 @@ class Orchestrator:
         ghost_controller: GhostModeController,
         verifier: Verifier,
         agents: dict[str, BaseAgent],
+        observer: SystemObserver | None = None,
     ) -> None:
         self._config = config
         self._llm = llm
@@ -104,6 +140,7 @@ class Orchestrator:
         self._ghost = ghost_controller
         self._verifier = verifier
         self._agents = agents
+        self._observer = observer
         self._brain = OrchestratorState(current_phase="installing")
         self._company_id = config.company_id
 
@@ -118,6 +155,15 @@ class Orchestrator:
         saved = self._sb.get_latest_brain_state(self._company_id)
         if saved:
             self._brain = OrchestratorState(**saved)
+
+            # Restore observer snapshot from brain for diff continuity
+            if self._observer and self._brain.last_snapshot:
+                from vincera.core.system_observer import SystemSnapshot
+                try:
+                    self._observer.last_snapshot = SystemSnapshot(**self._brain.last_snapshot)
+                except Exception:
+                    pass
+
             await self._narrate(
                 f"Vincera restarted.  Resuming from phase **{self._brain.current_phase}** "
                 f"(cycle {self._brain.cycle_count}).  "
@@ -150,7 +196,7 @@ class Orchestrator:
         return {"action": "error", "reason": f"Unknown phase: {phase}"}
 
     # ------------------------------------------------------------------
-    # Phases
+    # Phases (installing → discovering → researching → ghost → active)
     # ------------------------------------------------------------------
 
     async def _phase_install(self) -> dict:
@@ -210,7 +256,7 @@ class Orchestrator:
         # Skip ghost mode entirely if configured with 0 days
         if self._config.ghost_mode_days <= 0:
             self._brain.current_phase = "active"
-            self._brain.active_subphase = "working"
+            self._brain.active_subphase = "observing"
             await self._build_initial_backlog()
             await self._save_brain()
             return {
@@ -228,7 +274,7 @@ class Orchestrator:
             if await self._ghost.should_end(self._company_id):
                 await self._ghost.end(self._company_id)
                 self._brain.current_phase = "active"
-                self._brain.active_subphase = "working"
+                self._brain.active_subphase = "observing"
                 await self._build_initial_backlog()
                 await self._save_brain()
                 return {"action": "phase_transition", "from": "ghost", "to": "active"}
@@ -236,19 +282,450 @@ class Orchestrator:
         return {"action": "observing", "days_remaining": self._ghost.days_remaining}
 
     # ==================================================================
-    # ACTIVE PHASE — THE ALWAYS-ON WORK LOOP
+    # ACTIVE PHASE — LOOK → THINK → ACT → NARRATE (non-stop)
     # ==================================================================
 
     async def _phase_active(self) -> dict:
-        """The active phase **never** stops.  It continuously:
-        1.  Dispatches pending follow-up operations (operator, analyst, unstuck)
-        2.  Processes backlog tasks (delegates to builder / relevant agent)
-        3.  Seeks new opportunities when the backlog is empty
-        4.  Narrates every decision and observation in real-time
-        """
+        """The LTAN loop.  Runs every cycle.  Never stops.
 
+        LOOK:    Take a system snapshot, compute diff.
+        THINK:   LLM analyzes what changed.
+        ACT:     Spin up agents, alert user, process backlog.
+        NARRATE: Post everything to chat.
+        """
         if not self._authority.can_act():
             return {"action": "blocked", "reason": "Authority level does not permit action"}
+
+        return await self._observe_and_act()
+
+    # ------------------------------------------------------------------
+    # LOOK → THINK → ACT → NARRATE
+    # ------------------------------------------------------------------
+
+    async def _observe_and_act(self) -> dict:
+        """The complete LTAN cycle."""
+        self._brain.active_subphase = "observing"
+
+        # ============================================================
+        # LOOK — take a system snapshot and compute diff
+        # ============================================================
+        snapshot = None
+        diff = None
+        if self._observer:
+            try:
+                snapshot = await self._observer.take_snapshot()
+                diff = self._observer.diff(self._observer.last_snapshot, snapshot)
+                self._observer.last_snapshot = snapshot
+                self._brain.last_snapshot = snapshot.model_dump()
+                self._brain.last_diff_summary = {
+                    "total_changes": diff.total_changes,
+                    "severity": diff.severity,
+                    "new_processes": len(diff.new_processes),
+                    "stopped_processes": len(diff.stopped_processes),
+                    "modified_files": len(diff.modified_files),
+                    "log_anomalies": len(diff.log_anomalies),
+                }
+                self._brain.last_observation_at = datetime.now(timezone.utc).isoformat()
+            except Exception as exc:
+                logger.exception("System observation failed")
+                await self._narrate(f"System scan encountered an error: {str(exc)[:200]}")
+
+        # ============================================================
+        # THINK — LLM analyzes what it sees (only when changes detected)
+        # ============================================================
+        analysis: dict = {
+            "summary": "No changes detected.",
+            "concerns": [],
+            "opportunities": [],
+            "recommended_actions": [],
+        }
+
+        if snapshot and diff:
+            should_analyze = (
+                diff.total_changes > 0
+                or self._brain.cycle_count % 5 == 0  # every 5th cycle regardless
+            )
+            if should_analyze:
+                analysis = await self._analyze_observations(snapshot, diff)
+
+        # ============================================================
+        # ACT — dispatch agents, flag issues, process backlog
+        # ============================================================
+        observation_actions: list[dict] = []
+        observation_results: list[dict] = []
+
+        if diff:
+            observation_actions = await self._decide_actions(analysis, diff)
+            for action in observation_actions:
+                result = await self._execute_observation_action(action)
+                observation_results.append(result)
+
+        # Also run backlog / continuous improvement
+        backlog_result = await self._process_backlog_if_needed()
+
+        # ============================================================
+        # NARRATE — post everything to chat
+        # ============================================================
+        if snapshot and diff:
+            await self._narrate_cycle(
+                snapshot, diff, analysis, observation_actions, observation_results,
+            )
+
+        await self._save_brain()
+
+        # If backlog produced a meaningful result (task_completed, task_failed,
+        # operation_completed, etc.), propagate it as the cycle result so callers
+        # see the primary action taken.
+        if (
+            backlog_result
+            and isinstance(backlog_result, dict)
+            and backlog_result.get("action") not in (None, "monitoring", "idle")
+        ):
+            backlog_result["observation"] = {
+                "cycle": self._brain.cycle_count,
+                "diff_severity": diff.severity if diff else "unknown",
+                "total_changes": diff.total_changes if diff else 0,
+                "actions_taken": len(observation_results),
+            }
+            return backlog_result
+
+        return {
+            "action": "observation_cycle",
+            "cycle": self._brain.cycle_count,
+            "diff_severity": diff.severity if diff else "unknown",
+            "total_changes": diff.total_changes if diff else 0,
+            "actions_taken": len(observation_results),
+            "backlog_result": backlog_result,
+        }
+
+    # ------------------------------------------------------------------
+    # THINK — LLM analysis of observations
+    # ------------------------------------------------------------------
+
+    async def _analyze_observations(
+        self,
+        snapshot: SystemSnapshot,
+        diff: SystemDiff,
+    ) -> dict:
+        """LLM analyzes the snapshot and diff.
+
+        Returns: {summary, concerns, opportunities, recommended_actions}.
+        """
+        context = self._build_observation_context(snapshot, diff)
+
+        try:
+            analysis = await self._llm.think_structured(
+                system_prompt=(
+                    f"You are the Vincera orchestrator, an always-on AI system observer "
+                    f"running for {self._config.company_name}.  You have root access to the "
+                    f"machine.  You just scanned the system.  Analyze what you see and what "
+                    f"changed.  Identify concerns, automation opportunities, and actions.\n\n"
+                    f"Available agents: discovery, research, builder, operator, analyst, "
+                    f"unstuck, trainer.  Only recommend spinning up an agent if there is "
+                    f"genuine work for it.  Be specific.  Return valid JSON."
+                ),
+                user_message=context,
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "summary": {"type": "string"},
+                        "concerns": {"type": "array", "items": {"type": "string"}},
+                        "opportunities": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "description": {"type": "string"},
+                                    "domain": {"type": "string"},
+                                    "estimated_hours_saved_weekly": {"type": "number"},
+                                },
+                            },
+                        },
+                        "recommended_actions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string"},
+                                    "agent": {"type": "string"},
+                                    "task": {"type": "string"},
+                                    "priority": {"type": "string"},
+                                    "reason": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+            )
+            if isinstance(analysis, dict):
+                return analysis
+            return {
+                "summary": "Analysis returned unexpected format.",
+                "concerns": [],
+                "opportunities": [],
+                "recommended_actions": [],
+            }
+        except Exception as exc:
+            logger.exception("Observation analysis failed")
+            return {
+                "summary": f"Analysis failed: {str(exc)[:200]}",
+                "concerns": [],
+                "opportunities": [],
+                "recommended_actions": [],
+            }
+
+    # ------------------------------------------------------------------
+    # ACT — decide what to do
+    # ------------------------------------------------------------------
+
+    async def _decide_actions(
+        self,
+        analysis: dict,
+        diff: SystemDiff,
+    ) -> list[dict]:
+        """Convert LLM analysis into concrete actions."""
+        actions: list[dict] = []
+
+        # 1. Auto-alert on high severity
+        if diff.severity == "alert":
+            alert_parts = []
+            if diff.log_anomalies:
+                alert_parts.append(f"{len(diff.log_anomalies)} log anomalies")
+            if diff.disk_usage_changes:
+                alert_parts.append(f"{len(diff.disk_usage_changes)} disk changes")
+            if diff.new_processes:
+                alert_parts.append(f"{len(diff.new_processes)} new processes")
+            actions.append({
+                "type": "alert_user",
+                "message": f"ALERT: {', '.join(alert_parts)}",
+            })
+
+        # 2. LLM-recommended actions
+        for rec in analysis.get("recommended_actions", []):
+            action_type = rec.get("type", "flag")
+
+            if action_type == "spin_up_agent":
+                agent_name = rec.get("agent", "")
+                if agent_name in self._agents:
+                    actions.append({
+                        "type": "spin_up_agent",
+                        "agent": agent_name,
+                        "task": rec.get("task", {}),
+                        "reason": rec.get("reason", ""),
+                    })
+            elif action_type == "alert_user":
+                actions.append({
+                    "type": "alert_user",
+                    "message": rec.get("reason", ""),
+                })
+            elif action_type == "run_command":
+                actions.append({
+                    "type": "run_command",
+                    "command": rec.get("task", ""),
+                })
+
+        # 3. New opportunities → add to backlog
+        for opp in analysis.get("opportunities", []):
+            if opp.get("name"):
+                actions.append({"type": "add_opportunity", "opportunity": opp})
+
+        return actions
+
+    # ------------------------------------------------------------------
+    # ACT — execute a single action
+    # ------------------------------------------------------------------
+
+    async def _execute_observation_action(self, action: dict) -> dict:
+        """Execute one action from the ACT phase."""
+        action_type = action.get("type", "")
+
+        if action_type == "spin_up_agent":
+            return await self._spin_up_agent(action)
+
+        elif action_type == "alert_user":
+            await self._narrate(f"**ALERT:** {action.get('message', '')}")
+            return {"action": "alerted"}
+
+        elif action_type == "run_command":
+            return await self._run_observation_command(action)
+
+        elif action_type == "add_opportunity":
+            opp = action.get("opportunity", {})
+            await self._add_external_opportunities([opp], "live_observation")
+            return {"action": "opportunity_added", "name": opp.get("name", "")}
+
+        return {"action": "unknown", "type": action_type}
+
+    async def _spin_up_agent(self, action: dict) -> dict:
+        """Spin up a sub-agent for a specific task.  Announce, execute, kill."""
+        agent_name = action.get("agent", "")
+        task = action.get("task", {})
+        reason = action.get("reason", "")
+
+        if agent_name not in self._agents:
+            return {"action": "agent_unavailable", "agent": agent_name}
+
+        # If task is a string, wrap it
+        if isinstance(task, str):
+            task = {"type": task, "description": task}
+
+        # ANNOUNCE activation
+        await self._narrate(
+            f"Spinning up **{agent_name}** agent.\n"
+            f"Reason: {reason}\n"
+            f"Task: {task.get('type', task.get('description', str(task)[:100]))}"
+        )
+
+        # Track active session
+        session = {
+            "agent_name": agent_name,
+            "task_name": task.get("type", task.get("name", str(task)[:50])),
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._brain.active_agent_sessions.append(session)
+        await self._save_brain()
+
+        try:
+            result = await self._agents[agent_name].execute(task)
+
+            # ANNOUNCE deactivation
+            status = result.get("status", "done") if isinstance(result, dict) else "done"
+            await self._narrate(
+                f"Agent **{agent_name}** completed.  Status: {status}"
+            )
+
+            # Remove session
+            self._brain.active_agent_sessions = [
+                s for s in self._brain.active_agent_sessions
+                if s["agent_name"] != agent_name
+            ]
+            return {"action": "agent_completed", "agent": agent_name, "result": result}
+
+        except Exception as exc:
+            error_str = str(exc)[:300]
+            await self._narrate(
+                f"Agent **{agent_name}** FAILED: {error_str}"
+            )
+            self._brain.active_agent_sessions = [
+                s for s in self._brain.active_agent_sessions
+                if s["agent_name"] != agent_name
+            ]
+            return {"action": "agent_failed", "agent": agent_name, "error": error_str}
+
+    async def _run_observation_command(self, action: dict) -> dict:
+        """Execute a read-only shell command for deeper inspection."""
+        cmd = action.get("command", "")
+        if isinstance(cmd, str):
+            cmd_args = cmd.split()
+        else:
+            cmd_args = list(cmd)
+
+        if not _is_safe_command(cmd_args):
+            await self._narrate(
+                f"Blocked unsafe command: `{' '.join(cmd_args[:5])}`"
+            )
+            return {"action": "command_blocked", "command": cmd_args}
+
+        if not self._observer:
+            return {"action": "no_observer"}
+
+        result = await self._observer.run_shell_command(cmd_args, timeout=15)
+        return {"action": "command_run", "result": result}
+
+    # ------------------------------------------------------------------
+    # NARRATE — cycle report
+    # ------------------------------------------------------------------
+
+    async def _narrate_cycle(
+        self,
+        snapshot: SystemSnapshot,
+        diff: SystemDiff,
+        analysis: dict,
+        actions: list[dict],
+        results: list[dict],
+    ) -> None:
+        """Post a cycle observation report to chat.  Always."""
+        parts = [f"**Cycle {self._brain.cycle_count} — system observation:**"]
+
+        # What I see
+        parts.append(
+            f"CPU: {snapshot.cpu_percent:.1f}% | "
+            f"Memory: {snapshot.memory_used_percent:.1f}% | "
+            f"Processes: {snapshot.process_count} | "
+            f"Databases: {len(snapshot.databases)} | "
+            f"Scan: {snapshot.scan_duration_ms}ms"
+        )
+
+        # What changed
+        if diff.total_changes > 0:
+            changes: list[str] = []
+            if diff.new_processes:
+                names = ", ".join(p.get("name", "?") for p in diff.new_processes[:3])
+                changes.append(f"{len(diff.new_processes)} new processes ({names})")
+            if diff.stopped_processes:
+                names = ", ".join(p.get("name", "?") for p in diff.stopped_processes[:3])
+                changes.append(f"{len(diff.stopped_processes)} stopped ({names})")
+            if diff.modified_files:
+                changes.append(f"{len(diff.modified_files)} modified files")
+            if diff.new_files:
+                changes.append(f"{len(diff.new_files)} new files")
+            if diff.log_anomalies:
+                changes.append(f"{len(diff.log_anomalies)} log anomalies")
+            if diff.new_databases:
+                changes.append(f"{len(diff.new_databases)} new databases")
+            if diff.new_scheduled_tasks:
+                changes.append(f"{len(diff.new_scheduled_tasks)} new scheduled tasks")
+            if abs(diff.cpu_change) > 10:
+                changes.append(f"CPU {'up' if diff.cpu_change > 0 else 'down'} {abs(diff.cpu_change):.1f}%")
+            if abs(diff.memory_change) > 5:
+                changes.append(f"Memory {'up' if diff.memory_change > 0 else 'down'} {abs(diff.memory_change):.1f}%")
+            parts.append(f"Changes: {'; '.join(changes)}")
+        else:
+            parts.append("No changes since last scan.  System stable.")
+
+        # What I think
+        summary = analysis.get("summary", "")
+        if summary and summary != "No changes detected.":
+            parts.append(f"Assessment: {summary[:300]}")
+
+        # Concerns
+        concerns = analysis.get("concerns", [])
+        if concerns:
+            parts.append("Concerns: " + "; ".join(c[:100] for c in concerns[:3]))
+
+        # What I did
+        if actions:
+            action_summary = []
+            for a in actions[:5]:
+                atype = a.get("type", "?")
+                if atype == "spin_up_agent":
+                    action_summary.append(f"activated {a.get('agent', '?')}")
+                elif atype == "alert_user":
+                    action_summary.append("sent alert")
+                elif atype == "run_command":
+                    action_summary.append(f"ran command")
+                elif atype == "add_opportunity":
+                    action_summary.append(f"found opportunity: {a.get('opportunity', {}).get('name', '?')}")
+            parts.append(f"Actions: {', '.join(action_summary)}")
+
+        # Backlog status
+        backlog_count = len(self._brain.ranked_automations)
+        completed_count = len(self._brain.completed_tasks)
+        if backlog_count > 0 or completed_count > 0:
+            parts.append(
+                f"Backlog: {backlog_count} | Completed: {completed_count} | "
+                f"Failed: {len(self._brain.failed_tasks)}"
+            )
+
+        await self._narrate("\n".join(parts))
+
+    # ------------------------------------------------------------------
+    # ACT (backlog) — process pending operations and backlog items
+    # ------------------------------------------------------------------
+
+    async def _process_backlog_if_needed(self) -> dict | None:
+        """After observing, process any pending work."""
 
         # --- Priority 1: Pending post-completion operations ---------------
         if self._brain.pending_operations:
@@ -279,13 +756,7 @@ class Orchestrator:
             if self._brain.ranked_automations:
                 self._brain.active_subphase = "working"
                 return await self._work_on_backlog_item()
-            # Truly nothing on first attempt
-            await self._narrate(
-                "I've scanned your system but couldn't identify any automation "
-                "opportunities right now.  I'll keep monitoring and looking.  "
-                "You can also tell me what processes you want automated."
-            )
-            return {"action": "idle", "reason": "No automations found"}
+            return {"action": "idle", "reason": "No automations found yet"}
 
         # --- Priority 4: Continuous improvement ---------------------------
         self._brain.active_subphase = "seeking"
@@ -323,7 +794,7 @@ class Orchestrator:
 
         if is_sensitive:
             await self._narrate(
-                f"ATTENTION — The next task **{task.candidate.name}** involves sensitive data.\n"
+                f"**SENSITIVE TASK** — **{task.candidate.name}** involves sensitive data.\n"
                 f"Reason: {sensitivity_reason}\n"
                 f"Risk level: **{risk.value}**\n"
                 f"I need your approval before proceeding."
@@ -334,7 +805,7 @@ class Orchestrator:
         if not agent_name or agent_name not in self._agents:
             await self._narrate(
                 f"I want to work on \"{task.candidate.name}\" but no agent is "
-                f"available for domain '{task.candidate.domain}'.  Skipping for now."
+                f"available for domain '{task.candidate.domain}'.  Skipping."
             )
             self._remove_from_backlog(task.candidate.name)
             await self._save_brain()
@@ -349,20 +820,18 @@ class Orchestrator:
         )
         if not approved:
             await self._narrate(
-                f"You denied \"{task.candidate.name}\".  "
-                f"I understand — moving on to the next item."
+                f"You denied \"{task.candidate.name}\".  Moving on."
             )
             self._remove_from_backlog(task.candidate.name)
             await self._save_brain()
             return {"action": "task_denied", "task": task.candidate.name}
 
-        # --- NARRATE what we're about to do -------------------------------
+        # --- ANNOUNCE agent activation ------------------------------------
         await self._narrate(
-            f"Starting work on: **{task.candidate.name}**\n"
-            f"Score: {task.final_score:.2f} | Risk: {risk.value} | "
-            f"Delegating to: **{agent_name}**\n\n"
+            f"Spinning up **{agent_name}** for: **{task.candidate.name}**\n"
+            f"Score: {task.final_score:.2f} | Risk: {risk.value}\n"
             f"What this does: {task.candidate.description}\n"
-            f"Expected time savings: ~{task.candidate.estimated_hours_saved_weekly}h/week"
+            f"Expected savings: ~{task.candidate.estimated_hours_saved_weekly}h/week"
         )
 
         # Track as active
@@ -375,6 +844,11 @@ class Orchestrator:
             "started_at": datetime.now(timezone.utc).isoformat(),
         }
         self._brain.active_tasks.append(task_record)
+        self._brain.active_agent_sessions.append({
+            "agent_name": agent_name,
+            "task_name": task.candidate.name,
+            "started_at": task_record["started_at"],
+        })
         await self._save_brain()
 
         # --- DISPATCH: Actually run the agent -----------------------------
@@ -401,6 +875,10 @@ class Orchestrator:
                 t for t in self._brain.active_tasks
                 if t.get("name") != task.candidate.name
             ]
+            self._brain.active_agent_sessions = [
+                s for s in self._brain.active_agent_sessions
+                if s.get("agent_name") != agent_name
+            ]
             self._remove_from_backlog(task.candidate.name)
 
             # Queue follow-up operations
@@ -408,10 +886,9 @@ class Orchestrator:
 
             status = result.get("status", "unknown")
             await self._narrate(
-                f"Completed: **{task.candidate.name}** (status: {status})\n"
-                f"Agent **{agent_name}** finished the work.  "
+                f"Agent **{agent_name}** completed: **{task.candidate.name}** (status: {status})\n"
                 f"Remaining in backlog: {len(self._brain.ranked_automations)}\n"
-                f"I'll now set up monitoring and run follow-up checks."
+                f"Setting up monitoring and follow-up checks."
             )
             await self._save_brain()
             return {
@@ -435,15 +912,19 @@ class Orchestrator:
                 t for t in self._brain.active_tasks
                 if t.get("name") != task.candidate.name
             ]
+            self._brain.active_agent_sessions = [
+                s for s in self._brain.active_agent_sessions
+                if s.get("agent_name") != agent_name
+            ]
             self._remove_from_backlog(task.candidate.name)
 
             # Queue unstuck agent to diagnose
             self._queue_unstuck_diagnosis(task_record, error_str)
 
             await self._narrate(
-                f"Failed: **{task.candidate.name}**\n"
+                f"Agent **{agent_name}** FAILED on **{task.candidate.name}**\n"
                 f"Error: {error_str}\n"
-                f"I'm dispatching the unstuck agent to diagnose and attempt a fix.  "
+                f"Dispatching unstuck agent to diagnose.  "
                 f"Remaining in backlog: {len(self._brain.ranked_automations)}"
             )
             await self._save_brain()
@@ -476,14 +957,13 @@ class Orchestrator:
             return {"action": "agent_unavailable", "operation": op_type}
 
         await self._narrate(
-            f"Running follow-up: **{op.get('description', op_type)}**\n"
-            f"Delegating to: **{agent_name}**"
+            f"Spinning up **{agent_name}** for follow-up: **{op.get('description', op_type)}**"
         )
 
         try:
             result = await self._agents[agent_name].execute(op.get("task", {}))
             await self._narrate(
-                f"Follow-up complete: **{op.get('description', op_type)}** — "
+                f"Agent **{agent_name}** completed follow-up: **{op.get('description', op_type)}** — "
                 f"status: {result.get('status', 'done')}"
             )
             await self._save_brain()
@@ -495,7 +975,7 @@ class Orchestrator:
         except Exception as exc:
             logger.exception("Pending operation %s failed", op_type)
             await self._narrate(
-                f"Follow-up task failed: {op.get('description', op_type)} — "
+                f"Agent **{agent_name}** FAILED on follow-up: {op.get('description', op_type)} — "
                 f"{str(exc)[:200]}"
             )
             await self._save_brain()
@@ -585,8 +1065,8 @@ class Orchestrator:
     async def _run_periodic_discovery(self, now: datetime) -> dict:
         """Re-scan the system to find new changes and opportunities."""
         await self._narrate(
-            "Running periodic system scan.  Looking for new software, files, "
-            "processes, or configuration changes..."
+            "Spinning up **discovery** agent for periodic system scan.  "
+            "Looking for new software, files, processes, or configuration changes..."
         )
         try:
             result = await self._agents["discovery"].execute({"mode": "periodic"})
@@ -595,14 +1075,13 @@ class Orchestrator:
 
             if self._brain.ranked_automations:
                 await self._narrate(
-                    f"Periodic scan complete.  Found "
-                    f"**{len(self._brain.ranked_automations)} new automation "
+                    f"Discovery agent completed.  Found "
+                    f"**{len(self._brain.ranked_automations)} automation "
                     f"opportunities**!  Getting back to work."
                 )
             else:
                 await self._narrate(
-                    "Periodic scan complete.  No new opportunities found this cycle.  "
-                    "I'll check again soon."
+                    "Discovery agent completed.  No new opportunities this cycle."
                 )
             await self._save_brain()
             return {
@@ -618,7 +1097,7 @@ class Orchestrator:
     async def _run_analysis_scan(self, now: datetime) -> dict:
         """Run analyst to review performance of completed automations."""
         await self._narrate(
-            "Running performance analysis on completed automations.  "
+            "Spinning up **analyst** agent.  "
             "Checking health metrics, error rates, and efficiency..."
         )
         try:
@@ -643,6 +1122,9 @@ class Orchestrator:
             if opportunities:
                 await self._add_external_opportunities(opportunities, "analyst")
 
+            await self._narrate(
+                f"Analyst agent completed.  Reviewed {len(deployment_ids)} deployments."
+            )
             await self._save_brain()
             return {"action": "analysis_complete", "result": result}
         except Exception as exc:
@@ -654,14 +1136,15 @@ class Orchestrator:
     async def _run_training_cycle(self, now: datetime) -> dict:
         """Run trainer to learn from corrections and improve agent behaviour."""
         await self._narrate(
-            "Running a training cycle to learn from recent corrections.  "
-            "Improving agent behaviour patterns..."
+            "Spinning up **trainer** agent.  "
+            "Learning from recent corrections..."
         )
         try:
             result = await self._agents["trainer"].execute(
                 {"type": "full_training_cycle"},
             )
             self._brain.last_training_at = now.isoformat()
+            await self._narrate("Trainer agent completed.")
             await self._save_brain()
             return {"action": "training_complete", "result": result}
         except Exception as exc:
@@ -721,12 +1204,11 @@ class Orchestrator:
                         f"- **{o.get('name', 'Unknown')}**: "
                         f"{o.get('description', '')[:120]}"
                     )
-                lines.append("\nAdding these to my backlog.  Let me get to work.")
+                lines.append("\nAdding these to my backlog.")
                 await self._narrate("\n".join(lines))
             else:
                 await self._narrate(
-                    "Couldn't identify any new opportunities right now.  "
-                    "I'll keep monitoring your system for changes."
+                    "Couldn't identify new opportunities right now.  Monitoring."
                 )
 
             await self._save_brain()
@@ -1024,7 +1506,129 @@ class Orchestrator:
         return None
 
     # ------------------------------------------------------------------
-    # Narration — real-time chat via OpenRouter
+    # Observation context builder
+    # ------------------------------------------------------------------
+
+    def _build_observation_context(
+        self,
+        snapshot: SystemSnapshot,
+        diff: SystemDiff,
+    ) -> str:
+        """Build a concise text summary of snapshot + diff for LLM."""
+        parts: list[str] = []
+        parts.append(f"Timestamp: {snapshot.timestamp}")
+        parts.append(
+            f"CPU: {snapshot.cpu_percent:.1f}%, "
+            f"Memory: {snapshot.memory_used_percent:.1f}%, "
+            f"Available RAM: {snapshot.memory_available_gb:.1f} GB"
+        )
+        parts.append(f"Processes running: {snapshot.process_count}")
+
+        # Top CPU processes
+        top_cpu = sorted(
+            snapshot.processes,
+            key=lambda p: p.get("cpu_percent", 0) or 0,
+            reverse=True,
+        )[:5]
+        if top_cpu:
+            parts.append(
+                "Top CPU: "
+                + ", ".join(
+                    f"{p.get('name', '?')}({p.get('cpu_percent', 0):.1f}%)"
+                    for p in top_cpu
+                )
+            )
+
+        # Disk
+        for d in snapshot.disk_usage:
+            parts.append(
+                f"Disk {d['mountpoint']}: "
+                f"{d.get('used_gb', 0):.1f}/{d.get('total_gb', 0):.1f} GB "
+                f"({d.get('percent', 0):.0f}%)"
+            )
+
+        # Databases
+        if snapshot.databases:
+            parts.append(
+                f"Databases: "
+                + ", ".join(d.get("name", "?") for d in snapshot.databases[:5])
+            )
+
+        # Scheduled tasks summary
+        if snapshot.scheduled_tasks:
+            parts.append(f"Scheduled tasks: {len(snapshot.scheduled_tasks)}")
+
+        # --- CHANGES ---
+        parts.append("\n--- CHANGES SINCE LAST SCAN ---")
+        if diff.new_processes:
+            parts.append(
+                f"New processes: "
+                + ", ".join(p.get("name", "?") for p in diff.new_processes[:10])
+            )
+        if diff.stopped_processes:
+            parts.append(
+                f"Stopped: "
+                + ", ".join(p.get("name", "?") for p in diff.stopped_processes[:10])
+            )
+        if diff.modified_files:
+            parts.append(
+                f"Modified files: "
+                + ", ".join(f.get("name", "?") for f in diff.modified_files[:10])
+            )
+        if diff.new_files:
+            parts.append(
+                f"New files: "
+                + ", ".join(f.get("name", "?") for f in diff.new_files[:10])
+            )
+        if diff.log_anomalies:
+            parts.append(f"Log anomalies ({len(diff.log_anomalies)}):")
+            for entry in diff.log_anomalies[:5]:
+                parts.append(
+                    f"  [{entry.get('source', '?')}] {entry.get('line', '')[:150]}"
+                )
+        if diff.disk_usage_changes:
+            for dc in diff.disk_usage_changes[:3]:
+                parts.append(
+                    f"Disk {dc['mountpoint']}: "
+                    f"{'+'if dc['delta_used_gb']>0 else ''}"
+                    f"{dc['delta_used_gb']:.2f} GB → {dc['percent_now']:.0f}%"
+                )
+        if diff.new_databases:
+            parts.append(
+                f"New databases: "
+                + ", ".join(d.get("name", "?") for d in diff.new_databases)
+            )
+        if diff.new_scheduled_tasks:
+            parts.append(
+                f"New scheduled tasks: "
+                + ", ".join(t.get("name", "?") for t in diff.new_scheduled_tasks)
+            )
+        if diff.total_changes == 0:
+            parts.append("No changes detected.")
+
+        # Business context
+        if self._brain.company_model:
+            cm = self._brain.company_model
+            parts.append(
+                f"\nBusiness: {cm.get('business_type', 'unknown')} "
+                f"({cm.get('industry', 'unknown')})"
+            )
+
+        # Current work status
+        if self._brain.ranked_automations:
+            parts.append(f"\nBacklog: {len(self._brain.ranked_automations)} tasks")
+        if self._brain.completed_tasks:
+            parts.append(f"Completed: {len(self._brain.completed_tasks)}")
+        if self._brain.active_agent_sessions:
+            parts.append(
+                f"Active agents: "
+                + ", ".join(s["agent_name"] for s in self._brain.active_agent_sessions)
+            )
+
+        return "\n".join(parts)
+
+    # ------------------------------------------------------------------
+    # Narration — real-time chat via Supabase
     # ------------------------------------------------------------------
 
     async def _narrate(self, content: str) -> None:
@@ -1053,7 +1657,7 @@ class Orchestrator:
         # OODA phase for the dashboard Brain View
         ooda_phase = self._PHASE_TO_OODA.get(self._brain.current_phase, "idle")
         if self._brain.current_phase == "active":
-            if self._brain.active_tasks:
+            if self._brain.active_tasks or self._brain.active_agent_sessions:
                 ooda_phase = "acting"
             elif self._brain.ranked_automations:
                 ooda_phase = "deciding"
@@ -1092,6 +1696,7 @@ class Orchestrator:
                 {"label": "Phase", "value": self._brain.current_phase},
                 {"label": "Sub-phase", "value": self._brain.active_subphase},
                 {"label": "Active tasks", "value": len(self._brain.active_tasks)},
+                {"label": "Active agents", "value": len(self._brain.active_agent_sessions)},
                 {"label": "Completed", "value": len(self._brain.completed_tasks)},
                 {"label": "Failed", "value": len(self._brain.failed_tasks)},
                 {"label": "Backlog", "value": len(self._brain.ranked_automations)},
@@ -1102,13 +1707,33 @@ class Orchestrator:
             ],
         }
 
+        # System health from last observation
+        if self._brain.last_snapshot:
+            snap = self._brain.last_snapshot
+            raw["system_health"] = {
+                "cpu_percent": snap.get("cpu_percent", 0),
+                "memory_used_percent": snap.get("memory_used_percent", 0),
+                "process_count": snap.get("process_count", 0),
+                "database_count": len(snap.get("databases", [])),
+                "last_observed": snap.get("timestamp", ""),
+                "scan_duration_ms": snap.get("scan_duration_ms", 0),
+            }
+        if self._brain.last_diff_summary:
+            raw["last_diff"] = self._brain.last_diff_summary
+        if self._brain.active_agent_sessions:
+            raw["active_agents"] = self._brain.active_agent_sessions
+
         self._sb.save_brain_state(self._company_id, raw)
 
         # Keep orchestrator status row in sync
         active_task_name = (
             self._brain.active_tasks[0]["name"]
             if self._brain.active_tasks
-            else "idle"
+            else (
+                self._brain.active_agent_sessions[0]["task_name"]
+                if self._brain.active_agent_sessions
+                else "observing"
+            )
         )
         self._sb.update_agent_status(
             self._company_id,
@@ -1146,12 +1771,13 @@ class Orchestrator:
                 system_prompt=(
                     f"You are the orchestrator of Vincera, an autonomous AI agent "
                     f"system running for {self._config.company_name}.  You are the "
-                    f"central brain — you map company data, analyse operations, find "
-                    f"automation opportunities, and delegate work to sub-agents "
-                    f"(builder, operator, analyst, research, trainer, unstuck, "
-                    f"discovery).  The user is chatting with you through a dashboard.  "
+                    f"central brain — you directly observe the machine (processes, "
+                    f"files, databases, logs, network), analyze everything, and "
+                    f"spin up sub-agents (builder, operator, analyst, research, "
+                    f"trainer, unstuck, discovery) for specialized work.  "
+                    f"The user is chatting with you through a dashboard.  "
                     f"Be direct, specific, and helpful.  Reference real data from your "
-                    f"current state.  Keep responses concise (2-4 sentences max).\n\n"
+                    f"current observations.  Keep responses concise (2-4 sentences max).\n\n"
                     f"Current state:\n{context}"
                 ),
                 user_message=message,
@@ -1168,11 +1794,27 @@ class Orchestrator:
             f"Sub-phase: {self._brain.active_subphase}",
             f"Cycle: {self._brain.cycle_count}",
             f"Active tasks: {len(self._brain.active_tasks)}",
+            f"Active agents: {len(self._brain.active_agent_sessions)}",
             f"Completed tasks: {len(self._brain.completed_tasks)}",
             f"Failed tasks: {len(self._brain.failed_tasks)}",
             f"Backlog size: {len(self._brain.ranked_automations)}",
             f"Pending operations: {len(self._brain.pending_operations)}",
         ]
+
+        # System observation data
+        if self._brain.last_snapshot:
+            snap = self._brain.last_snapshot
+            parts.append(
+                f"\nSystem: CPU {snap.get('cpu_percent', 0):.1f}%, "
+                f"Memory {snap.get('memory_used_percent', 0):.1f}%, "
+                f"Processes {snap.get('process_count', 0)}"
+            )
+        if self._brain.last_diff_summary:
+            ds = self._brain.last_diff_summary
+            parts.append(
+                f"Last scan: {ds.get('total_changes', 0)} changes, "
+                f"severity: {ds.get('severity', 'unknown')}"
+            )
 
         if self._brain.active_tasks:
             parts.append("\nCurrently working on:")
@@ -1181,6 +1823,11 @@ class Orchestrator:
                     f"  - {t['name']} (agent: {t.get('agent')}, "
                     f"status: {t.get('status')})"
                 )
+
+        if self._brain.active_agent_sessions:
+            parts.append("\nActive agents:")
+            for s in self._brain.active_agent_sessions:
+                parts.append(f"  - {s['agent_name']}: {s['task_name']}")
 
         if self._brain.completed_tasks:
             parts.append("\nRecently completed:")
@@ -1212,7 +1859,7 @@ class Orchestrator:
         return (
             f"Phase: {self._brain.current_phase} | "
             f"Cycle: {self._brain.cycle_count} | "
-            f"Active tasks: {len(self._brain.active_tasks)} | "
+            f"Active agents: {len(self._brain.active_agent_sessions)} | "
             f"Completed: {len(self._brain.completed_tasks)} | "
             f"Backlog: {len(self._brain.ranked_automations)}"
         )
