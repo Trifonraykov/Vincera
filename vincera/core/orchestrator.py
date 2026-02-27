@@ -1643,30 +1643,31 @@ class Orchestrator:
     # Persistence & agent-status sync
     # ------------------------------------------------------------------
 
-    _PHASE_TO_OODA: dict[str, str] = {
-        "installing": "observing",
-        "discovering": "observing",
-        "researching": "orienting",
-        "ghost": "observing",
+    _PHASE_TO_LTAN: dict[str, str] = {
+        "installing": "looking",
+        "discovering": "looking",
+        "researching": "thinking",
+        "ghost": "looking",
         "active": "acting",
     }
 
     async def _save_brain(self) -> None:
         raw = self._brain.model_dump()
 
-        # OODA phase for the dashboard Brain View
-        ooda_phase = self._PHASE_TO_OODA.get(self._brain.current_phase, "idle")
+        # LTAN phase for the dashboard Brain View
+        ltan_phase = self._PHASE_TO_LTAN.get(self._brain.current_phase, "idle")
         if self._brain.current_phase == "active":
             if self._brain.active_tasks or self._brain.active_agent_sessions:
-                ooda_phase = "acting"
+                ltan_phase = "acting"
             elif self._brain.ranked_automations:
-                ooda_phase = "deciding"
+                ltan_phase = "thinking"
             elif self._brain.pending_operations:
-                ooda_phase = "orienting"
+                ltan_phase = "thinking"
             else:
-                ooda_phase = "observing"
+                ltan_phase = "looking"
 
-        raw["ooda_phase"] = ooda_phase
+        raw["ltan_phase"] = ltan_phase
+        raw["ooda_phase"] = ltan_phase  # backward compat
         raw["cycle_number"] = self._brain.cycle_count
         raw["confidence"] = min(
             1.0, 0.1 * len(self._brain.completed_tasks) + 0.3,

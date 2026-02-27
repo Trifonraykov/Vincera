@@ -36,26 +36,55 @@ export function getObj(state: Json, key: string): Json | null {
   return obj[key] ?? null;
 }
 
-export type OodaPhase =
-  | "observing"
-  | "orienting"
-  | "deciding"
+// ---------------------------------------------------------------------------
+// LTAN Phase — the orchestrator's LOOK → THINK → ACT → NARRATE loop
+// ---------------------------------------------------------------------------
+
+export type LtanPhase =
+  | "looking"
+  | "thinking"
   | "acting"
-  | "learning"
+  | "narrating"
   | "idle";
 
-export function getPhase(state: Json): OodaPhase {
-  const raw = getStr(state, "ooda_phase");
+/** Backward-compat: normalize old OODA phase names to LTAN */
+const OODA_TO_LTAN: Record<string, LtanPhase> = {
+  observing: "looking",
+  orienting: "thinking",
+  deciding: "thinking",
+  acting: "acting",
+  learning: "narrating",
+};
+
+export function getPhase(state: Json): LtanPhase {
+  // Try ltan_phase first (new format)
+  const ltan = getStr(state, "ltan_phase");
   if (
-    raw === "observing" ||
-    raw === "orienting" ||
-    raw === "deciding" ||
-    raw === "acting" ||
-    raw === "learning"
+    ltan === "looking" ||
+    ltan === "thinking" ||
+    ltan === "acting" ||
+    ltan === "narrating"
   )
-    return raw;
+    return ltan;
+
+  // Fall back to ooda_phase (old format) and normalize
+  const ooda = getStr(state, "ooda_phase");
+  if (ooda && OODA_TO_LTAN[ooda]) return OODA_TO_LTAN[ooda];
+
+  // New LTAN values may also be stored in ooda_phase (transition period)
+  if (
+    ooda === "looking" ||
+    ooda === "thinking" ||
+    ooda === "acting" ||
+    ooda === "narrating"
+  )
+    return ooda as LtanPhase;
+
   return "idle";
 }
+
+// Keep backward-compat export alias
+export type OodaPhase = LtanPhase;
 
 // ---------------------------------------------------------------------------
 // Hook return type

@@ -33,8 +33,9 @@ function getDuration(state: Json): number | null {
   return getNum(state, "duration_ms");
 }
 
+/** Read LTAN phase, falling back to ooda_phase for historical data */
 function getPhaseLabel(state: Json): string {
-  return getStr(state, "ooda_phase") ?? "idle";
+  return getStr(state, "ltan_phase") ?? getStr(state, "ooda_phase") ?? "idle";
 }
 
 function hasFailures(state: Json): boolean {

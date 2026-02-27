@@ -2,14 +2,14 @@
 
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import type { OodaPhase } from "@/hooks/useBrainState";
+import type { LtanPhase } from "@/hooks/useBrainState";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
-interface OODAIndicatorProps {
-  currentPhase: OodaPhase;
+interface LTANIndicatorProps {
+  currentPhase: LtanPhase;
   cycleNumber: number;
   confidence: number;
   durationMs: number | null;
@@ -17,22 +17,21 @@ interface OODAIndicatorProps {
 }
 
 // ---------------------------------------------------------------------------
-// Phase config
+// Phase config — LOOK → THINK → ACT → NARRATE
 // ---------------------------------------------------------------------------
 
-const PHASES: { key: OodaPhase; label: string }[] = [
-  { key: "observing", label: "OBSERVE" },
-  { key: "orienting", label: "ORIENT" },
-  { key: "deciding", label: "DECIDE" },
+const PHASES: { key: LtanPhase; label: string }[] = [
+  { key: "looking", label: "LOOK" },
+  { key: "thinking", label: "THINK" },
   { key: "acting", label: "ACT" },
+  { key: "narrating", label: "NARRATE" },
 ];
 
 const PHASE_INDEX: Record<string, number> = {
-  observing: 0,
-  orienting: 1,
-  deciding: 2,
-  acting: 3,
-  learning: 4,
+  looking: 0,
+  thinking: 1,
+  acting: 2,
+  narrating: 3,
   idle: -1,
 };
 
@@ -50,7 +49,7 @@ function formatDuration(ms: number): string {
 }
 
 function formatTime(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "\u2014";
   try {
     const d = new Date(iso);
     return d.toLocaleTimeString("en-GB", {
@@ -59,7 +58,7 @@ function formatTime(iso: string | null): string {
       second: "2-digit",
     });
   } catch {
-    return "—";
+    return "\u2014";
   }
 }
 
@@ -80,16 +79,17 @@ const R_DOT = 3;
 // Component
 // ---------------------------------------------------------------------------
 
-export default function OODAIndicator({
+export default function LTANIndicator({
   currentPhase,
   cycleNumber,
   confidence,
   durationMs,
   startedAt,
-}: OODAIndicatorProps) {
+}: LTANIndicatorProps) {
   const activeIdx = PHASE_INDEX[currentPhase] ?? -1;
-  const isLearning = currentPhase === "learning";
+  const isNarrating = currentPhase === "narrating";
   const isIdle = currentPhase === "idle";
+  const allComplete = isNarrating && activeIdx === 3;
 
   const confPct = Math.round(confidence * 100);
   const confColor =
@@ -106,11 +106,11 @@ export default function OODAIndicator({
         <svg
           viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
           className="w-full max-w-lg"
-          aria-label="OODA phase indicator"
+          aria-label="LTAN phase indicator"
         >
           {/* Glow filter */}
           <defs>
-            <filter id="ooda-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <filter id="ltan-glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="6" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
@@ -125,8 +125,8 @@ export default function OODAIndicator({
             const x2 = CX_START + (i + 1) * CX_GAP - R_NORMAL - 2;
 
             // Line is "completed" if both endpoints are completed or active
-            const lineCompleted = i < activeIdx || isLearning;
-            const lineActive = i === activeIdx - 1 && !isLearning && !isIdle;
+            const lineCompleted = i < activeIdx || allComplete;
+            const lineActive = i === activeIdx - 1 && !allComplete && !isIdle;
 
             return (
               <motion.line
@@ -164,8 +164,7 @@ export default function OODAIndicator({
           {PHASES.map((phase, i) => {
             const cx = CX_START + i * CX_GAP;
             const isActive = i === activeIdx;
-            const isCompleted = activeIdx > i || isLearning;
-            const allGlow = isLearning;
+            const isCompleted = activeIdx > i || allComplete;
 
             return (
               <g key={phase.key}>
@@ -176,23 +175,23 @@ export default function OODAIndicator({
                   animate={{
                     r: isActive && !isIdle ? R_ACTIVE : R_NORMAL,
                     fill:
-                      isActive || allGlow
+                      isActive || allComplete
                         ? "#00FF88"
                         : "transparent",
                     stroke:
-                      isCompleted && !allGlow
+                      isCompleted && !allComplete
                         ? "#888888"
-                        : isActive || allGlow
+                        : isActive || allComplete
                           ? "#00FF88"
                           : "#1A1A1A",
-                    strokeWidth: isActive || allGlow ? 0 : 1.5,
+                    strokeWidth: isActive || allComplete ? 0 : 1.5,
                   }}
-                  filter={isActive || allGlow ? "url(#ooda-glow)" : undefined}
+                  filter={isActive || allComplete ? "url(#ltan-glow)" : undefined}
                   transition={{ duration: 0.4, ease: "easeOut" }}
                 />
 
                 {/* Completed dot (small center circle) */}
-                {isCompleted && !isActive && !allGlow && (
+                {isCompleted && !isActive && !allComplete && (
                   <motion.circle
                     cx={cx}
                     cy={CY}
@@ -234,13 +233,13 @@ export default function OODAIndicator({
       {/* Metadata row */}
       <div className="mt-4 flex flex-wrap items-center justify-center gap-6 font-mono text-xs">
         <span className="text-text-primary">
-          Cycle #{cycleNumber || "—"}
+          Cycle #{cycleNumber || "\u2014"}
         </span>
         <span className="text-text-muted">
           Started {formatTime(startedAt)}
         </span>
         <span className="text-text-muted">
-          Last cycle: {durationMs !== null ? formatDuration(durationMs) : "—"}
+          Last cycle: {durationMs !== null ? formatDuration(durationMs) : "\u2014"}
         </span>
         <span className={cn(confColor)}>
           Confidence: {confPct}%

@@ -5,22 +5,23 @@ import {
   staggerChildren,
   slideInRight,
   dissolveIn,
-  cardEntrance,
 } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import type { Json } from "@/lib/supabase";
-import type { OodaPhase } from "@/hooks/useBrainState";
+import type { LtanPhase } from "@/hooks/useBrainState";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 interface ThinkingPanelProps {
-  phase: OodaPhase;
+  phase: LtanPhase;
   observations: Json | null;
   analysis: Json | null;
   plannedActions: Json | null;
   actionResults: Json | null;
+  systemHealth: Json | null;
+  lastDiff: Json | null;
   confidence: number;
   cycleNumber: number;
   durationMs: number | null;
@@ -48,82 +49,182 @@ function asStr(val: Json | null | undefined): string {
   return "";
 }
 
+function asNum(val: Json | null | undefined): number {
+  if (typeof val === "number") return val;
+  return 0;
+}
+
 // ---------------------------------------------------------------------------
 // Phase content components
 // ---------------------------------------------------------------------------
 
-function ObservingContent({ data }: { data: Json | null }) {
+function LookingContent({
+  data,
+  systemHealth,
+  lastDiff,
+}: {
+  data: Json | null;
+  systemHealth: Json | null;
+  lastDiff: Json | null;
+}) {
   const obj = asObj(data);
   const items = asArr(obj?.items);
-
-  if (items.length === 0) {
-    return (
-      <motion.p
-        variants={dissolveIn}
-        initial="hidden"
-        animate="visible"
-        className="font-body text-sm text-text-muted italic animate-pulse"
-      >
-        Gathering data...
-      </motion.p>
-    );
-  }
+  const health = asObj(systemHealth);
+  const diff = asObj(lastDiff);
 
   return (
-    <motion.ul
-      variants={staggerChildren(0.06)}
-      initial="hidden"
-      animate="visible"
-      className="space-y-2"
-    >
-      {items.map((item, i) => {
-        const o = asObj(item);
-        const source = asStr(o?.source);
-        const summary = asStr(o?.summary);
-        const severity = asStr(o?.severity);
-        const dotColor =
-          severity === "error" || severity === "critical"
-            ? "bg-error"
-            : severity === "warning"
-              ? "bg-warning"
-              : "bg-accent";
-
-        return (
-          <motion.li
-            key={i}
-            variants={slideInRight}
-            className="flex items-start gap-2"
-          >
-            <span
-              className={cn(
-                "mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full",
-                dotColor
-              )}
-            />
-            <div>
-              {source && (
-                <span className="mr-2 font-mono text-[10px] text-text-muted">
-                  {source}
+    <motion.div variants={dissolveIn} initial="hidden" animate="visible" className="space-y-3">
+      {/* System health summary */}
+      {health && (
+        <div className="rounded-md bg-bg-primary px-3 py-2">
+          <p className="mb-1.5 font-body text-xs font-semibold uppercase tracking-widest text-text-muted">
+            System Snapshot
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <span className="font-mono text-[10px] text-text-muted">CPU</span>
+            <span className="font-mono text-[10px] text-text-secondary">
+              {asNum(health.cpu_percent).toFixed(1)}%
+            </span>
+            <span className="font-mono text-[10px] text-text-muted">Memory</span>
+            <span className="font-mono text-[10px] text-text-secondary">
+              {asNum(health.memory_used_percent).toFixed(1)}%
+            </span>
+            <span className="font-mono text-[10px] text-text-muted">Processes</span>
+            <span className="font-mono text-[10px] text-text-secondary">
+              {asNum(health.process_count)}
+            </span>
+            <span className="font-mono text-[10px] text-text-muted">Databases</span>
+            <span className="font-mono text-[10px] text-text-secondary">
+              {asNum(health.database_count)}
+            </span>
+            {health.scan_duration_ms && (
+              <>
+                <span className="font-mono text-[10px] text-text-muted">Scan time</span>
+                <span className="font-mono text-[10px] text-text-secondary">
+                  {asNum(health.scan_duration_ms)}ms
                 </span>
-              )}
-              <span className="font-body text-sm text-text-secondary">
-                {summary || "—"}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Diff summary */}
+      {diff && asNum(diff.total_changes) > 0 && (
+        <div className="rounded-md bg-bg-primary px-3 py-2">
+          <p className="mb-1.5 font-body text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Changes Detected
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {asNum(diff.total_changes) > 0 && (
+              <span className={cn(
+                "rounded-full px-2 py-0.5 font-mono text-[10px]",
+                asStr(diff.severity) === "alert"
+                  ? "bg-error/20 text-error"
+                  : asStr(diff.severity) === "notable"
+                    ? "bg-warning/20 text-warning"
+                    : "bg-accent/20 text-accent"
+              )}>
+                {asNum(diff.total_changes)} changes \u2022 {asStr(diff.severity) || "normal"}
               </span>
-            </div>
-          </motion.li>
-        );
-      })}
-    </motion.ul>
+            )}
+            {asArr(diff.new_processes).length > 0 && (
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] text-accent">
+                +{asArr(diff.new_processes).length} processes
+              </span>
+            )}
+            {asArr(diff.stopped_processes).length > 0 && (
+              <span className="rounded-full bg-error/10 px-2 py-0.5 font-mono text-[10px] text-error">
+                -{asArr(diff.stopped_processes).length} processes
+              </span>
+            )}
+            {asArr(diff.new_files).length > 0 && (
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-[10px] text-accent">
+                +{asArr(diff.new_files).length} files
+              </span>
+            )}
+            {asArr(diff.modified_files).length > 0 && (
+              <span className="rounded-full bg-warning/10 px-2 py-0.5 font-mono text-[10px] text-warning">
+                ~{asArr(diff.modified_files).length} files modified
+              </span>
+            )}
+            {asArr(diff.log_anomalies).length > 0 && (
+              <span className="rounded-full bg-error/10 px-2 py-0.5 font-mono text-[10px] text-error">
+                {asArr(diff.log_anomalies).length} log anomalies
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Observation items */}
+      {items.length === 0 && !health && (
+        <p className="font-body text-sm text-text-muted italic animate-pulse">
+          Scanning system...
+        </p>
+      )}
+
+      {items.length > 0 && (
+        <motion.ul
+          variants={staggerChildren(0.06)}
+          initial="hidden"
+          animate="visible"
+          className="space-y-2"
+        >
+          {items.map((item, i) => {
+            const o = asObj(item);
+            const source = asStr(o?.source);
+            const label = asStr(o?.label);
+            const summary = asStr(o?.summary);
+            const value = asStr(o?.value);
+            const severity = asStr(o?.severity);
+            const dotColor =
+              severity === "error" || severity === "critical"
+                ? "bg-error"
+                : severity === "warning"
+                  ? "bg-warning"
+                  : "bg-accent";
+
+            return (
+              <motion.li
+                key={i}
+                variants={slideInRight}
+                className="flex items-start gap-2"
+              >
+                <span
+                  className={cn(
+                    "mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+                    dotColor
+                  )}
+                />
+                <div>
+                  {(source || label) && (
+                    <span className="mr-2 font-mono text-[10px] text-text-muted">
+                      {source || label}
+                    </span>
+                  )}
+                  <span className="font-body text-sm text-text-secondary">
+                    {summary || value || "\u2014"}
+                  </span>
+                </div>
+              </motion.li>
+            );
+          })}
+        </motion.ul>
+      )}
+    </motion.div>
   );
 }
 
-function OrientingContent({ data }: { data: Json | null }) {
+function ThinkingContent({ data }: { data: Json | null }) {
   const obj = asObj(data);
   const summary = asStr(obj?.summary);
   const keyFindings = asArr(obj?.key_findings);
+  const concerns = asArr(obj?.concerns);
+  const opportunities = asArr(obj?.opportunities);
   const risks = asArr(obj?.risks);
 
-  if (!summary && keyFindings.length === 0 && risks.length === 0) {
+  if (!summary && keyFindings.length === 0 && risks.length === 0 && concerns.length === 0) {
     return (
       <p className="font-body text-sm text-text-muted italic">
         No analysis data for this phase.
@@ -157,6 +258,42 @@ function OrientingContent({ data }: { data: Json | null }) {
         </div>
       )}
 
+      {concerns.length > 0 && (
+        <div>
+          <p className="mb-1.5 font-body text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Concerns
+          </p>
+          <ul className="space-y-1">
+            {concerns.map((c, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+                <span className="font-body text-sm text-text-secondary">
+                  {asStr(c)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {opportunities.length > 0 && (
+        <div>
+          <p className="mb-1.5 font-body text-xs font-semibold uppercase tracking-widest text-text-muted">
+            Opportunities
+          </p>
+          <ul className="space-y-1">
+            {opportunities.map((o, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                <span className="font-body text-sm text-text-secondary">
+                  {asStr(o)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {risks.length > 0 && (
         <div>
           <p className="mb-1.5 font-body text-xs font-semibold uppercase tracking-widest text-text-muted">
@@ -178,100 +315,18 @@ function OrientingContent({ data }: { data: Json | null }) {
   );
 }
 
-function DecidingContent({ data }: { data: Json | null }) {
-  const obj = asObj(data);
-  const actions = asArr(obj?.actions);
-
-  if (actions.length === 0) {
-    return (
-      <p className="font-body text-sm text-text-muted italic">
-        No planned actions for this phase.
-      </p>
-    );
-  }
-
-  const authorityBadge = (auth: string) => {
-    switch (auth) {
-      case "REQUIRES_APPROVAL":
-        return "bg-warning/20 text-warning";
-      case "ACT_AND_NOTIFY":
-        return "bg-accent/20 text-accent";
-      case "ACT_SILENTLY":
-        return "bg-text-muted/20 text-text-muted";
-      case "PROHIBITED":
-        return "bg-error/20 text-error";
-      default:
-        return "bg-text-muted/20 text-text-muted";
-    }
-  };
-
-  return (
-    <motion.ol
-      variants={staggerChildren(0.08)}
-      initial="hidden"
-      animate="visible"
-      className="space-y-3"
-    >
-      {actions.map((item, i) => {
-        const a = asObj(item);
-        const agent = asStr(a?.agent);
-        const task = asStr(a?.task);
-        const priority = typeof a?.priority === "number" ? a.priority : null;
-        const authority = asStr(a?.authority);
-
-        const prioColor =
-          priority !== null && priority >= 0.8
-            ? "text-accent"
-            : priority !== null && priority >= 0.5
-              ? "text-warning"
-              : "text-text-muted";
-
-        return (
-          <motion.li key={i} variants={cardEntrance} className="rounded-md bg-bg-primary px-3 py-2">
-            <div className="flex items-start gap-2">
-              <span className="mt-0.5 font-mono text-xs text-text-muted">
-                {i + 1}.
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-body text-sm text-text-primary">
-                  <span className="font-mono text-accent">{agent}</span>
-                  {" → "}
-                  {task || "—"}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {priority !== null && (
-                    <span className={cn("font-mono text-[10px]", prioColor)}>
-                      Priority: {priority.toFixed(2)}
-                    </span>
-                  )}
-                  {authority && (
-                    <span
-                      className={cn(
-                        "rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase",
-                        authorityBadge(authority)
-                      )}
-                    >
-                      {authority.replace(/_/g, " ")}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </motion.li>
-        );
-      })}
-    </motion.ol>
-  );
-}
-
 function ActingContent({ data }: { data: Json | null }) {
   const obj = asObj(data);
   const results = asArr(obj?.results);
+  const actions = asArr(obj?.actions);
 
-  if (results.length === 0) {
+  // Support both planned_actions.actions and action_results.results
+  const items = results.length > 0 ? results : actions;
+
+  if (items.length === 0) {
     return (
       <p className="font-body text-sm text-text-muted italic">
-        No execution results for this phase.
+        No actions or results for this phase.
       </p>
     );
   }
@@ -291,15 +346,39 @@ function ActingContent({ data }: { data: Json | null }) {
     }
   };
 
+  const authorityBadge = (auth: string) => {
+    switch (auth) {
+      case "REQUIRES_APPROVAL":
+        return "bg-warning/20 text-warning";
+      case "ACT_AND_NOTIFY":
+        return "bg-accent/20 text-accent";
+      case "ACT_SILENTLY":
+        return "bg-text-muted/20 text-text-muted";
+      case "PROHIBITED":
+        return "bg-error/20 text-error";
+      default:
+        return "";
+    }
+  };
+
   return (
     <div className="space-y-2">
-      {results.map((item, i) => {
+      {items.map((item, i) => {
         const r = asObj(item);
         const agent = asStr(r?.agent);
         const task = asStr(r?.task);
         const status = asStr(r?.status);
         const detail = asStr(r?.detail);
-        const si = statusIcon(status);
+        const authority = asStr(r?.authority);
+        const priority = typeof r?.priority === "number" ? r.priority : null;
+        const si = status ? statusIcon(status) : { icon: String(i + 1) + ".", color: "text-text-muted" };
+
+        const prioColor =
+          priority !== null && priority >= 0.8
+            ? "text-accent"
+            : priority !== null && priority >= 0.5
+              ? "text-warning"
+              : "text-text-muted";
 
         return (
           <div key={i} className="rounded-md bg-bg-primary px-3 py-2">
@@ -310,14 +389,30 @@ function ActingContent({ data }: { data: Json | null }) {
               <div className="min-w-0 flex-1">
                 <p className="font-body text-sm text-text-primary">
                   <span className="font-mono text-accent">{agent}</span>
-                  {" — "}
-                  {task || "—"}
+                  {task ? ` \u2014 ${task}` : ""}
                 </p>
-                {detail && (
-                  <p className="mt-0.5 font-mono text-[10px] text-text-muted">
-                    {detail}
-                  </p>
-                )}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {detail && (
+                    <p className="font-mono text-[10px] text-text-muted">
+                      {detail}
+                    </p>
+                  )}
+                  {priority !== null && (
+                    <span className={cn("font-mono text-[10px]", prioColor)}>
+                      Priority: {priority.toFixed(2)}
+                    </span>
+                  )}
+                  {authority && (
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 py-0.5 font-mono text-[9px] uppercase",
+                        authorityBadge(authority)
+                      )}
+                    >
+                      {authority.replace(/_/g, " ")}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -327,7 +422,7 @@ function ActingContent({ data }: { data: Json | null }) {
   );
 }
 
-function LearningContent({
+function NarratingContent({
   cycleNumber,
   confidence,
   durationMs,
@@ -339,7 +434,7 @@ function LearningContent({
   return (
     <motion.div variants={dissolveIn} initial="hidden" animate="visible" className="space-y-3">
       <p className="font-body text-sm text-text-secondary">
-        Cycle #{cycleNumber} complete. Updating playbooks and knowledge...
+        Cycle #{cycleNumber} complete. Narrating observations and updating knowledge...
       </p>
 
       {/* Confidence bar */}
@@ -383,12 +478,11 @@ function IdleContent() {
 // Phase header labels
 // ---------------------------------------------------------------------------
 
-const PHASE_HEADERS: Record<OodaPhase, { title: string; subtitle: string }> = {
-  observing: { title: "Observing", subtitle: "What I see" },
-  orienting: { title: "Orienting", subtitle: "What I think" },
-  deciding: { title: "Deciding", subtitle: "What I\u2019ll do" },
+const PHASE_HEADERS: Record<LtanPhase, { title: string; subtitle: string }> = {
+  looking: { title: "Looking", subtitle: "What I see" },
+  thinking: { title: "Thinking", subtitle: "What I think" },
   acting: { title: "Acting", subtitle: "What\u2019s happening" },
-  learning: { title: "Learning", subtitle: "What I learned" },
+  narrating: { title: "Narrating", subtitle: "What I learned" },
   idle: { title: "Idle", subtitle: "Waiting" },
 };
 
@@ -402,6 +496,8 @@ export default function ThinkingPanel({
   analysis,
   plannedActions,
   actionResults,
+  systemHealth,
+  lastDiff,
   confidence,
   cycleNumber,
   durationMs,
@@ -420,7 +516,7 @@ export default function ThinkingPanel({
           {header.title}
         </h3>
         <span className="font-body text-xs text-text-muted">
-          — {header.subtitle}
+          \u2014 {header.subtitle}
         </span>
       </div>
 
@@ -434,12 +530,19 @@ export default function ThinkingPanel({
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
           >
-            {phase === "observing" && <ObservingContent data={observations} />}
-            {phase === "orienting" && <OrientingContent data={analysis} />}
-            {phase === "deciding" && <DecidingContent data={plannedActions} />}
-            {phase === "acting" && <ActingContent data={actionResults} />}
-            {phase === "learning" && (
-              <LearningContent
+            {phase === "looking" && (
+              <LookingContent
+                data={observations}
+                systemHealth={systemHealth}
+                lastDiff={lastDiff}
+              />
+            )}
+            {phase === "thinking" && <ThinkingContent data={analysis} />}
+            {phase === "acting" && (
+              <ActingContent data={actionResults ?? plannedActions} />
+            )}
+            {phase === "narrating" && (
+              <NarratingContent
                 cycleNumber={cycleNumber}
                 confidence={confidence}
                 durationMs={durationMs}

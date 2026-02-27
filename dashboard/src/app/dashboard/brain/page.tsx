@@ -9,9 +9,10 @@ import {
   getObj,
   getNum,
 } from "@/hooks/useBrainState";
-import OODAIndicator from "@/components/brain/OODAIndicator";
+import LTANIndicator from "@/components/brain/LTANIndicator";
 import ThinkingPanel from "@/components/brain/ThinkingPanel";
 import PriorityQueue from "@/components/brain/PriorityQueue";
+import SystemHealthPanel from "@/components/brain/SystemHealthPanel";
 import DecisionTimeline from "@/components/brain/DecisionTimeline";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,17 @@ export default function BrainViewPage() {
     ? getObj(displayState.state, "priority_queue")
     : null;
 
+  // System observer data
+  const systemHealth = displayState
+    ? getObj(displayState.state, "system_health")
+    : null;
+  const lastDiff = displayState
+    ? getObj(displayState.state, "last_diff")
+    : null;
+  const activeAgents = displayState
+    ? getObj(displayState.state, "active_agents")
+    : null;
+
   // Start time: use created_at of the display state as a proxy
   const startedAt = displayState?.created_at ?? null;
 
@@ -94,7 +106,7 @@ export default function BrainViewPage() {
           )}
         </div>
         <p className="mt-1 font-body text-sm text-text-secondary">
-          Orchestrator reasoning cycle — live
+          LOOK \u2192 THINK \u2192 ACT \u2192 NARRATE — live orchestrator loop
         </p>
       </div>
 
@@ -104,14 +116,14 @@ export default function BrainViewPage() {
           <p className="font-body text-sm text-text-secondary">
             Viewing Cycle #{selectedCycleNumber}{" "}
             <span className="text-text-muted">
-              — {selectedCycle.created_at ? new Date(selectedCycle.created_at).toLocaleString() : ""}
+              \u2014 {selectedCycle.created_at ? new Date(selectedCycle.created_at).toLocaleString() : ""}
             </span>
           </p>
           <button
             onClick={clearSelection}
             className="font-body text-xs text-accent transition-colors hover:text-accent/80"
           >
-            ← Back to Live
+            \u2190 Back to Live
           </button>
         </div>
       )}
@@ -125,9 +137,9 @@ export default function BrainViewPage() {
 
       {!isLoading && (
         <>
-          {/* OODA Indicator — full width */}
+          {/* LTAN Indicator — full width */}
           <div className="mb-4">
-            <OODAIndicator
+            <LTANIndicator
               currentPhase={phase}
               cycleNumber={cycleNumber}
               confidence={confidence}
@@ -136,17 +148,24 @@ export default function BrainViewPage() {
             />
           </div>
 
-          {/* ThinkingPanel + PriorityQueue — side by side */}
-          <div className="mb-4 grid min-h-[320px] gap-4 lg:grid-cols-[3fr_2fr]">
+          {/* ThinkingPanel + SystemHealth + PriorityQueue — three columns */}
+          <div className="mb-4 grid min-h-[320px] gap-4 lg:grid-cols-[3fr_2fr_2fr]">
             <ThinkingPanel
               phase={phase}
               observations={observations}
               analysis={analysis}
               plannedActions={plannedActions}
               actionResults={actionResults}
+              systemHealth={systemHealth}
+              lastDiff={lastDiff}
               confidence={confidence}
               cycleNumber={cycleNumber}
               durationMs={durationMs}
+            />
+            <SystemHealthPanel
+              systemHealth={systemHealth}
+              lastDiff={lastDiff}
+              activeAgents={activeAgents}
             />
             <PriorityQueue queue={priorityQueue} />
           </div>
