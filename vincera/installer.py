@@ -121,9 +121,9 @@ def run_installer(
         console.print("[red]Supabase connection validation failed.[/red]")
         return False
 
-    # 4. Register company
+    # 4. Register company (use service_key to bypass RLS)
     try:
-        sb_client = create_client(supabase_url, supabase_anon_key)
+        sb_client = create_client(supabase_url, supabase_service_key)
         result = (
             sb_client.table("companies")
             .insert({"name": company_name, "agent_name": agent_name})

@@ -30,6 +30,39 @@ class GhostModeController:
         self._would_have: list[dict] = []
 
     # ------------------------------------------------------------------
+    # Initialization — restore state from Supabase
+    # ------------------------------------------------------------------
+
+    def load_state(self, company_id: str) -> None:
+        """Restore ghost mode state from the company record in Supabase.
+
+        This must be called after construction so ghost mode survives
+        bot restarts without resetting the timer.
+        """
+        self._company_id = company_id
+        company = self._sb.get_company(company_id)
+        if not company:
+            return
+
+        ghost_until_str = company.get("ghost_mode_until")
+        if ghost_until_str:
+            try:
+                end_dt = datetime.fromisoformat(ghost_until_str)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                self._ghost_mode_until = end_dt
+                # Approximate start_date from the configured duration
+                days = self._config.ghost_mode_days or 7
+                self._start_date = end_dt - timedelta(days=days)
+                logger.info(
+                    "Ghost mode restored: ends %s (%d days remaining)",
+                    end_dt.isoformat(),
+                    self.days_remaining,
+                )
+            except (ValueError, TypeError) as exc:
+                logger.warning("Could not parse ghost_mode_until: %s", exc)
+
+    # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
 

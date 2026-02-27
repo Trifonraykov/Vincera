@@ -99,7 +99,7 @@ class SupabaseManager:
                 "agent_name": agent_name,
                 "status": status,
                 "current_task": task,
-                "detail": detail,
+                "error_message": detail,
                 "updated_at": self._now(),
             })
             .execute()
@@ -132,7 +132,7 @@ class SupabaseManager:
     ) -> dict | None:
         fields: dict = {"status": status, "updated_at": self._now()}
         if shadow_report is not None:
-            fields["shadow_report"] = shadow_report
+            fields["shadow_result"] = shadow_report
         return self._safe_execute(
             lambda: self._client.table("automations")
             .update(fields)
@@ -212,7 +212,7 @@ class SupabaseManager:
             lambda: self._client.table("messages")
             .insert({
                 "company_id": company_id,
-                "agent_name": agent_name,
+                "sender": agent_name,
                 "content": content,
                 "message_type": message_type,
                 "metadata": metadata,
@@ -241,7 +241,7 @@ class SupabaseManager:
             lambda: self._client.table("messages")
             .select("*")
             .eq("company_id", company_id)
-            .eq("agent_name", agent_name)
+            .eq("sender", agent_name)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -377,7 +377,7 @@ class SupabaseManager:
         entry: dict,
     ) -> dict | None:
         return self._safe_execute(
-            lambda: self._client.table("playbooks")
+            lambda: self._client.table("playbook_entries")
             .insert({
                 **entry,
                 "company_id": company_id,
@@ -395,11 +395,11 @@ class SupabaseManager:
         limit: int = 5,
     ) -> list:
         return self._safe_query(
-            lambda: self._client.table("playbooks")
+            lambda: self._client.table("playbook_entries")
             .select("*")
             .eq("company_id", company_id)
             .eq("agent_name", agent_name)
-            .contains("tags", tags)
+            .contains("similarity_tags", tags)
             .limit(limit)
             .execute()
         )
@@ -472,7 +472,7 @@ class SupabaseManager:
     def save_brain_state(self, company_id: str, data: dict) -> dict | None:
         return self._safe_execute(
             lambda: self._client.table("brain_states")
-            .insert({**data, "company_id": company_id, "created_at": self._now()})
+            .insert({"state": data, "company_id": company_id, "created_at": self._now()})
             .execute()
         )
 
@@ -485,7 +485,10 @@ class SupabaseManager:
             .limit(1)
             .execute()
         )
-        return data[0] if data else None
+        if not data:
+            return None
+        row = data[0]
+        return row.get("state") if isinstance(row.get("state"), dict) else None
 
     # ------------------------------------------------------------------
     # 12. Ghost reports
@@ -519,10 +522,10 @@ class SupabaseManager:
     ) -> dict | None:
         return self._safe_execute(
             lambda: self._client.table("metrics")
-            .insert({
+            .upsert({
                 "company_id": company_id,
-                "field": field,
-                "amount": amount,
+                "metric_name": field,
+                "metric_value": amount,
                 "created_at": self._now(),
             })
             .execute()

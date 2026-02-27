@@ -63,7 +63,7 @@ function AgentInfoPanel({
   const { status } = useAgentStatus(companyId, agentName);
   const [playbook, setPlaybook] = useState<PlaybookEntry[]>([]);
   const [priorityQueue, setPriorityQueue] = useState<
-    { task: string; priority: number }[]
+    { task: string; priority: string | number }[]
   >([]);
 
   // Fetch playbook entries
@@ -98,16 +98,33 @@ function AgentInfoPanel({
         .single();
       if (data?.state && typeof data.state === "object") {
         const state = data.state as Record<string, Json>;
-        const queue = state.priority_queue;
-        if (Array.isArray(queue)) {
+        const rawQueue = state.priority_queue;
+        // Handle both formats: flat array or {items: [...]}
+        const queueArr = Array.isArray(rawQueue)
+          ? rawQueue
+          : rawQueue && typeof rawQueue === "object" && !Array.isArray(rawQueue)
+            ? (rawQueue as Record<string, Json>).items
+            : null;
+        if (Array.isArray(queueArr)) {
           setPriorityQueue(
-            queue.map((item: Json) => {
+            queueArr.map((item: Json) => {
               if (typeof item === "object" && item && !Array.isArray(item)) {
                 const obj = item as Record<string, Json>;
-                return {
-                  task: typeof obj.task === "string" ? obj.task : "Unknown",
-                  priority: typeof obj.priority === "number" ? obj.priority : 0,
-                };
+                const name =
+                  typeof obj.task === "string"
+                    ? obj.task
+                    : typeof obj.description === "string"
+                      ? obj.description
+                      : "Unknown";
+                const prio =
+                  typeof obj.priority === "string"
+                    ? obj.priority
+                    : typeof obj.priority === "number"
+                      ? obj.priority
+                      : typeof obj.score === "number"
+                        ? obj.score
+                        : 0;
+                return { task: name, priority: prio };
               }
               return { task: String(item), priority: 0 };
             })

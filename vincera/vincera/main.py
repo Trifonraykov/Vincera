@@ -228,6 +228,25 @@ def main() -> None:
     settings = get_settings()
     setup_logging(settings.logs_dir)
 
+    # Auto-register company if COMPANY_ID is not set
+    if not settings.company_id:
+        console.print("[yellow]No COMPANY_ID found. Registering company…[/yellow]")
+        tmp_sb = SupabaseManager(
+            supabase_url=settings.supabase_url,
+            supabase_key=settings.supabase_service_key,
+            company_id="",
+        )
+        new_id = tmp_sb.register_company(settings.company_name, settings.agent_name)
+        if not new_id:
+            console.print("[red]Failed to register company in Supabase.[/red]")
+            sys.exit(1)
+        # Persist to .env
+        _update_env_company_id(new_id)
+        # Reload settings with new company_id
+        get_settings.cache_clear()
+        settings = get_settings()
+        console.print(f"[green]Company registered: {new_id}[/green]")
+
     sb = SupabaseManager(
         supabase_url=settings.supabase_url,
         supabase_key=settings.supabase_service_key,
@@ -250,6 +269,25 @@ def main() -> None:
         _handle_install_service()
     else:
         handle_run(state, settings)
+
+
+def _update_env_company_id(company_id: str) -> None:
+    """Write COMPANY_ID into the .env file."""
+    env_path = Path(".env")
+    if not env_path.exists():
+        env_path.write_text(f"COMPANY_ID={company_id}\n", encoding="utf-8")
+        return
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    updated = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("COMPANY_ID=") or stripped == "COMPANY_ID":
+            lines[i] = f"COMPANY_ID={company_id}"
+            updated = True
+            break
+    if not updated:
+        lines.append(f"COMPANY_ID={company_id}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _handle_stop(settings) -> None:

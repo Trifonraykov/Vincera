@@ -88,8 +88,8 @@ class MessageHandler:
             await self._handle_system_command(command, content)
             return
 
-        # Route to specific agent if mentioned or keyword-matched
-        agent_name = self._route_to_agent(content, metadata)
+        # Route to specific agent — prefer explicit target_agent from dashboard
+        agent_name = metadata.get("target_agent") or self._route_to_agent(content, metadata)
         if agent_name and agent_name in self._agents:
             await self._agents[agent_name].handle_message(content)
             return

@@ -15,6 +15,19 @@ export interface UseMessagesReturn {
   sendMessage: (content: string) => Promise<void>;
 }
 
+// ---------------------------------------------------------------------------
+// Helper: check if a message belongs to an agent conversation
+// ---------------------------------------------------------------------------
+
+function isRelevant(msg: Message, agentName: string): boolean {
+  if (msg.sender === agentName || msg.sender === "system") return true;
+  if (msg.sender === "user") {
+    const meta = (msg.metadata ?? {}) as Record<string, unknown>;
+    return meta.target_agent === agentName;
+  }
+  return false;
+}
+
 export function useMessages(
   companyId: string | null,
   agentName: string
@@ -35,7 +48,7 @@ export function useMessages(
   }
 
   // ---------------------------------------------------------------------------
-  // Initial fetch
+  // Initial fetch — two queries to avoid PostgREST JSONB filter issues
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -51,24 +64,46 @@ export function useMessages(
     optimisticIdsRef.current.clear();
 
     async function fetchInitial() {
-      const { data } = await supabase
+      // Query 1: Agent responses + system messages
+      const { data: agentData } = await supabase
         .from("messages")
         .select("*")
         .eq("company_id", companyId)
-        .or(`sender.eq.${agentName},sender.eq.user,sender.eq.system`)
+        .or(`sender.eq.${agentName},sender.eq.system`)
         .order("created_at", { ascending: true })
         .limit(PAGE_SIZE);
 
-      const rows = (data ?? []) as Message[];
+      // Query 2: User messages targeted at this agent (uses @> JSONB contains)
+      const { data: userData } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("sender", "user")
+        .contains("metadata", { target_agent: agentName })
+        .order("created_at", { ascending: true })
+        .limit(PAGE_SIZE);
+
+      // Merge, deduplicate, sort chronologically
+      const seen = new Set<string>();
+      const merged: Message[] = [];
+      for (const m of [...(agentData ?? []), ...(userData ?? [])] as Message[]) {
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          merged.push(m);
+        }
+      }
+      merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+      const rows = merged.slice(-PAGE_SIZE);
       rows.forEach((m) => knownIdsRef.current.add(m.id));
       setMessages(rows);
-      setHasMore(rows.length === PAGE_SIZE);
+      setHasMore(merged.length > PAGE_SIZE);
       setIsLoading(false);
     }
 
     fetchInitial();
 
-    // Realtime subscription
+    // Realtime subscription — client-side filtering (always reliable)
     const channel = supabase
       .channel(`messages-${companyId}-${agentName}`)
       .on(
@@ -81,14 +116,7 @@ export function useMessages(
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          // Only include messages relevant to this agent conversation
-          if (
-            newMsg.sender !== agentName &&
-            newMsg.sender !== "user" &&
-            newMsg.sender !== "system"
-          ) {
-            return;
-          }
+          if (!isRelevant(newMsg, agentName)) return;
 
           if (knownIdsRef.current.has(newMsg.id)) return;
           knownIdsRef.current.add(newMsg.id);
@@ -132,16 +160,37 @@ export function useMessages(
     const supabase = getSupabase();
     const oldest = messages[0];
 
-    const { data } = await supabase
+    // Same two-query approach for older messages
+    const { data: agentData } = await supabase
       .from("messages")
       .select("*")
       .eq("company_id", companyId)
-      .or(`sender.eq.${agentName},sender.eq.user,sender.eq.system`)
+      .or(`sender.eq.${agentName},sender.eq.system`)
       .lt("created_at", oldest.created_at)
       .order("created_at", { ascending: true })
       .limit(PAGE_SIZE);
 
-    const rows = (data ?? []) as Message[];
+    const { data: userData } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("sender", "user")
+      .contains("metadata", { target_agent: agentName })
+      .lt("created_at", oldest.created_at)
+      .order("created_at", { ascending: true })
+      .limit(PAGE_SIZE);
+
+    const seen = new Set<string>();
+    const merged: Message[] = [];
+    for (const m of [...(agentData ?? []), ...(userData ?? [])] as Message[]) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        merged.push(m);
+      }
+    }
+    merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+    const rows = merged.slice(-PAGE_SIZE);
     rows.forEach((m) => knownIdsRef.current.add(m.id));
     setMessages((prev) => [...rows, ...prev]);
     setHasMore(rows.length === PAGE_SIZE);
@@ -155,6 +204,7 @@ export function useMessages(
     async (content: string) => {
       if (!companyId || !content.trim()) return;
 
+      const meta = { target_agent: agentName };
       const optimisticId = `optimistic-${Date.now()}`;
       const optimisticMsg: Message = {
         id: optimisticId,
@@ -162,7 +212,7 @@ export function useMessages(
         sender: "user",
         content: content.trim(),
         message_type: "chat",
-        metadata: {},
+        metadata: meta,
         read: false,
         created_at: new Date().toISOString(),
       };
@@ -178,11 +228,11 @@ export function useMessages(
           sender: "user",
           content: content.trim(),
           message_type: "chat",
-          metadata: {},
+          metadata: meta,
         });
       }
     },
-    [companyId]
+    [companyId, agentName]
   );
 
   return { messages, isLoading, hasMore, loadMore, sendMessage };

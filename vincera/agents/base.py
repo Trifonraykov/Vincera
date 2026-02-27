@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import traceback
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from vincera.utils.errors import VinceraError
 
 if TYPE_CHECKING:
     from vincera.config import VinceraSettings
@@ -116,17 +120,61 @@ class BaseAgent(ABC):
             self._status = AgentStatus.COMPLETED
             self._state.update_agent_status(self._name, "completed", self._current_task)
             return result
+        except VinceraError as exc:
+            self._status = AgentStatus.FAILED
+            self._state.update_agent_status(
+                self._name, "failed", self._current_task, f"{type(exc).__name__}: {exc}",
+            )
+            await self._report_error(exc)
+            raise
         except Exception as exc:
             self._status = AgentStatus.FAILED
-            self._state.update_agent_status(self._name, "failed", self._current_task, str(exc))
-            # Send error to chat
+            self._state.update_agent_status(
+                self._name, "failed", self._current_task, f"Unexpected: {type(exc).__name__}",
+            )
+            wrapped = VinceraError(
+                f"Unexpected error in {self._name}: {exc}",
+                agent_name=self._name,
+                context={
+                    "original_type": type(exc).__name__,
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            await self._report_error(wrapped)
+            raise wrapped from exc
+
+    async def _report_error(self, error: VinceraError) -> None:
+        """Send error details to the agent's chat and log as event.
+
+        Wrapped in try/except — error reporting must never cascade.
+        """
+        try:
+            error_msg = f"Error in {self._name}: {error}"
+            if error.context:
+                error_msg += f"\n\nContext: {json.dumps(error.context, indent=2, default=str)}"
+
             self._sb.send_message(
                 self._company_id,
                 self._name,
-                f"Error during task '{self._current_task}': {exc}",
-                "error",
+                error_msg,
+                "alert",
+                {
+                    "error_type": type(error).__name__,
+                    "agent_name": error.agent_name or self._name,
+                    "context": error.context,
+                },
             )
-            raise
+
+            self._sb.log_event(
+                company_id=self._company_id,
+                event_type="agent_error",
+                agent_name=self._name,
+                message=str(error),
+                severity="error",
+                metadata=error.context,
+            )
+        except Exception:
+            logger.exception("Failed to report error for %s", self._name)
 
     # ------------------------------------------------------------------
     # Chat capability
@@ -134,33 +182,47 @@ class BaseAgent(ABC):
 
     async def handle_message(self, user_message: str) -> str:
         """Handle a user message from the dashboard chat."""
-        context = await self.get_context()
-        recent_actions = context.get("recent_actions", [])
+        try:
+            context = await self.get_context()
+            recent_actions = context.get("recent_actions", [])
 
-        system_prompt = (
-            f"You are the {self._name} agent for {self._config.company_name}. "
-            "The user is chatting with you through the Vincera dashboard. "
-            "Be conversational, specific, and honest. If you don't know something, say so. "
-            "Reference specific actions you've taken, data you've seen, and decisions you've made.\n\n"
-            f"Your current state: {self._status.value}\n"
-            f"Your recent actions: {recent_actions}\n"
-            f"Your current task: {self._current_task or 'none'}"
-        )
+            system_prompt = (
+                f"You are the {self._name} agent for {self._config.company_name}. "
+                "The user is chatting with you through the Vincera dashboard. "
+                "Be conversational, specific, and honest. If you don't know something, say so. "
+                "Reference specific actions you've taken, data you've seen, and decisions you've made.\n\n"
+                f"Your current state: {self._status.value}\n"
+                f"Your recent actions: {recent_actions}\n"
+                f"Your current task: {self._current_task or 'none'}"
+            )
 
-        response = await self._llm.think(
-            system_prompt=system_prompt,
-            user_message=user_message,
-        )
+            response = await self._llm.think(
+                system_prompt=system_prompt,
+                user_message=user_message,
+            )
 
-        # Send response to Supabase chat
-        self._sb.send_message(
-            self._company_id,
-            self._name,
-            response,
-            "chat",
-        )
+            # Send response to Supabase chat
+            self._sb.send_message(
+                self._company_id,
+                self._name,
+                response,
+                "chat",
+            )
 
-        return response
+            return response
+        except Exception as exc:
+            error_response = (
+                f"Sorry, I encountered an error while processing your message: "
+                f"{type(exc).__name__}"
+            )
+            logger.exception("Error in %s.handle_message", self._name)
+            try:
+                self._sb.send_message(
+                    self._company_id, self._name, error_response, "error",
+                )
+            except Exception:
+                pass  # Don't cascade
+            return error_response
 
     # ------------------------------------------------------------------
     # Playbook integration

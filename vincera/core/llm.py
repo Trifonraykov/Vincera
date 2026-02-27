@@ -13,6 +13,7 @@ from typing import Any, Callable
 import httpx
 
 from vincera.utils.db import VinceraDB
+from vincera.utils.errors import LLMCircuitOpenError, LLMError  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,6 @@ _SYSTEM_PREFIX = (
 # Rough per-token costs (USD) for cost estimation
 _COST_PER_INPUT_TOKEN = 3e-6
 _COST_PER_OUTPUT_TOKEN = 15e-6
-
-
-class LLMCircuitOpenError(Exception):
-    """Raised when the circuit breaker is open and calls are rejected."""
-
-
-class LLMError(Exception):
-    """Raised when all retries and fallbacks are exhausted."""
 
 
 class OpenRouterClient:
@@ -69,6 +62,7 @@ class OpenRouterClient:
         # Circuit breaker state
         self._consecutive_failures: int = 0
         self._circuit_open_until: float | None = None
+        self._was_half_open: bool = False
 
     # ------------------------------------------------------------------
     # System prefix
@@ -92,21 +86,28 @@ class OpenRouterClient:
                 raise LLMCircuitOpenError(
                     f"Circuit breaker open. Retry after {self._circuit_open_until - time.monotonic():.0f}s"
                 )
-            # Cooldown expired — half-open, allow the call
+            # Cooldown expired — half-open, allow one test call
+            logger.info("LLM circuit breaker HALF_OPEN — testing with single call")
             self._circuit_open_until = None
+            self._was_half_open = True
 
     def _record_failure(self) -> None:
+        self._was_half_open = False
         self._consecutive_failures += 1
         if self._consecutive_failures >= CIRCUIT_THRESHOLD:
             self._circuit_open_until = time.monotonic() + CIRCUIT_COOLDOWN
-            logger.error(
-                "Circuit breaker opened after %d consecutive failures",
+            logger.warning(
+                "LLM circuit breaker OPEN after %d consecutive failures. Cooldown: %ds",
                 self._consecutive_failures,
+                CIRCUIT_COOLDOWN,
             )
 
     def _record_success(self) -> None:
+        if self._was_half_open:
+            logger.info("LLM circuit breaker CLOSED — service recovered")
         self._consecutive_failures = 0
         self._circuit_open_until = None
+        self._was_half_open = False
 
     # ------------------------------------------------------------------
     # Token logging
