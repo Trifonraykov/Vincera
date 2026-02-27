@@ -52,7 +52,7 @@ class Scheduler:
         self._state = state
         self._tasks: dict[str, ScheduledTask] = {}
         self._running: bool = False
-        self._cycle_interval: int = 300  # 5 minutes
+        self._cycle_interval: int = 60  # 1 minute — responsive active phase
 
     # ------------------------------------------------------------------
     # Task management

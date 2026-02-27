@@ -52,6 +52,7 @@ def _mock_state():
 def _mock_llm():
     llm = MagicMock()
     llm.think = AsyncMock(return_value="ok")
+    llm.think_structured = AsyncMock(return_value={"opportunities": []})
     return llm
 
 
@@ -82,6 +83,7 @@ def _mock_priority():
     pe.merge_candidates.return_value = [candidate]
     pe.rank.return_value = [scored]
     pe.get_next_batch.return_value = [scored]
+    pe.score.return_value = scored
     return pe
 
 
@@ -242,7 +244,6 @@ class TestPhaseResearch:
         agents = {"discovery": _mock_agent(), "research": research_agent}
         orch, _ = _build_orchestrator(tmp_path, agents=agents)
         orch._brain.current_phase = "researching"
-        # Provide a company model so research can run
         orch._brain.company_model = {
             "business_type": "ecommerce", "industry": "retail", "confidence": 0.8,
             "software_stack": [], "data_architecture": [], "detected_processes": [],
@@ -294,7 +295,7 @@ class TestPhaseGhost:
     def test_ends(self, tmp_path: Path) -> None:
         ghost = _mock_ghost()
         ghost.is_active = False
-        ghost.start_date = "2024-01-01"  # not None — was started before
+        ghost.start_date = "2024-01-01"
         ghost.should_end = AsyncMock(return_value=True)
         orch, _ = _build_orchestrator(tmp_path, ghost_controller=ghost)
         orch._brain.current_phase = "ghost"
@@ -320,7 +321,6 @@ class TestPhaseActive:
         agents = {"discovery": _mock_agent(), "builder": _mock_agent("builder")}
         orch, _ = _build_orchestrator(tmp_path, agents=agents)
         orch._brain.current_phase = "active"
-        # Pre-fill ranked automations
         from vincera.core.priority import AutomationCandidate, ScoredCandidate
         candidate = AutomationCandidate(
             name="auto_invoice", domain="finance", description="Auto invoicing",
@@ -366,6 +366,159 @@ class TestPhaseActive:
         orch._brain.ranked_automations = []
         result = _run(orch.run_cycle())
         assert result["action"] == "idle"
+
+
+# ===========================================================================
+# Post-completion operations
+# ===========================================================================
+
+class TestPostCompletion:
+    def test_queues_operator_after_builder(self, tmp_path: Path) -> None:
+        agents = {
+            "discovery": _mock_agent(),
+            "builder": _mock_agent("builder"),
+            "operator": _mock_agent("operator"),
+        }
+        builder_result = {
+            "status": "success",
+            "deployment_id": "dep-123",
+            "script_path": None,
+        }
+        agents["builder"].execute = AsyncMock(return_value=builder_result)
+        orch, _ = _build_orchestrator(tmp_path, agents=agents)
+        orch._brain.current_phase = "active"
+
+        from vincera.core.priority import AutomationCandidate, ScoredCandidate
+        candidate = AutomationCandidate(
+            name="auto_invoice", domain="finance", description="invoicing",
+            source="ontology", evidence="match", estimated_hours_saved_weekly=5.0,
+        )
+        scored = ScoredCandidate(
+            candidate=candidate, impact_score=0.8, feasibility_score=0.9,
+            risk_score=0.1, final_score=0.75, priority="high",
+            scoring_breakdown={},
+        )
+        orch._brain.ranked_automations = [scored.model_dump()]
+        result = _run(orch.run_cycle())
+        assert result["action"] == "task_completed"
+        assert any(
+            op["type"] == "operator_canary" for op in orch._brain.pending_operations
+        )
+
+    def test_queues_unstuck_on_failure(self, tmp_path: Path) -> None:
+        agents = {
+            "discovery": _mock_agent(),
+            "builder": _mock_agent("builder"),
+            "unstuck": _mock_agent("unstuck"),
+        }
+        agents["builder"].execute = AsyncMock(side_effect=RuntimeError("build failed"))
+        orch, _ = _build_orchestrator(tmp_path, agents=agents)
+        orch._brain.current_phase = "active"
+
+        from vincera.core.priority import AutomationCandidate, ScoredCandidate
+        candidate = AutomationCandidate(
+            name="test_task", domain="finance", description="test",
+            source="ontology", evidence="match",
+        )
+        scored = ScoredCandidate(
+            candidate=candidate, impact_score=0.5, feasibility_score=0.5,
+            risk_score=0.1, final_score=0.5, priority="medium",
+            scoring_breakdown={},
+        )
+        orch._brain.ranked_automations = [scored.model_dump()]
+        result = _run(orch.run_cycle())
+        assert result["action"] == "task_failed"
+        assert any(
+            op["type"] == "unstuck_diagnosis" for op in orch._brain.pending_operations
+        )
+
+    def test_dispatches_pending_ops(self, tmp_path: Path) -> None:
+        operator = _mock_agent("operator")
+        agents = {"discovery": _mock_agent(), "operator": operator}
+        orch, _ = _build_orchestrator(tmp_path, agents=agents)
+        orch._brain.current_phase = "active"
+        orch._brain.pending_operations = [{
+            "type": "operator_canary",
+            "agent": "operator",
+            "description": "Run canary for test",
+            "task": {
+                "type": "run_canary",
+                "deployment_id": "dep-1",
+                "script": "",
+                "automation_name": "test",
+            },
+        }]
+        result = _run(orch.run_cycle())
+        assert result["action"] == "operation_completed"
+        operator.execute.assert_called_once()
+
+
+# ===========================================================================
+# Sensitivity detection
+# ===========================================================================
+
+class TestSensitivity:
+    def test_financial_data(self) -> None:
+        from vincera.core.priority import AutomationCandidate
+        candidate = AutomationCandidate(
+            name="payroll", domain="finance", description="process payroll",
+            source="ontology", evidence="test",
+            affects_financial_data=True,
+        )
+        is_sensitive, reason = Orchestrator._detect_sensitivity(candidate)
+        assert is_sensitive
+        assert "financial" in reason
+
+    def test_customer_data(self) -> None:
+        from vincera.core.priority import AutomationCandidate
+        candidate = AutomationCandidate(
+            name="emails", domain="sales", description="send emails",
+            source="ontology", evidence="test",
+            affects_customer_data=True,
+        )
+        is_sensitive, reason = Orchestrator._detect_sensitivity(candidate)
+        assert is_sensitive
+        assert "customer" in reason
+
+    def test_safe_task(self) -> None:
+        from vincera.core.priority import AutomationCandidate
+        candidate = AutomationCandidate(
+            name="report", domain="general", description="generate report",
+            source="ontology", evidence="test",
+        )
+        is_sensitive, _ = Orchestrator._detect_sensitivity(candidate)
+        assert not is_sensitive
+
+
+# ===========================================================================
+# Continuous improvement
+# ===========================================================================
+
+class TestContinuousImprovement:
+    def test_triggers_when_backlog_empty(self, tmp_path: Path) -> None:
+        agents = {"discovery": _mock_agent(), "builder": _mock_agent("builder")}
+        orch, _ = _build_orchestrator(tmp_path, agents=agents)
+        orch._brain.current_phase = "active"
+        orch._brain.ranked_automations = []
+        orch._brain.completed_tasks = [{"name": "done_task", "status": "completed"}]
+        orch._brain.last_discovery_at = "2099-01-01T00:00:00+00:00"
+        orch._brain.last_analysis_at = "2099-01-01T00:00:00+00:00"
+        orch._brain.last_training_at = "2099-01-01T00:00:00+00:00"
+        orch._brain.last_opportunity_scan_at = "2099-01-01T00:00:00+00:00"
+        result = _run(orch.run_cycle())
+        assert result["action"] == "monitoring"
+
+    def test_triggers_discovery_when_due(self, tmp_path: Path) -> None:
+        discovery = _mock_agent("discovery")
+        agents = {"discovery": discovery}
+        orch, _ = _build_orchestrator(tmp_path, agents=agents)
+        orch._brain.current_phase = "active"
+        orch._brain.ranked_automations = []
+        orch._brain.completed_tasks = [{"name": "x", "status": "completed"}]
+        orch._brain.last_discovery_at = "2020-01-01T00:00:00+00:00"
+        result = _run(orch.run_cycle())
+        assert result["action"] == "discovery_complete"
+        discovery.execute.assert_called_once()
 
 
 # ===========================================================================
