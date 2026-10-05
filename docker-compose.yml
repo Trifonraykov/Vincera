@@ -1,0 +1,46 @@
+# Local test setup for the Creator x Builder platform.
+#   docker compose up --build      → http://localhost:3000
+#   docker compose down -v         → stop and delete all local data
+# Every external service is fake (payments, social logins, email, storage, AI); see README.
+name: creator-platform
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: creator
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d creator"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/creator
+      APP_ENV: development
+      FAKE_SERVICES: all
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      # Local-only webhook secret; fake Stripe signs its webhooks with it.
+      STRIPE_WEBHOOK_SECRET: whsec_local_docker_only
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@example.com}
+    volumes:
+      - appdata:/app/.data
+
+volumes:
+  pgdata:
+  appdata:

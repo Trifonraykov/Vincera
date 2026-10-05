@@ -1,0 +1,23 @@
+# Platform demo image: only what the Next.js app, migrations and seed need.
+.git
+node_modules
+.next
+.data
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+next-env.d.ts
+# Legacy Vincera Bot (not part of the platform)
+vincera
+dashboard
+supabase
+tests/*.py
+tests/conftest.py
+install.sh
+install.ps1
+pyproject.toml
+requirements.txt
