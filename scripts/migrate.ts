@@ -13,6 +13,6 @@ loadEnvFiles()
 runScript(async () => {
   const databaseUrl = requireEnv("DATABASE_URL")
   const { name, host } = parseDatabaseUrl(databaseUrl)
-  await runMigrations(databaseUrl)
+  await runMigrations(databaseUrl, undefined, { caCert: process.env.DATABASE_CA_CERT?.trim() })
   console.log(`Migrations applied to "${name}" on ${host}.`)
 })

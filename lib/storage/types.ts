@@ -41,6 +41,12 @@ export interface ObjectStorage {
   statObject(key: string): Promise<ObjectInfo | null>
   /** Idempotent: deleting a missing key succeeds. */
   deleteObject(key: string): Promise<void>
+  /**
+   * Server-side copy of `sourceKey` to `destinationKey` (type and bytes), or false when the source
+   * does not exist. Used to move a browser upload to a key that was never presigned, so a still
+   * valid upload URL cannot change what is served afterwards (CLAUDE.md §19.19).
+   */
+  copyObject(sourceKey: string, destinationKey: string): Promise<boolean>
   /** Short-lived download URL (e.g. 5 minutes for buyer access, §12). */
   signedGetUrl(key: string, options: SignedGetOptions): Promise<string>
   /** Short-lived URL the browser PUTs the file to directly. */

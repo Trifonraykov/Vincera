@@ -14,6 +14,7 @@ import { getDb } from "@/lib/db/client"
 import { requireOnboardingStep } from "@/lib/onboarding/page"
 import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { loadAudienceOverview } from "@/lib/social/audience"
+import { canViewOwnAudience } from "@/lib/social/authz"
 
 export const metadata: Metadata = { title: "Review your audience" }
 
@@ -25,6 +26,8 @@ export const metadata: Metadata = { title: "Review your audience" }
  */
 export default async function OnboardingReviewPage() {
   const { user, progress } = await requireOnboardingStep("creator.review")
+  // The step's own rule too (§6 defence in depth): a creator's own audience data.
+  if (!canViewOwnAudience(user)) redirect(ONBOARDING_STEP_PATHS.role)
   const overview = await loadAudienceOverview(getDb(), user.id)
   const { profile } = overview
   if (!profile) redirect(ONBOARDING_STEP_PATHS["creator.profile"])

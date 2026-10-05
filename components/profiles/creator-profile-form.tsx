@@ -12,27 +12,44 @@ import {
   DISPLAY_NAME_MAX,
   LANGUAGES_MAX,
   NICHE_MAX,
+  TOPICS_MAX,
   type ProfileFormSource,
 } from "@/lib/profiles/fields"
 import { COMMON_LANGUAGE_COUNT, type Option } from "@/lib/profiles/locale"
+import { parseTopicsInput } from "@/lib/social/summary-form"
 
-import { describe, Field, FormErrorAlert, NativeSelect, useFormAction } from "./form-kit"
+import {
+  describe,
+  Field,
+  FormActions,
+  FormErrorAlert,
+  NativeSelect,
+  splitList,
+  useFormAction,
+} from "./form-kit"
 import { HandleField } from "./handle-field"
+import { TagInput } from "./tag-input"
 
 export type CreatorProfileFormDefaults = {
   displayName: string
   handle: string
   niche: string | null
   bio: string | null
+  topics: readonly string[]
   country: string | null
   languages: readonly string[]
 }
 
-const FIELDS = ["displayName", "handle", "niche", "bio", "country", "languages"] as const
+const FIELDS = ["displayName", "handle", "niche", "bio", "topics", "country", "languages"] as const
+
+/** A topic as the audience summary stores them: lowercase, no `#`. */
+function normalizeTopic(tag: string): string {
+  return parseTopicsInput(tag)[0] ?? ""
+}
 
 /**
- * The creator profile (§5 creator_profiles): name, handle, niche, bio, country and languages.
- * `onboarding` creates it and continues to the next step; `settings` saves in place.
+ * The creator profile (§5 creator_profiles): name, handle, niche, bio, topics, country and
+ * languages. `onboarding` creates it and continues to the next step; `settings` saves in place.
  */
 export function CreatorProfileForm({
   source,
@@ -54,6 +71,7 @@ export function CreatorProfileForm({
     handle: `${id}-handle`,
     niche: `${id}-niche`,
     bio: `${id}-bio`,
+    topics: `${id}-topics`,
     country: `${id}-country`,
     languages: `${id}-languages`,
   }
@@ -148,6 +166,35 @@ export function CreatorProfileForm({
       </Field>
 
       <Field
+        id={ids.topics}
+        label="Topics"
+        optional
+        hint={
+          source === "onboarding"
+            ? `What your content covers, up to ${TOPICS_MAX}. Press Enter or a comma after each. Once you connect an account we suggest topics from your audience, and you can review them.`
+            : `What your content covers, up to ${TOPICS_MAX}. Press Enter or a comma after each. Topics you change here are kept when your audience summary refreshes.`
+        }
+        error={form.fieldError("topics")}
+      >
+        <TagInput
+          key={defaults.topics.join("|")}
+          id={ids.topics}
+          name="topics"
+          label="topic"
+          defaultValue={splitList(form.valueOf("topics", defaults.topics.join(", ")))}
+          max={TOPICS_MAX}
+          normalize={normalizeTopic}
+          placeholder="meal prep, budget recipes"
+          describedBy={
+            describe(ids.topics, { hint: true, error: form.fieldError("topics") })[
+              "aria-describedby"
+            ]
+          }
+          invalid={Boolean(form.fieldError("topics"))}
+        />
+      </Field>
+
+      <Field
         id={ids.country}
         label="Where you're based"
         optional
@@ -198,7 +245,7 @@ export function CreatorProfileForm({
         ) : null}
       </fieldset>
 
-      <div className="flex flex-col gap-2 border-t pt-6 sm:flex-row sm:items-center sm:justify-end">
+      <FormActions>
         {saved ? (
           <p role="status" className="text-sm text-muted-foreground sm:mr-auto">
             Saved.
@@ -225,7 +272,7 @@ export function CreatorProfileForm({
             </>
           )}
         </Button>
-      </div>
+      </FormActions>
     </form>
   )
 }

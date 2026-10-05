@@ -196,10 +196,19 @@ export async function insertStripeAccount(
   return account
 }
 
-export async function insertPortfolioItem(db: DbOrTx, builderProfileId: string) {
+export async function insertPortfolioItem(
+  db: DbOrTx,
+  builderProfileId: string,
+  overrides: Partial<typeof portfolioItems.$inferInsert> = {},
+) {
   const [item] = await db
     .insert(portfolioItems)
-    .values({ builderProfileId, title: "Invoice CLI", url: "https://example.test/cli" })
+    .values({
+      builderProfileId,
+      title: "Invoice CLI",
+      url: "https://example.test/cli",
+      ...overrides,
+    })
     .returning()
   if (!item) throw new Error("insertPortfolioItem: no row returned")
   return item

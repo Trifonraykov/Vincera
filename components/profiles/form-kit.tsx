@@ -78,6 +78,14 @@ function fieldErrorIn(errors: FieldErrors | undefined, field: string): boolean {
   return (errors?.[field]?.length ?? 0) > 0
 }
 
+/** "a, b ,c" → ["a", "b", "c"]: a submitted comma list back into tags (tag inputs). */
+export function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
 /** `aria-describedby` / `aria-invalid` for an input with an optional hint and error. */
 export function describe(id: string, { hint, error }: { hint?: boolean; error?: string }) {
   const ids = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean)
@@ -138,6 +146,25 @@ export function NativeSelect({ className, ...props }: ComponentProps<"select">) 
       )}
       {...props}
     />
+  )
+}
+
+/**
+ * A form's action row (Save / Continue). On phones it sticks to the bottom of the screen above the
+ * home indicator, like an app's action bar, so the main action is always in reach; from `sm` up it
+ * is an ordinary row under the form.
+ */
+export function FormActions({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "sticky bottom-[var(--sticky-bottom,0px)] z-10 -mx-4 flex flex-col gap-2 border-t bg-background/95 px-4 pt-3 pb-[calc(0.75rem+var(--sticky-safe-area,env(safe-area-inset-bottom)))] backdrop-blur supports-[backdrop-filter]:bg-background/80",
+        "sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-end sm:bg-transparent sm:px-0 sm:pt-6 sm:pb-0 sm:backdrop-blur-none sm:supports-[backdrop-filter]:bg-transparent",
+        className,
+      )}
+    >
+      {children}
+    </div>
   )
 }
 

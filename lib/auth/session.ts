@@ -52,6 +52,20 @@ export async function requireOnboardedUser(): Promise<AuthUser> {
   return user
 }
 
+/**
+ * A page loader's own authorization check (§6: every page loader calls a rule from authz.ts;
+ * §19.9 defence in depth): pass the rule's answer, e.g.
+ * `authorizePage(canManageOwnAccount(user))`. A refusal redirects to `fallback`, by default the
+ * sign-in page's "account suspended" message, because every self-service rule starts from an
+ * active account. It does not depend on `requireUser()` having checked the status already.
+ */
+export function authorizePage(
+  allowed: boolean,
+  fallback: string = signInUrl({ error: "AccountSuspended" }),
+): void {
+  if (!allowed) redirect(fallback)
+}
+
 /** `requireUser()` plus the admin role; other users are sent to `/app`. */
 export async function requireAdmin(): Promise<AuthUser> {
   const user = await requireUser()

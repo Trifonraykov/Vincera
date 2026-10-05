@@ -4,7 +4,8 @@ import Link from "next/link"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
-import { requireUser } from "@/lib/auth/session"
+import { canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage, requireUser } from "@/lib/auth/session"
 import { appRolesOf } from "@/lib/auth/user"
 import { ROLE_LABELS } from "@/lib/nav"
 
@@ -19,6 +20,8 @@ export const metadata: Metadata = { title: "Choose your role" }
  */
 export default async function OnboardingRolePage() {
   const user = await requireUser()
+  // Adding roles changes only the user's own account (`chooseRoles` uses the same rule).
+  authorizePage(canManageOwnAccount(user))
   const roles = appRolesOf(user)
   const firstName = user.name?.split(/\s+/)[0]
   const hasBoth = roles.includes("creator") && roles.includes("builder")

@@ -1,9 +1,11 @@
-import { Check, ExternalLink } from "lucide-react"
+import { Check, ExternalLink, Info } from "lucide-react"
 
 import { formatCompact, formatDateTimeUtc, formatPercent } from "@/components/audience/format"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardFooter, CardTitle } from "@/components/ui/card"
+import { isSocialOAuthAvailable } from "@/lib/social/availability"
 import { SOCIAL_PROVIDER_META } from "@/lib/social/catalog"
+import { connectErrorMessage } from "@/lib/social/connect-errors"
 import { socialErrorMessage } from "@/lib/social/errors"
 import type { CreatorSocialProviderId, SocialProviderId } from "@/lib/social/types"
 import type { ConnectionView } from "@/lib/social/view"
@@ -44,7 +46,9 @@ function isManualProvider(provider: SocialProviderId): provider is CreatorSocial
 
 /**
  * One provider on /app/settings/connections and /onboarding/creator/connect: connect it, or see
- * its status and resync, reconnect, update or disconnect it.
+ * its status and resync, reconnect, update or disconnect it. While the provider's OAuth is
+ * switched off (SOCIAL_OAUTH_DISABLED, e.g. app review pending) the card says so and offers only
+ * manual entry (creator providers) and disconnecting.
  */
 export function ConnectionCard({
   provider,
@@ -66,6 +70,7 @@ export function ConnectionCard({
   const meta = SOCIAL_PROVIDER_META[provider]
   const titleId = `connection-${provider}-title`
   const manualAllowed = allowManual && isManualProvider(provider)
+  const oauthAvailable = isSocialOAuthAvailable(provider)
   const Heading = headingLevel
 
   return (
@@ -95,9 +100,10 @@ export function ConnectionCard({
       </div>
 
       {connection ? (
-        <ConnectionDetails connection={connection} />
+        <ConnectionDetails connection={connection} oauthAvailable={oauthAvailable} />
       ) : (
-        <CardContent>
+        <CardContent className="space-y-3">
+          {!oauthAvailable ? <OAuthUnavailableNote provider={provider} /> : null}
           <ul className="space-y-1.5 text-sm text-muted-foreground">
             {PROVIDER_REQUIREMENTS[provider].map((requirement) => (
               <li key={requirement} className="flex gap-2">
@@ -116,9 +122,19 @@ export function ConnectionCard({
           returnTo={returnTo}
           manualAllowed={manualAllowed}
           recommended={recommended}
+          oauthAvailable={oauthAvailable}
         />
       </CardFooter>
     </Card>
+  )
+}
+
+function OAuthUnavailableNote({ provider }: { provider: SocialProviderId }) {
+  return (
+    <p className="flex gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+      <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{connectErrorMessage("oauth_disabled", provider)}</span>
+    </p>
   )
 }
 
@@ -145,14 +161,22 @@ function ConnectedSummary({ connection }: { connection: ConnectionView }) {
   )
 }
 
-function ConnectionDetails({ connection }: { connection: ConnectionView }) {
+function ConnectionDetails({
+  connection,
+  oauthAvailable,
+}: {
+  connection: ConnectionView
+  oauthAvailable: boolean
+}) {
   const { latest } = connection
   const message =
-    connection.health === "expired"
-      ? `Access to ${connection.label} expired or was removed. Reconnect to keep your numbers current; until then your profile shows the last update.`
-      : connection.health === "error" && connection.lastSyncError
-        ? socialErrorMessage(connection.lastSyncError, connection.label)
-        : null
+    !oauthAvailable && connection.source === "oauth"
+      ? `Syncing ${connection.label} is paused for now, so these are the numbers from the last update.`
+      : connection.health === "expired"
+        ? `Access to ${connection.label} expired or was removed. Reconnect to keep your numbers current; until then your profile shows the last update.`
+        : connection.health === "error" && connection.lastSyncError
+          ? socialErrorMessage(connection.lastSyncError, connection.label)
+          : null
   const audienceWord = connection.provider === "youtube" ? "Subscribers" : "Followers"
 
   return (
@@ -221,23 +245,30 @@ function ConnectionActions({
   returnTo,
   manualAllowed,
   recommended,
+  oauthAvailable,
 }: {
   provider: SocialProviderId
   connection: ConnectionView | null
   returnTo: string
   manualAllowed: boolean
   recommended: boolean
+  oauthAvailable: boolean
 }) {
   if (!connection) {
     return (
       <>
-        <ConnectButton
-          provider={provider}
-          returnTo={returnTo}
-          variant={recommended ? "default" : "outline"}
-        />
+        {oauthAvailable ? (
+          <ConnectButton
+            provider={provider}
+            returnTo={returnTo}
+            variant={recommended ? "default" : "outline"}
+          />
+        ) : null}
         {manualAllowed && isManualProvider(provider) ? (
-          <ManualEntryDialog provider={provider} triggerVariant="ghost" />
+          <ManualEntryDialog
+            provider={provider}
+            triggerVariant={oauthAvailable ? "ghost" : "outline"}
+          />
         ) : null}
       </>
     )
@@ -265,6 +296,10 @@ function ConnectionActions({
         {disconnect}
       </>
     )
+  }
+  if (!oauthAvailable) {
+    // Nothing to resync or reconnect with for now; the stored numbers stay as they are.
+    return disconnect
   }
   if (connection.status !== "active") {
     return (

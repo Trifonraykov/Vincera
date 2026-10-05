@@ -60,6 +60,14 @@ describe("sendEmail (fake outbox)", () => {
     expect(email?.text).toContain(magicUrl)
   })
 
+  it("shows the sign-in code for the installed app, in two groups", async () => {
+    await sendMagicLinkEmail({ to: "code@example.com", url: magicUrl, code: "7K4QX2MZ" })
+    const email = await latestEmailTo("code@example.com")
+    expect(email?.text).toContain("7K4Q-X2MZ")
+    expect(email?.html).toContain("7K4Q-X2MZ")
+    expect(email?.text).toContain("home screen")
+  })
+
   it("finds the latest email per recipient and extracts its links", async () => {
     setClockForTests(new Date("2026-04-01T09:00:00.000Z"))
     await sendMagicLinkEmail({ to: "ada@example.com", url: `${magicUrl}&n=1` })

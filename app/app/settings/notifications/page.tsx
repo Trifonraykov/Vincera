@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 
 import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form"
 import { PageHeader } from "@/components/shared/page-header"
-import { requireOnboardedUser } from "@/lib/auth/session"
+import { canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage, requireOnboardedUser } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
 import { loadNotificationPrefs } from "@/lib/notifications/prefs"
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Notifications" }
 export default async function NotificationSettingsPage() {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
+  authorizePage(canManageOwnAccount(user))
   const prefs = await loadNotificationPrefs(getDb(), user.id)
 
   return (

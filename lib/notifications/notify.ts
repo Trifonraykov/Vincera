@@ -23,7 +23,9 @@ export * from "./types"
  *   and `emailed` comes back false. If the caller's transaction later rolls back, the email has
  *   still gone out, so notify after the change is certain (e.g. at the end of the transaction).
  * - `dedupeKey` makes retries safe: at most one notification per user and key (the second call
- *   writes and sends nothing). It also keys the email's idempotency at Resend.
+ *   writes and sends nothing). It also keys the email's idempotency at Resend. The key is claimed
+ *   even when in-app is off for the type: a hidden row (`in_app = false`) records the delivery,
+ *   so the email still goes out once, not on every call.
  */
 
 export type NotifyInput<T extends NotificationType> = {
@@ -71,7 +73,8 @@ export async function notify<T extends NotificationType>(
   const emailOn = recipient.emailPref ?? true
 
   let notificationId: string | null = null
-  if (inApp) {
+  // In-app off and no key to claim: nothing to record.
+  if (inApp || input.dedupeKey !== undefined) {
     const inserted = await database
       .insert(notifications)
       .values({
@@ -79,11 +82,12 @@ export async function notify<T extends NotificationType>(
         type: input.type,
         payload,
         dedupeKey: input.dedupeKey ?? null,
+        inApp,
       })
       .onConflictDoNothing({ target: [notifications.userId, notifications.dedupeKey] })
       .returning({ id: notifications.id })
     if (inserted.length === 0) return { notificationId: null, emailed: false, duplicate: true }
-    notificationId = inserted[0]?.id ?? null
+    if (inApp) notificationId = inserted[0]?.id ?? null
   }
 
   let emailed = false

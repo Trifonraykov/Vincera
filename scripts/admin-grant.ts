@@ -24,7 +24,10 @@ runScript(async () => {
   }
 
   const databaseUrl = requireEnv("DATABASE_URL")
-  const database = createDb(databaseUrl, { max: 1 })
+  const database = createDb(databaseUrl, {
+    max: 1,
+    caCert: process.env.DATABASE_CA_CERT?.trim() || undefined,
+  })
   try {
     const [user] = await database.db
       .select({ id: users.id })

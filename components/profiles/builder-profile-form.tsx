@@ -19,8 +19,17 @@ import {
   type ProfileFormSource,
 } from "@/lib/profiles/fields"
 
-import { describe, Field, FormErrorAlert, RadioCard, useFormAction } from "./form-kit"
+import {
+  describe,
+  Field,
+  FormActions,
+  FormErrorAlert,
+  RadioCard,
+  splitList,
+  useFormAction,
+} from "./form-kit"
 import { HandleField } from "./handle-field"
+import { TagInput } from "./tag-input"
 
 export type BuilderProfileFormDefaults = {
   displayName: string
@@ -126,30 +135,46 @@ export function BuilderProfileForm({
           id={ids.skills}
           label="Skills"
           optional
-          hint={`What you're good at, separated by commas. Up to ${TAGS_MAX}.`}
+          hint={`What you're good at. Press Enter or a comma after each, up to ${TAGS_MAX}.`}
           error={form.fieldError("skills")}
         >
-          <Input
+          <TagInput
+            key={defaults.skills.join("|")}
             id={ids.skills}
             name="skills"
-            defaultValue={form.valueOf("skills", defaults.skills.join(", "))}
+            label="skill"
+            defaultValue={splitList(form.valueOf("skills", defaults.skills.join(", ")))}
+            max={TAGS_MAX}
             placeholder="Web apps, AI tools, Notion templates"
-            {...describe(ids.skills, { hint: true, error: form.fieldError("skills") })}
+            describedBy={
+              describe(ids.skills, { hint: true, error: form.fieldError("skills") })[
+                "aria-describedby"
+              ]
+            }
+            invalid={Boolean(form.fieldError("skills"))}
           />
         </Field>
         <Field
           id={ids.stack}
           label="Stack"
           optional
-          hint={`Languages and tools you build with, separated by commas. Up to ${TAGS_MAX}.`}
+          hint={`Languages and tools you build with, up to ${TAGS_MAX}.`}
           error={form.fieldError("stack")}
         >
-          <Input
+          <TagInput
+            key={defaults.stack.join("|")}
             id={ids.stack}
             name="stack"
-            defaultValue={form.valueOf("stack", defaults.stack.join(", "))}
+            label="tool"
+            defaultValue={splitList(form.valueOf("stack", defaults.stack.join(", ")))}
+            max={TAGS_MAX}
             placeholder="TypeScript, Next.js, Postgres"
-            {...describe(ids.stack, { hint: true, error: form.fieldError("stack") })}
+            describedBy={
+              describe(ids.stack, { hint: true, error: form.fieldError("stack") })[
+                "aria-describedby"
+              ]
+            }
+            invalid={Boolean(form.fieldError("stack"))}
           />
         </Field>
       </div>
@@ -198,7 +223,7 @@ export function BuilderProfileForm({
         ) : null}
       </fieldset>
 
-      <div className="flex flex-col gap-2 border-t pt-6 sm:flex-row sm:items-center sm:justify-end">
+      <FormActions>
         {saved ? (
           <p role="status" className="text-sm text-muted-foreground sm:mr-auto">
             Saved.
@@ -225,7 +250,7 @@ export function BuilderProfileForm({
             </>
           )}
         </Button>
-      </div>
+      </FormActions>
     </form>
   )
 }

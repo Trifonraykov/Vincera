@@ -1,13 +1,16 @@
 import { ArrowLeft } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { BuilderProfileForm } from "@/components/profiles/builder-profile-form"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
+import { canEditBuilderProfile } from "@/lib/auth/authz"
 import { getDb } from "@/lib/db/client"
 import { requireOnboardingStep } from "@/lib/onboarding/page"
+import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { builderProfilePageData } from "@/lib/profiles/page-data"
 
 export const metadata: Metadata = { title: "Your builder profile" }
@@ -19,6 +22,8 @@ export const metadata: Metadata = { title: "Your builder profile" }
  */
 export default async function OnboardingBuilderProfilePage() {
   const { user, progress } = await requireOnboardingStep("builder.profile")
+  // Defence in depth (§19.9): the step guard already checks the path; the rule checks the role.
+  if (!canEditBuilderProfile(user)) redirect(ONBOARDING_STEP_PATHS.role)
   const data = await builderProfilePageData(getDb(), user)
 
   return (

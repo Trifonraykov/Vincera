@@ -15,6 +15,7 @@ import {
   type SizeTier,
 } from "@/lib/db/schema"
 import { HANDLE_REGEX } from "@/lib/db/schema/columns"
+import { portfolioImagePath } from "@/lib/profiles/image-policy"
 import { SOCIAL_PROVIDER_META } from "@/lib/social/catalog"
 import { latestSnapshotsFor } from "@/lib/social/queries"
 import { safeUrl } from "@/lib/social/metrics"
@@ -33,8 +34,9 @@ import { CREATOR_SOCIAL_PROVIDERS, type SocialProviderId } from "@/lib/social/ty
  * average views, engagement, verified/unverified, last update, and the channel link when
  * verified.
  * Builder (public): handle, display name, bio, skills, stack, availability, deal preference,
- * portfolio items (title, link, description, shipped, format), and GitHub stats (login, profile
- * link, followers, public repos, stars, top languages, top repositories, contributions).
+ * portfolio items (title, link, description, shipped, format, and the image through its app
+ * route, never the storage key), and GitHub stats (login, profile link, followers, public repos,
+ * stars, top languages, top repositories, contributions).
  */
 
 export function isValidHandle(value: string): boolean {
@@ -183,6 +185,8 @@ export type PublicPortfolioItem = {
   description: string | null
   isShipped: boolean
   format: ProductFormat | null
+  /** The app route that serves the project image (never the storage key), or null. */
+  imageSrc: string | null
 }
 
 export type PublicGitHub = {
@@ -236,11 +240,13 @@ export async function loadPublicBuilderProfile(
 
   const portfolio = await database
     .select({
+      id: portfolioItems.id,
       title: portfolioItems.title,
       url: portfolioItems.url,
       description: portfolioItems.description,
       isShipped: portfolioItems.isShipped,
       format: portfolioItems.format,
+      imageKey: portfolioItems.imageUrl,
     })
     .from(portfolioItems)
     .where(eq(portfolioItems.builderProfileId, row.id))
@@ -281,7 +287,11 @@ export async function loadPublicBuilderProfile(
     dealPreference: row.dealPreference,
     verified: row.verifiedAt !== null,
     // Links are user input: only http(s) ever reaches an href.
-    portfolio: portfolio.map((item) => ({ ...item, url: safeUrl(item.url) })),
+    portfolio: portfolio.map(({ id, imageKey, ...item }) => ({
+      ...item,
+      url: safeUrl(item.url),
+      imageSrc: portfolioImagePath(id, imageKey),
+    })),
     github: publicGitHub,
     memberSince: row.memberSince,
   }

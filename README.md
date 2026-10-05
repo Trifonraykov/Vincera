@@ -157,7 +157,7 @@ The repository root is also a Next.js app: a two-sided platform where creators a
 docker compose up --build    # http://localhost:3000
 ```
 
-This starts Postgres with pgvector and the app, with every external service faked. Sign in with any email and click the magic link in the dev mailbox at <http://localhost:3000/api/dev/mailbox>. Sign up as `admin@example.com` for admin access. See [`docker/README.md`](./docker/README.md) for updating and resetting.
+This starts Postgres with pgvector and the app, with every external service faked. Sign in with any email and click the magic link in the dev mailbox at <http://localhost:3000/api/dev/mailbox>. Sign up as `admin@example.com` for admin access. The port is published on `127.0.0.1` only: with everything fake and the mailbox on, anyone who could reach it could sign in as any user. See [`docker/README.md`](./docker/README.md) for updating and resetting.
 
 ## Local setup
 
@@ -178,6 +178,21 @@ All variables are listed in [`.env.example`](./.env.example) (its first block be
 - `APP_ENV` (`development` | `test` | `production`) defaults from `NODE_ENV`. In production every external credential is required and fakes are refused.
 - `ADMIN_EMAILS` (comma list) get the admin role when they sign up. For an existing account: `pnpm admin:grant <email>`.
 - `STRIPE_CONNECT_WEBHOOK_SECRET` (the Connect endpoint's signing secret) is required in production; elsewhere it falls back to `STRIPE_WEBHOOK_SECRET`. `YOUTUBE_LONG_RETENTION` (default `false`) keeps YouTube statistics beyond 30 days; see `CLAUDE.md` §19.10.
+- `SOCIAL_OAUTH_DISABLED` (comma list, e.g. `instagram,tiktok`) switches off a provider whose app review is still pending: its Connect buttons are hidden, creators enter numbers by hand, and its credentials are not required in production (`CLAUDE.md` §19.14).
+- `DATABASE_CA_CERT` (PEM) turns on verified TLS for a hosted database such as Supabase (see below).
+- `DEV_MAILBOX=1` (never in production) serves the fake outbox at `/api/dev/mailbox`, so magic links can be clicked in the browser. Anyone who can reach the dev server can then sign in as any user, so use it only on a machine and network you trust.
+
+## Database on Supabase
+
+The platform runs on any Postgres 16+ with pgvector, Supabase included. It talks to the database directly (Drizzle over `pg`) and does not use Supabase's client libraries or its Data API.
+
+1. Create a Supabase project **for the platform alone**. The legacy bot's project cannot be shared: both have `events` and `messages` tables in `public`.
+2. In the project's **Connect** dialog, copy a pooler connection string. Use the **transaction pooler** (port 6543) for serverless hosting such as Vercel, or the **session pooler** (port 5432) for a long-running `pnpm start` or Docker. The direct `db.<ref>.supabase.co` host is IPv6-only unless the project has the IPv4 add-on.
+3. Under **Database settings → SSL configuration**, download the CA certificate and put its contents in `DATABASE_CA_CERT` (a one-line value with `\n` escapes works). Connections then use TLS and verify the server. Production refuses a Supabase `DATABASE_URL` without that certificate (or an `sslrootcert` file in the URL): node-postgres treats `sslmode=require` like `verify-full`, which fails against Supabase's own CA, and `sslmode=no-verify` would not check the server.
+4. Apply the migrations once, with the session pooler URL: `DATABASE_URL=<session pooler url> DATABASE_CA_CERT="$(cat prod-ca-2021.crt)" pnpm db:migrate`. They enable `vector`, create the tables and triggers, turn on row-level security for every table and revoke the `anon` / `authenticated` roles' access, so the auto-generated Data API can neither list nor read anything (the app's own `postgres` role owns the tables and is not restricted). You can also switch the Data API off in the project settings, since nothing uses it.
+5. Set `DATABASE_URL` (and `DATABASE_CA_CERT`) in the deployment and start the app.
+
+To check a change against Supabase's own Postgres locally (the image `supabase start` uses, with the same roles and default privileges as a hosted project): `docker run -d --name supabase-db -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:54322:5432 supabase/postgres:17.11.0.003`, then `DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres pnpm db:migrate` and `TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres pnpm test:integration`. CI runs the same checks in its `supabase-postgres` job. `pnpm db:reset` is for local databases only.
 
 ## Fake services
 
@@ -194,7 +209,9 @@ Outside production, every external service runs a fake implementation when its c
 | Rate limiting (Upstash) | In-memory, per process |
 | Sentry / PostHog | Off unless a DSN / key is set |
 
-**Signing in locally:** sign-in is by email magic link (plus Google / GitHub once their `AUTH_*` credentials are set). With the fake email service nothing is sent: open the newest file in `.data/outbox/` and follow its `/api/auth/callback/email?...` link. See `CLAUDE.md` §19.3 and §19.9.
+**Signing in locally:** sign-in is by email magic link, whose email also carries an 8-character code that can be typed instead (plus Google / GitHub once their `AUTH_*` credentials are set). With the fake email service nothing is sent: open the newest file in `.data/outbox/` and follow its `/api/auth/callback/email?...` link, or set `DEV_MAILBOX=1` and click it at <http://localhost:3000/api/dev/mailbox>. See `CLAUDE.md` §19.3 and §19.9.
+
+**On a phone:** the app is built mobile-first and behaves like an app. Signed in, a bottom tab bar holds the main places (Home, then Audience, Profile and Payouts for creators or Profile, Connections and Payouts for builders until Products, Discover and Collabs are built, and More for the full menu), forms keep their main button in a bar above it, and dark mode follows the phone. Pages that later phases build show "Coming soon" inside the app, with the menu and tab bar still there. It ships a web app manifest, so "Add to Home Screen" (iOS Safari) or "Install app" (Chrome on Android) puts it on the home screen, where it opens full screen straight into `/app`. On iOS the installed app keeps its own cookies, apart from Safari's, so tapping the email's link in Mail signs Safari in, not the app: type the **sign-in code** from the same email into the app instead (it appears under "Check your email", or "Have a sign-in code?" on the sign-in page). To try it from a phone on your network, set `NEXT_PUBLIC_APP_URL` and `AUTH_URL` to `http://<your computer's IP>:3000` (links and OAuth redirects use them), run `pnpm dev` and open that address on the phone. Installing to the home screen needs https (a deployment or a tunnel).
 
 **What works so far (Phase 1):** sign up, pick creator, builder or both, and walk onboarding: profile (handle, niche, languages / skills, stack, availability), connect YouTube, Instagram or TikTok (or enter numbers by hand), review the AI audience summary, GitHub and portfolio for builders, then Stripe payouts. Then `/app/audience`, Settings (profile, connections, payouts, notifications, account) and the public profiles at `/c/<handle>` and `/b/<handle>`. With fakes, every connection and the payouts onboarding work offline. Real provider apps need their credentials in `.env.local`; each provider's redirect URI is `<NEXT_PUBLIC_APP_URL>/api/oauth/<provider>/callback`. Background jobs (`social/sync`, the daily resync and YouTube retention) run in-process when Inngest is fake.
 
@@ -225,6 +242,6 @@ Outside production, every external service runs a fake implementation when its c
 
 `TEST_DATABASE_URL` and `E2E_DATABASE_URL` are read from the environment or `.env.local`. Both must point at a Postgres on this machine, because the tests create and drop databases there; set `ALLOW_REMOTE_TEST_DB=1` to use another server that holds only test databases.
 
-**CI** (`.github/workflows/ci.yml`) runs on every push and pull request with a `pgvector/pgvector:pg17` service: install (frozen lockfile), typecheck, lint, `pnpm test`, `pnpm build`, then Playwright. All services are fake (`APP_ENV=test`, `FAKE_SERVICES=all`) and the secrets are test-only values. The Playwright report is uploaded when the job fails.
+**CI** (`.github/workflows/ci.yml`) runs on every push and pull request with a `pgvector/pgvector:pg17` service: install (frozen lockfile), typecheck, lint, `pnpm test`, `pnpm build`, then Playwright. All services are fake (`APP_ENV=test`, `FAKE_SERVICES=all`) and the secrets are test-only values. The Playwright report is uploaded when the job fails. A second job, `supabase-postgres`, applies the migrations to Supabase's Postgres image, checks that the Data API roles see no tables, and runs the integration tests there.
 
 Before opening a pull request, run `pnpm typecheck && pnpm lint && pnpm test && pnpm test:e2e`.

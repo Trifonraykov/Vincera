@@ -23,6 +23,7 @@ import { requestEvidenceUpload, submitManualConnection } from "@/lib/social/acti
 import { SOCIAL_PROVIDER_META } from "@/lib/social/catalog"
 import {
   checkEvidenceFile,
+  checkManualEntryFields,
   EVIDENCE_POLICY,
   PROFILE_URL_EXAMPLES,
 } from "@/lib/social/manual-policy"
@@ -31,8 +32,10 @@ import { formatBytes } from "@/lib/storage/limits"
 
 /**
  * "Enter manually" (§7.1 fallback): follower count, profile link and a screenshot of the count.
- * The screenshot goes straight to storage through a signed PUT URL, then the form is submitted
- * with the stored object's key. The entry shows as "Unverified" until an admin checks it.
+ * Every field is checked here first (the same rules as the server), so nothing is uploaded for a
+ * form that would be refused. Then the screenshot goes straight to storage through a signed PUT
+ * URL, and the form is submitted with the stored object's key. The entry shows as "Unverified"
+ * until an admin checks it.
  */
 export function ManualEntryDialog({
   provider,
@@ -42,7 +45,7 @@ export function ManualEntryDialog({
   provider: CreatorSocialProviderId
   /** Re-entering numbers for an existing manual entry. */
   update?: boolean
-  triggerVariant?: "outline" | "ghost" | "secondary"
+  triggerVariant?: "default" | "outline" | "ghost" | "secondary"
 }) {
   const label = SOCIAL_PROVIDER_META[provider].label
   const router = useRouter()
@@ -68,13 +71,17 @@ export function ManualEntryDialog({
     setError(null)
     setFieldErrors({})
 
-    if (!(file instanceof File) || file.size === 0) {
-      setFieldErrors({ screenshot: ["Choose a screenshot of your follower count."] })
-      return
-    }
-    const check = checkEvidenceFile({ contentType: file.type, sizeBytes: file.size })
-    if (!check.ok) {
-      setFieldErrors({ screenshot: [check.message] })
+    const errors: FieldErrors = {}
+    const fieldsCheck = checkManualEntryFields(provider, { followers, profileUrl })
+    if (!fieldsCheck.ok) Object.assign(errors, fieldsCheck.fieldErrors)
+    const check =
+      file instanceof File && file.size > 0
+        ? checkEvidenceFile({ contentType: file.type, sizeBytes: file.size })
+        : ({ ok: false, message: "Choose a screenshot of your follower count." } as const)
+    if (!check.ok) errors.screenshot = [check.message]
+    if (!check.ok || !fieldsCheck.ok || !(file instanceof File)) {
+      setFieldErrors(errors)
+      focusFirstInvalid(event.currentTarget, errors)
       return
     }
 
@@ -226,4 +233,14 @@ export function ManualEntryDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** Move focus to the first field with an error, so keyboard and screen reader users land on it. */
+function focusFirstInvalid(form: HTMLFormElement, errors: FieldErrors): void {
+  for (const name of ["profileUrl", "followers", "screenshot"]) {
+    if (!errors[name]?.length) continue
+    const field = form.elements.namedItem(name)
+    if (field instanceof HTMLElement) field.focus()
+    return
+  }
 }

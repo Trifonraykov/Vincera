@@ -4,6 +4,9 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
 import { Pool } from "pg"
 
+import { databasePoolConfig } from "../../lib/db/connection"
+import { redactQueryParams } from "../../lib/db/errors"
+
 /**
  * Database administration helpers shared by the db:* scripts and the test global setups.
  * They take explicit URLs and never read lib/env, so they work in any Node context.
@@ -93,15 +96,19 @@ export async function recreateDatabase(databaseUrl: string): Promise<void> {
   }
 }
 
-/** Apply pending Drizzle migrations from `migrationsFolder` (default ./drizzle). */
+/**
+ * Apply pending Drizzle migrations from `migrationsFolder` (default ./drizzle). `caCert`
+ * (DATABASE_CA_CERT) turns on verified TLS, e.g. for Supabase (lib/db/connection.ts).
+ */
 export async function runMigrations(
   databaseUrl: string,
   migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
+  options: { caCert?: string | undefined } = {},
 ): Promise<void> {
   if (!existsSync(path.join(migrationsFolder, "meta", "_journal.json"))) {
     throw new Error(`No migrations found in ${migrationsFolder}. Run \`pnpm db:generate\` first.`)
   }
-  const pool = new Pool({ connectionString: databaseUrl, max: 1 })
+  const pool = new Pool({ max: 1, ...databasePoolConfig(databaseUrl, options) })
   try {
     await migrate(drizzle(pool), { migrationsFolder })
   } finally {
@@ -117,7 +124,8 @@ export function describeError(error: unknown): string {
   const messages: string[] = []
   let current = error
   while (current instanceof Error && messages.length < 5) {
-    messages.push(current.message)
+    // A failed query's parameters may hold personal data; the SQL and the cause are enough.
+    messages.push(redactQueryParams(current.message))
     current = current.cause
   }
   return messages.length > 0 ? messages.join("\n  caused by: ") : String(error)

@@ -11,6 +11,7 @@ import { audienceSnapshots, socialConnections } from "@/lib/db/schema"
 import { track } from "@/lib/events/track"
 import { newId } from "@/lib/ids"
 
+import { recomputeSizeTier } from "./derived"
 import type { SocialProfile, SocialProviderId, TokenSet } from "./types"
 
 /**
@@ -132,6 +133,11 @@ export type UpsertOAuthConnectionResult = {
    * (of the other account) were deleted.
    */
   accountChanged: boolean
+  /**
+   * True when the row's old snapshots were deleted: an account change, or a manual entry upgraded
+   * to OAuth (self-reported numbers must not read as verified).
+   */
+  snapshotsDropped: boolean
   /** Evidence screenshot of the manual entry this replaced; delete it from storage. */
   replacedEvidenceKey: string | null
 }
@@ -180,6 +186,13 @@ export async function upsertOAuthConnection(
         existing !== undefined &&
         existing.providerAccountId !== null &&
         existing.providerAccountId !== accountId
+      // A manual entry upgraded to OAuth: its snapshots hold the number the creator typed. Kept,
+      // they would read as platform-verified as soon as this row is (latest snapshot + verified
+      // connection), on /app/audience, in the size tier and on /c/<handle>, until the first
+      // OAuth sync replaced them. They go like an account change's; the card shows "syncing"
+      // until real numbers arrive.
+      const upgradedFromManual = existing?.source === "manual"
+      const dropSnapshots = accountChanged || upgradedFromManual
       const values = {
         providerAccountId: accountId,
         username: input.profile.username,
@@ -197,15 +210,15 @@ export async function upsertOAuthConnection(
 
       let connection: SocialConnectionRow | undefined
       if (existing) {
-        if (accountChanged) {
+        if (dropSnapshots) {
           // A different channel/account now: the old account's snapshots describe someone else's
-          // audience, so they go like on a disconnect (§14).
+          // audience, so they go like on a disconnect (§14). Same for self-reported numbers.
           await allowGdprErasure(tx)
           await tx.delete(audienceSnapshots).where(eq(audienceSnapshots.socialConnectionId, id))
         }
         ;[connection] = await tx
           .update(socialConnections)
-          .set({ ...values, ...(accountChanged ? { lastSyncedAt: null } : {}) })
+          .set({ ...values, ...(dropSnapshots ? { lastSyncedAt: null } : {}) })
           .where(eq(socialConnections.id, id))
           .returning()
       } else {
@@ -226,11 +239,15 @@ export async function upsertOAuthConnection(
         },
         tx,
       )
+      // The connection is verified (again) and may have lost its snapshots: the tier follows in
+      // the same transaction, so nothing reads a tier built on numbers that are gone.
+      await recomputeSizeTier(tx, input.userId)
 
       return {
         connection,
         created: existing === undefined,
         accountChanged,
+        snapshotsDropped: dropSnapshots,
         replacedEvidenceKey: existing?.evidenceStorageKey ?? null,
       }
     }, database)

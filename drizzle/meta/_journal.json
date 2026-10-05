@@ -43,6 +43,27 @@
       "when": 1791207318583,
       "tag": "0005_phase1_profiles_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791219522842,
+      "tag": "0006_notifications_in_app",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791219703551,
+      "tag": "0007_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791219707745,
+      "tag": "0008_supabase_data_api_grants",
+      "breakpoints": true
     }
   ]
 }

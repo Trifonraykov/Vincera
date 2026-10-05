@@ -1,3 +1,5 @@
+import { latestEmailTo } from "@/lib/email/outbox"
+
 import { expect, test } from "./fixtures"
 import { E2E_ADMIN_EMAIL, uniqueEmail } from "./helpers/accounts"
 import { chooseRole, requestMagicLink, signIn, signOutFromApp, signUp } from "./helpers/auth"
@@ -11,6 +13,38 @@ import { completeOnboardingInDb } from "./helpers/db"
  */
 
 test.describe("authentication", () => {
+  test("signs in with the code from the email, where the link was asked for", async ({ page }) => {
+    // The installed app on iOS keeps its own cookies: a link tapped in Mail would sign Safari in,
+    // so the app takes the code from the same email instead (CLAUDE.md §19.19).
+    const email = uniqueEmail("code")
+    await page.goto("/sign-in")
+    await page.getByLabel("Email", { exact: true }).fill(email)
+    await page.getByRole("button", { name: "Email me a sign-in link" }).click()
+    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible()
+
+    let code = ""
+    await expect
+      .poll(async () => {
+        const message = await latestEmailTo(email)
+        code = message?.text.match(/\b([0-9A-Z]{4}-[0-9A-Z]{4})\b/)?.[1] ?? ""
+        return code
+      })
+      .not.toBe("")
+
+    // A malformed code is caught on the page; the real one, typed in lower case, signs in.
+    const field = page.getByLabel("Sign-in code")
+    await field.fill("abc")
+    await page.getByRole("button", { name: "Sign in with code" }).click()
+    await expect(page.getByText(/Enter the 8-character code/)).toBeVisible()
+    await field.fill(code.toLowerCase())
+    await page.getByRole("button", { name: "Sign in with code" }).click()
+    await expect(page).toHaveURL(/\/onboarding\/role$/)
+
+    // The code worked once: the link in the same email is now used up.
+    const link = (await latestEmailTo(email))?.text.match(/https?:\/\/\S+callback\/email\S+/)?.[0]
+    expect(link && new URL(link).searchParams.get("token")).toBe(code.replace("-", ""))
+  })
+
   test("sign up, onboard, sign out, sign in again and switch roles", async ({ page }) => {
     const email = uniqueEmail("creator")
 
@@ -63,7 +97,7 @@ test.describe("authentication", () => {
     await signOutFromApp(page, /Ada Creator/)
     await page.goto(link)
     await expect(page).toHaveURL(/\/sign-in\?error=Verification$/)
-    await expect(page.getByText(/sign-in link is invalid or has expired/)).toBeVisible()
+    await expect(page.getByText(/sign-in link or code is invalid or has expired/)).toBeVisible()
   })
 
   test("non-admins are blocked from /admin", async ({ page }) => {

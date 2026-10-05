@@ -112,6 +112,15 @@ test.describe("Phase 1 acceptance", () => {
     await summary.fill(
       "Spanish-speaking students and freelancers who want to get organised with Notion.",
     )
+    // A refused save keeps what was typed.
+    const topics = page.getByLabel("Topics")
+    const generatedTopics = await topics.inputValue()
+    await topics.fill("one, two, three, four, five, six, seven, eight, nine")
+    await page.getByRole("button", { name: "Continue" }).click()
+    await expect(page.getByText("Pick at most 8 topics.")).toBeVisible()
+    await expect(summary).toHaveValue(/^Spanish-speaking students and freelancers/)
+    await expect(topics).toHaveValue("one, two, three, four, five, six, seven, eight, nine")
+    await topics.fill(generatedTopics)
     await page.getByRole("button", { name: "Continue" }).click()
 
     // Payouts with fake Stripe Connect (the creator profile's country preselects Germany).
@@ -143,6 +152,11 @@ test.describe("Phase 1 acceptance", () => {
     expect(retention).toMatchObject({ skipped: false })
     await page.reload()
     await expect(page.getByText("48.2K").first()).toBeVisible()
+
+    // Reconnect buttons on this page come back here with the outcome in the URL.
+    await page.goto("/app/audience?error=access_denied&provider=youtube")
+    await expect(page.getByText("YouTube wasn't connected")).toBeVisible()
+    await expect(page.getByText(/You cancelled the YouTube connection/)).toBeVisible()
 
     // Public creator profile.
     await page.goto(`/c/${handle}`)
@@ -227,7 +241,17 @@ test.describe("Phase 1 acceptance", () => {
     const instagram = page.getByRole("region", { name: "Instagram" })
     await instagram.getByRole("button", { name: "Enter manually" }).click()
     const dialog = page.getByRole("dialog", { name: "Enter your Instagram numbers" })
-    await dialog.getByLabel("Link to your Instagram profile").fill("https://www.instagram.com/luna")
+    // Checked in the browser before anything is uploaded.
+    const profileLink = dialog.getByLabel("Link to your Instagram profile")
+    await profileLink.fill("https://example.com/luna")
+    await dialog.getByRole("button", { name: "Save numbers" }).click()
+    await expect(
+      dialog.getByText("Enter the https:// link to your Instagram profile."),
+    ).toBeVisible()
+    await expect(dialog.getByText("Choose a screenshot of your follower count.")).toBeVisible()
+    await expect(profileLink).toBeFocused()
+
+    await profileLink.fill("https://www.instagram.com/luna")
     await dialog.getByLabel("Followers").fill("12,500")
     await dialog.getByLabel("Screenshot showing the count").setInputFiles({
       name: "followers.png",

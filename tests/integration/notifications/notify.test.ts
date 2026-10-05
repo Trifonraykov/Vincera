@@ -77,6 +77,7 @@ describe("notify", () => {
       payload: input.payload,
       readAt: null,
       dedupeKey: null,
+      inApp: true,
     })
 
     const outbox = await listOutbox()
@@ -132,6 +133,37 @@ describe("notify", () => {
 
     expect((await rowsOf(user.id)).map((row) => row.dedupeKey).sort()).toEqual(["k1", "k2"])
     expect(await listOutbox()).toHaveLength(1)
+  })
+
+  it("claims the dedupe key when in-app is off, so the email goes out once", async () => {
+    const { user } = await setup()
+    await testDb.db
+      .insert(notificationPrefs)
+      .values({ userId: user.id, type: "payouts.ready", email: true, inApp: false })
+    const ready = {
+      userId: user.id,
+      type: "payouts.ready" as const,
+      payload: { stripe_account_id: "0190a000-0000-7000-8000-000000000001" },
+      email: { ...expiredEmail(), subject: "Your payouts are set up" },
+      dedupeKey: "payouts.ready:acct_1",
+    }
+
+    expect(await notify(ready, testDb.db)).toEqual({
+      notificationId: null,
+      emailed: true,
+      duplicate: false,
+    })
+    expect(await notify(ready, testDb.db)).toEqual({
+      notificationId: null,
+      emailed: false,
+      duplicate: true,
+    })
+
+    expect(await listOutbox()).toHaveLength(1)
+    // The row only records the delivery; in-app lists show `in_app = true` rows.
+    expect(await rowsOf(user.id)).toMatchObject([
+      { type: "payouts.ready", dedupeKey: "payouts.ready:acct_1", inApp: false },
+    ])
   })
 
   it("commits the in-app row with the caller's transaction", async () => {

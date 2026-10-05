@@ -1,8 +1,9 @@
 "use client"
 
 import { ArrowRight, CircleAlert, Loader2, Save } from "lucide-react"
-import { useActionState, useId, useState } from "react"
+import { useId, useState, type ReactNode } from "react"
 
+import { FormActions, useFormAction } from "@/components/profiles/form-kit"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,8 @@ import { SUMMARY_MAX_LENGTH, TOPICS_MAX } from "@/lib/social/summary-form"
 /**
  * The editable audience summary and topics (§7.3 use 1). `review` mode is the onboarding review
  * ("Continue" saves, records the decision and moves on); `edit` mode saves on /app/audience.
+ * A failed save keeps what the creator typed (`useFormAction`): React resets uncontrolled fields
+ * after every form action.
  */
 export function AudienceSummaryForm({
   mode,
@@ -29,26 +32,24 @@ export function AudienceSummaryForm({
   onSaved?: () => void
 }) {
   const id = useId()
-  const [length, setLength] = useState(summary?.length ?? 0)
-  const [state, formAction, pending] = useActionState(
-    async (_previous: ActionResult<unknown> | null, formData: FormData) => {
-      const result =
-        mode === "review"
-          ? await confirmAudienceReview(formData)
-          : await updateAudienceSummary(formData)
-      if (result.ok) onSaved?.()
-      return result
-    },
-    null,
-  )
-  const error = state && !state.ok ? state : null
-  const summaryError = error?.fieldErrors?.summary?.[0]
-  const topicsError = error?.fieldErrors?.topics?.[0]
+  const form = useFormAction(async (formData: FormData): Promise<ActionResult<unknown>> => {
+    const result =
+      mode === "review"
+        ? await confirmAudienceReview(formData)
+        : await updateAudienceSummary(formData)
+    if (result.ok) onSaved?.()
+    return result
+  })
+  const summaryValue = form.valueOf("summary", summary ?? "")
+  const [length, setLength] = useState(summaryValue.length)
+  const { error, pending } = form
+  const summaryError = form.fieldError("summary")
+  const topicsError = form.fieldError("topics")
   const summaryId = `${id}-summary`
   const topicsId = `${id}-topics`
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={form.formAction} className="space-y-5">
       {error && !summaryError && !topicsError ? (
         <Alert variant="destructive">
           <CircleAlert aria-hidden="true" />
@@ -61,7 +62,7 @@ export function AudienceSummaryForm({
         <Textarea
           id={summaryId}
           name="summary"
-          defaultValue={summary ?? ""}
+          defaultValue={summaryValue}
           maxLength={SUMMARY_MAX_LENGTH}
           rows={6}
           onChange={(event) => setLength(event.currentTarget.value.length)}
@@ -84,7 +85,7 @@ export function AudienceSummaryForm({
         <Input
           id={topicsId}
           name="topics"
-          defaultValue={topics.join(", ")}
+          defaultValue={form.valueOf("topics", topics.join(", "))}
           placeholder="home cooking, budget recipes, meal prep"
           aria-invalid={topicsError ? true : undefined}
           aria-describedby={`${topicsId}-hint${topicsError ? ` ${topicsId}-error` : ""}`}
@@ -99,8 +100,8 @@ export function AudienceSummaryForm({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        {mode === "edit" && state?.ok ? (
+      <Actions sticky={mode === "review"}>
+        {mode === "edit" && form.result?.ok ? (
           <p role="status" className="self-center text-sm text-muted-foreground sm:mr-auto">
             Saved.
           </p>
@@ -126,7 +127,17 @@ export function AudienceSummaryForm({
             </>
           )}
         </Button>
-      </div>
+      </Actions>
     </form>
   )
+}
+
+/**
+ * The submit row. On the onboarding review it is the step's action bar, pinned to the bottom of
+ * phone screens like the other onboarding steps (`FormActions`); inside the /app/audience card it
+ * is an ordinary row.
+ */
+function Actions({ sticky, children }: { sticky: boolean; children: ReactNode }) {
+  if (sticky) return <FormActions>{children}</FormActions>
+  return <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">{children}</div>
 }

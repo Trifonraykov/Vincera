@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { formatBytes, normalizeMimeType, UPLOAD_LIMITS } from "@/lib/storage/limits"
 
+import { SOCIAL_PROVIDER_META } from "./catalog"
 import { CREATOR_SOCIAL_PROVIDERS, type CreatorSocialProviderId } from "./types"
 
 /**
@@ -74,9 +75,16 @@ export const PROFILE_URL_EXAMPLES: Record<CreatorSocialProviderId, string> = {
   tiktok: "https://www.tiktok.com/@yourname",
 }
 
-/** Followers people can type: whole numbers, with thousands separators allowed. */
+/**
+ * Followers people can type: whole numbers, with thousands separators allowed. An empty field is
+ * missing, not zero.
+ */
 export const followerCountSchema = z.preprocess(
-  (value) => (typeof value === "string" ? value.replace(/[\s,.'’_]/g, "") : value),
+  (value) => {
+    if (typeof value !== "string") return value
+    const digits = value.replace(/[\s,.'’_]/g, "")
+    return digits === "" ? undefined : digits
+  },
   z.coerce
     .number({ error: "Enter your follower count as a whole number." })
     .int("Enter your follower count as a whole number.")
@@ -87,3 +95,37 @@ export const followerCountSchema = z.preprocess(
 export const manualProviderSchema = z.enum(MANUAL_PROVIDERS, {
   error: "Manual entry is available for YouTube, Instagram and TikTok.",
 })
+
+export const PROFILE_URL_MAX_LENGTH = 500
+
+export type ManualEntryFields = { followers: number; profileUrl: string }
+export type ManualEntryFieldErrors = Partial<Record<keyof ManualEntryFields, string[]>>
+
+/**
+ * The typed part of a manual entry (follower count and profile link), checked the same way in
+ * the browser, before the screenshot is uploaded, and on the server.
+ */
+export function checkManualEntryFields(
+  provider: CreatorSocialProviderId,
+  input: { followers: unknown; profileUrl: unknown },
+): { ok: true; data: ManualEntryFields } | { ok: false; fieldErrors: ManualEntryFieldErrors } {
+  const fieldErrors: ManualEntryFieldErrors = {}
+  const profileUrl = typeof input.profileUrl === "string" ? input.profileUrl.trim() : ""
+  if (!profileUrl) {
+    fieldErrors.profileUrl = ["Enter the link to your profile."]
+  } else if (profileUrl.length > PROFILE_URL_MAX_LENGTH) {
+    fieldErrors.profileUrl = ["That link is too long."]
+  } else if (!isProfileUrlFor(provider, profileUrl)) {
+    fieldErrors.profileUrl = [
+      `Enter the https:// link to your ${SOCIAL_PROVIDER_META[provider].label} profile.`,
+    ]
+  }
+  const followers = followerCountSchema.safeParse(input.followers)
+  if (!followers.success) {
+    fieldErrors.followers = [
+      followers.error.issues[0]?.message ?? "Enter your follower count as a whole number.",
+    ]
+  }
+  if (!followers.success || fieldErrors.profileUrl) return { ok: false, fieldErrors }
+  return { ok: true, data: { followers: followers.data, profileUrl } }
+}

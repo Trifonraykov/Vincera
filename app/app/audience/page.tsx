@@ -11,6 +11,7 @@ import { SummaryEditor } from "@/components/audience/summary-editor"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConnectButton } from "@/components/social/connect-button"
+import { ConnectResultAlert } from "@/components/social/connect-result-alert"
 import { ConnectionStatusBadge } from "@/components/social/connection-status-badge"
 import { ManualEntryDialog } from "@/components/social/manual-entry-dialog"
 import { ProviderIcon } from "@/components/social/provider-icon"
@@ -30,6 +31,8 @@ import type { ConnectionView } from "@/lib/social/view"
 
 export const metadata: Metadata = { title: "Audience" }
 
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
+
 const RETURN_TO = "/app/audience"
 
 /**
@@ -37,15 +40,20 @@ const RETURN_TO = "/app/audience"
  * real data"): followers per platform, size tier, average views, engagement, top countries and
  * age/gender (with what the shares are of), the AI summary and topics (editable, regenerable),
  * when each platform last synced, resync, and connection health (expired → reconnect).
+ *
+ * Connect and Reconnect buttons here come back with `?connected=` / `?error=` (lib/social/
+ * oauth-flow.ts), so every branch shows that outcome, the empty states included.
  */
-export default async function AudiencePage() {
+export default async function AudiencePage({ searchParams }: Props) {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
+  const connectResult = <ConnectResultAlert searchParams={await searchParams} />
 
   if (!canViewOwnAudience(user)) {
     return (
       <div className="space-y-8">
         <PageHeader title="Audience" />
+        {connectResult}
         <EmptyState
           icon={Users}
           title="Audience stats are for creators"
@@ -67,6 +75,7 @@ export default async function AudiencePage() {
     return (
       <div className="space-y-8">
         <PageHeader title="Audience" />
+        {connectResult}
         <EmptyState
           icon={Users}
           title="Create your creator profile first"
@@ -88,6 +97,7 @@ export default async function AudiencePage() {
           title="Audience"
           description="Who follows you, where they are and what they care about."
         />
+        {connectResult}
         <EmptyState
           icon={Users}
           title="Connect an account to see your audience"
@@ -134,6 +144,7 @@ export default async function AudiencePage() {
         }
       />
 
+      {connectResult}
       {overview.syncPending || overview.summaryPending ? <SyncRefresher /> : null}
 
       {problems.map((connection) => (

@@ -7,6 +7,7 @@ import { Pool, type PoolConfig } from "pg"
 
 import { env } from "@/lib/env"
 
+import { databasePoolConfig, type DatabaseConnectionOptions } from "./connection"
 import * as schema from "./schema"
 
 /**
@@ -33,12 +34,17 @@ export type DbHandle = {
   close: () => Promise<void>
 }
 
-/** A new drizzle instance with its own pool. Callers own it and must `close()` it. */
+/**
+ * A new drizzle instance with its own pool. Callers own it and must `close()` it. `caCert`
+ * (DATABASE_CA_CERT) turns on verified TLS for hosted databases such as Supabase
+ * (lib/db/connection.ts).
+ */
 export function createDb(
   connectionString: string,
-  poolConfig: Omit<PoolConfig, "connectionString"> = {},
+  options: Omit<PoolConfig, "connectionString" | "ssl"> & DatabaseConnectionOptions = {},
 ): DbHandle {
-  const pool = new Pool({ connectionString, ...poolConfig })
+  const { caCert, ...poolConfig } = options
+  const pool = new Pool({ ...poolConfig, ...databasePoolConfig(connectionString, { caCert }) })
   // An idle client losing its connection (DB restart, terminated backend) must not crash the
   // process; the pool replaces the client on the next query.
   pool.on("error", (error) => {
@@ -53,7 +59,7 @@ let appDb: DbHandle | undefined
 
 /** The app's database, created on first use from DATABASE_URL. */
 export function getDb(): Db {
-  appDb ??= globalForDb.__appDb ?? createDb(env.DATABASE_URL)
+  appDb ??= globalForDb.__appDb ?? createDb(env.DATABASE_URL, { caCert: env.DATABASE_CA_CERT })
   if (process.env.NODE_ENV !== "production") globalForDb.__appDb = appDb
   return appDb.db
 }

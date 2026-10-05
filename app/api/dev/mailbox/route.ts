@@ -1,15 +1,16 @@
-import { isFake, isProduction } from "@/lib/env"
+import { devMailboxEnabled } from "@/lib/env"
 import { extractUrls, listOutbox } from "@/lib/email/outbox"
 
 /**
  * Dev mailbox for the fake email service (§19.3): lists the emails in `.data/outbox/` with their
  * links, so magic links can be clicked from a browser (e.g. when running in Docker). Does not
- * exist (404) unless email is fake, and never in production.
+ * exist (404) unless DEV_MAILBOX is set and email is fake, and never in production
+ * (`devMailboxEnabled`): it lets anyone who can reach the server sign in as anyone.
  */
 export const dynamic = "force-dynamic"
 
 export async function GET(): Promise<Response> {
-  if (isProduction() || !isFake("email")) return new Response("Not found", { status: 404 })
+  if (!devMailboxEnabled()) return new Response("Not found", { status: 404 })
 
   const emails = (await listOutbox()).reverse()
   const rows = emails

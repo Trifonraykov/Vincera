@@ -26,8 +26,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Published on this machine only: every service is fake and the dev mailbox shows everyone's
+    # magic links, so anyone who could reach the port could sign in as any user (admin included).
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/creator
       APP_ENV: development
@@ -35,6 +37,8 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       AUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: "true"
+      # /api/dev/mailbox: read the fake magic links in the browser (local only, see ports above).
+      DEV_MAILBOX: "1"
       # Local-only webhook secret; fake Stripe signs its webhooks with it.
       STRIPE_WEBHOOK_SECRET: whsec_local_docker_only
       ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@example.com}

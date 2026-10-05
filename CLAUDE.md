@@ -576,7 +576,7 @@ Every external integration sits behind a small interface with a **live** and a *
 - `ON DELETE`: personal child rows of a user cascade (auth rows, handles, profiles, social connections, notifications, saved items); child rows of collabs (members, agreements, tasks, thread) and threads (messages, reads) cascade; everything that money, attribution or history hangs off is RESTRICT (proposals, ideas/products in deals, launches, orders, ledger, transfers, events). Users are anonymised, never hard-deleted.
 - **Append-only at the DB level** (`drizzle/0002_append_only_guards.sql`): triggers reject UPDATE, DELETE and TRUNCATE on `events`, `audience_snapshots`, `proposal_revisions`, `agreement_signatures`, `link_clicks`, `admin_audit_log` with SQLSTATE `AO001` (`PG_ERROR.appendOnlyViolation`). `ledger_entries` also rejects them, except one UPDATE: setting `transfer_id` from NULL to a transfer with no other column changing (the payout job, §9). Because entries are immutable, a chargeback "freezes" untransferred entries by excluding orders in `disputed` status from the payout query, not by flagging entries.
 - GDPR escape hatch: inside a transaction, `allowGdprErasure(tx)` (`lib/db/append-only.ts`) sets `app.gdpr_erasure` for that transaction only, which lets DELETE through on `audience_snapshots` (disconnecting a social account deletes its snapshots, §14). Updates and every other append-only table stay blocked; Phase 6 must extend the trigger explicitly if it needs to redact more.
-- Migrations: `0000` enables pgvector (custom), `0001` is the generated schema, `0002` adds the append-only triggers (custom), `0003` seeds matching v0 (custom), `0004` adds `audience_snapshots.countries_basis` (generated), `0005` adds the Phase 1 columns (generated, §19.11).
+- Migrations: `0000` enables pgvector (custom), `0001` is the generated schema, `0002` adds the append-only triggers (custom), `0003` seeds matching v0 (custom), `0004` adds `audience_snapshots.countries_basis` (generated), `0005` adds the Phase 1 columns (generated, §19.11), `0006` adds `notifications.in_app` (generated), `0007` enables row-level security on every table (generated) and `0008` revokes Supabase's Data API roles (custom); §19.18.
 - **Audience snapshot shapes:** the `audience_snapshots` columns store a provider's `AudienceSnapshotInput` (lib/social/types.ts) as it is: `age_gender` is `{ basis, buckets: { ageGroup, gender, share }[] } | null`, `top_countries` is `{ country, share }[]` with its basis in `countries_basis`, and `raw` is a JSON object (Zod `z.json()` values). YouTube shares are of viewers, Instagram's of followers, so the basis is never dropped. Gender is `female | male | other | unknown` (`other` = YouTube "user_specified", `unknown` = Instagram "U"). A compile-time check in lib/social/types.ts fails the typecheck when a field and its column drift apart. Add custom SQL with `pnpm db:generate --custom --name <name>`. Postgres truncates identifiers at 63 characters, so long foreign keys are named explicitly.
 - `lib/db/client.ts`: `db` (lazy, connects on first use like `env`) / `getDb()`, `createDb(url)` for scripts and tests, `closeDb()`, `withTransaction(fn, dbOrTx?)` (nested calls become savepoints), types `Db`, `Tx`, `DbOrTx`. Queries live in `lib/db/queries/<domain>.ts` and take `DbOrTx` first. `lib/db/errors.ts` (`getPgError`, `isPgError`, `PG_ERROR`) unwraps drizzle's `DrizzleQueryError`. Its message includes the query parameters, so never show it to users or send it to Sentry unscrubbed.
 
@@ -603,7 +603,7 @@ Every external integration sits behind a small interface with a **live** and a *
 - **enqueue:** `enqueue(name, data, { id? })` in `lib/jobs/enqueue.ts` validates the payload, then sends it to Inngest; when jobs are fake it runs the handlers through `after()`, or awaits them outside a request, and reports errors to Sentry. `runJobsNow` (for test routes and scripts) rethrows. Inline mode has no retries, debounce or cron.
 - **Inngest details:** triggers are plain `{ event }`, and our Zod schemas validate payloads in both modes. `/api/inngest` answers 404 when jobs are fake. To use a local Inngest dev server, set INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY (any values) plus INNGEST_DEV=1.
 - **Rate limits** (`lib/ratelimit.ts`): auth 10 per 10 min (per IP and per email; applied as described in §19.9), proposals 20 per day per user (§14), messages 30 per minute per user, `/r/*` 120 per minute per IP, checkout 10 per minute per IP. Keys are SHA-256-hashed before reaching Redis. If Upstash fails, the request is allowed and the error goes to Sentry. The in-memory fake is an exact sliding log on the app clock.
-- **Observability:** without a DSN, Sentry is never initialised (server, edge or browser). Use `reportError(error, { tags, extra })` from `lib/observability.ts`. `onRequestError` (instrumentation.ts) passes Sentry the request path without its query string (Next hands it the raw URL, which Sentry copies into `contexts.nextjs.request_path`, outside `dataCollection`'s reach), and `beforeSend` (`scrubEvent`, sentry.shared.ts) strips it again for every SDK. PostHog initialises in `instrumentation-client.ts` (`defaults: "2026-08-30"`, `person_profiles: identified_only`, session replay off). `AnalyticsProvider` wraps the root layout so client components can use the PostHog hooks. Server code uses `captureServerEvent` (`lib/analytics/posthog-server.ts`).
+- **Observability:** without a DSN, Sentry is never initialised (server, edge or browser). Use `reportError(error, { tags, extra })` from `lib/observability.ts`; it redacts database errors first (`redactDbError`, §19.18). `onRequestError` (instrumentation.ts) passes Sentry the request path without its query string (Next hands it the raw URL, which Sentry copies into `contexts.nextjs.request_path`, outside `dataCollection`'s reach), and `beforeSend` (`scrubEvent`, sentry.shared.ts) strips it again for every SDK. PostHog initialises in `instrumentation-client.ts` (`defaults: "2026-08-30"`, `person_profiles: identified_only`, session replay off). `AnalyticsProvider` wraps the root layout so client components can use the PostHog hooks. Server code uses `captureServerEvent` (`lib/analytics/posthog-server.ts`).
 - **Open item:** PostHog sets cookies. Before an EU launch we need a consent banner, or PostHog's cookieless mode (which must also be switched on in the PostHog project).
 
 ### 19.8 Navigation and layouts
@@ -726,7 +726,7 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - Profile pages call `completeOnboardingStep(tx, { step: "<role>.profile", status: "done" })` in the transaction that inserts the profile, then `redirect(nextStep ?? "/app")`.
   - Review, connect, portfolio and payouts record `done` on Confirm / Continue / Finish.
   - "Do this later" is `SkipStepButton`.
-- **E2E:** specs that are not about onboarding use `completeOnboardingInDb(email)` (`tests/e2e/helpers/db.ts`); the onboarding pages themselves are walked by `tests/e2e/onboarding.spec.ts` and `phase1-acceptance.spec.ts` (§19.15).
+- **E2E:** specs that are not about onboarding use `completeOnboardingInDb(email)` (`tests/e2e/helpers/db.ts`); the onboarding pages themselves are walked by `tests/e2e/onboarding-profiles.spec.ts` and `phase1-acceptance.spec.ts` (§19.15, §19.17).
 
 **Events added beyond §11**
 - `onboarding.step_completed { step, status }`.
@@ -743,7 +743,7 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - Inserts the in-app row with the given `dbOrTx`.
   - Sends the email immediately; a send failure goes to Sentry and never fails the caller.
   - Skips the email for users without an email address.
-  - A repeated `dedupeKey` writes and sends nothing.
+  - A repeated `dedupeKey` writes and sends nothing. The key is claimed even when in-app is off for the type: a hidden row (`in_app = false`) records the delivery, so the email still goes out once (§19.18). In-app lists and unread counts must filter `in_app = true`.
   - Because the email goes out even if the caller's transaction later rolls back, notify at the end of the transaction.
 - Generic template: `lib/email/templates/notification.tsx` (heading, paragraphs, one button). Email links use `absoluteUrl(path)` from `lib/urls.ts`.
 
@@ -881,20 +881,21 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
 
 ### 19.14 Phase 1: social connection flow, sync, audience pages and public profiles
 **Files**
-- `lib/social/`: `oauth-flow.ts` (the start/callback logic; the routes under `app/api/oauth/[provider]/` only pass the session user and the database), `connect-errors.ts` (`?error=` codes and messages), `connections.ts` (token columns, OAuth upsert, disconnect), `sync.ts`, `derived.ts` (size tier, audience summary, embedding), `size-tier.ts`, `retention.ts`, `manual.ts` + `manual-policy.ts`, `revoke.ts`, `summary.ts` + `summary-form.ts` (the creator's review/edits), `queries.ts` (never selects token columns), `view.ts` / `audience.ts` (page view models), `authz.ts`, `actions.ts`, `background.ts`, `revalidate.ts`.
+- `lib/social/`: `oauth-flow.ts` (the start/callback logic; the routes under `app/api/oauth/[provider]/` only pass the session user and the database), `connect-errors.ts` (`?error=` codes and messages), `availability.ts` (`SOCIAL_OAUTH_DISABLED`, below), `connections.ts` (token columns, OAuth upsert, disconnect), `sync.ts`, `derived.ts` (size tier, audience summary, embedding), `size-tier.ts`, `retention.ts`, `manual.ts` + `manual-policy.ts`, `revoke.ts`, `summary.ts` + `summary-form.ts` (the creator's review/edits), `queries.ts` (never selects token columns), `view.ts` / `audience.ts` (page view models), `authz.ts`, `actions.ts`, `background.ts`, `revalidate.ts`.
 - `lib/public-profiles/` (`load.ts`, `metadata.ts`); jobs `inngest/functions/social-sync.ts`, `social-daily-sync.ts`, `social-youtube-retention.ts`; email `lib/email/templates/social-expired.tsx`; UI in `components/social/`, `components/audience/`, `components/public-profile/`.
 - Pages: `/onboarding/creator/connect`, `/onboarding/creator/review`, `/app/audience`, `/app/settings/connections`, `/c/[handle]`, `/b/[handle]`.
 
-**Authorization:** the social rules (`canConnectSocial`, `canManageSocialConnection`, `canVerifySocialConnection`, `canViewOwnAudience`) live in `lib/social/authz.ts`, built on `isActive` / `isAdmin` from `lib/auth/authz.ts`. Deviation from §6's single file, made to keep the shared file untouched during the parallel build; they can move into `authz.ts` later.
+**Authorization:** the social rules (`canConnectSocial`, `canManageSocialConnection`, `canVerifySocialConnection`, `canViewOwnAudience`) live in `lib/social/authz.ts`, built on `isActive` / `isAdmin` from `lib/auth/authz.ts`. Deviation from §6's single file, made to keep the shared file untouched during the parallel build; they can move into `authz.ts` later. Every page calls a rule itself, besides the session helpers (§19.9): `/onboarding/creator/connect` `canEditCreatorProfile`, `/onboarding/creator/review` and `/app/audience` `canViewOwnAudience`, `/app/settings/connections` `canManageOwnAccount` plus `canConnectSocial` per provider.
 
 **OAuth flow**
-- Start: needs a session (signed out → `/sign-in?callbackUrl=<returnTo>`, since an `/api` path is never a callbackUrl), the provider allowed for the user's roles, and the rate limit `oauth-start` (10 per user per 10 minutes). Every redirect is a 303 to `absoluteUrl()` (NEXT_PUBLIC_APP_URL).
+- Start: needs a session (signed out → `/sign-in?callbackUrl=<returnTo>`, since an `/api` path is never a callbackUrl), the provider allowed for the user's roles, its OAuth switched on, and the rate limit `oauth-start` (10 per user per 10 minutes). Every redirect is a 303 to `absoluteUrl()` (NEXT_PUBLIC_APP_URL).
 - Callback answers: `returnTo?connected=<provider>` or `returnTo?error=<code>&provider=<provider>`.
-  - Codes: the `SocialErrorCode`s, plus `access_denied` (Cancel on the consent screen), `state_invalid` (cookie missing, tampered with, other state, other user), `session_expired` (more than 10 minutes), `account_in_use` and `not_allowed`.
+  - Codes: the `SocialErrorCode`s, plus `access_denied` (Cancel on the consent screen), `state_invalid` (cookie missing, tampered with, other state, other user), `session_expired` (more than 10 minutes), `account_in_use`, `not_allowed` and `oauth_disabled`.
+  - Every page with a Connect or Reconnect button shows the outcome (`ConnectResultAlert`), `/app/audience` included, in all its states.
   - Without a readable cookie the return path is unknown, so it goes to `/app/settings/connections`.
   - The state cookie is cleared on every callback answer.
   - Expected user-side failures (`invalid_code`, `no_channel`, `scope_missing`, `not_eligible`, `rate_limited`) are not sent to Sentry; everything else is.
-- Identity is `fetchProfile().providerAccountId`. A reconnect, or a manual entry upgraded to OAuth, updates the existing row: active, `verified_at = now`, sync error cleared, evidence key cleared (the screenshot is deleted, best effort). If the row now points at a different provider account (another channel), its old snapshots are deleted under `allowGdprErasure` and `last_synced_at` is reset. `social.connected` is emitted on every successful callback, reconnects included.
+- Identity is `fetchProfile().providerAccountId`. A reconnect, or a manual entry upgraded to OAuth, updates the existing row: active, `verified_at = now`, sync error cleared, evidence key cleared (the screenshot is deleted, best effort). If the row now points at a different provider account (another channel), **or was a manual entry**, its old snapshots are deleted under `allowGdprErasure` and `last_synced_at` is reset: a typed number must never read as verified once the row is (the card shows "syncing" until the first OAuth sync). The size tier is recomputed in the same transaction and the public profiles are revalidated. `social.connected` is emitted on every successful callback, reconnects included.
 - Tokens: AES-GCM (`lib/crypto.ts`) with the AAD `social_connections.<access|refresh>_token:<row id>`, so a ciphertext only decrypts on its own row. Tokens that cannot be decrypted (e.g. a rotated key) are treated as expired.
 - After the upsert the callback enqueues `social/sync.requested` (`reason: connected`); an enqueue failure is reported, and the daily sync picks the connection up.
 
@@ -906,11 +907,12 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - `social.expired` and a size tier recompute (an expired connection is no longer verified);
   - `notify("social.expired")`: in-app plus email (`social-expired.tsx`), dedupe key `social.expired:<id>:<token_obtained_at ms>`.
 - Retryable errors record `last_sync_error` and come back `retryable`; the job throws *inside* its step so Inngest retries it (a step that returned is memoised and would never run again). Other provider errors record the code, go to Sentry and are final. Anything that is not a provider error (database, bug) propagates.
-- Results: `synced | skipped (not_found, revoked, expired, manual) | expired | failed`.
+- **Token-state guard:** every write is conditional on the access-token ciphertext the sync started with (unique per encryption, so it identifies the token): the refreshed tokens, the snapshot (the row is locked `FOR UPDATE` and checked first), `last_sync_error` and the expiry. A reconnect or disconnect while the provider was answering makes the sync drop its results (`skipped: superseded`) instead of writing another channel's numbers onto the new connection, overwriting its fresh tokens, or marking a working connection expired and emailing the user.
+- Results: `synced | skipped (not_found, revoked, expired, manual, superseded, oauth_disabled) | expired | failed`.
 
 **Jobs**
 - `social-sync` (`social/sync.requested`): 3 retries, concurrency 1 per `connectionId`.
-- `social-daily-sync` (cron 04:15 UTC): active OAuth connections not synced in the last 20 hours. Under Inngest one event each, with the idempotency id `social-sync:<id>:<day>`. Inline (fake jobs, `/api/test/jobs/social-daily-sync`) the syncs run in sequence and it returns `{ due, failed }`.
+- `social-daily-sync` (cron 04:15 UTC): active OAuth connections not synced in the last 20 hours (switched-off providers excluded), read in pages of 200 by id (keyset), with the cutoff and day fixed in a first memoised step. Under Inngest each page is one step that queries and sends its events in **one batched `inngest.send`** (event id `social-sync:<id>:<day>`, so a retried step or a second run the same day is deduplicated), which keeps a run far below Inngest's step, output-size and batch limits. Inline (fake jobs, `/api/test/jobs/social-daily-sync`) the syncs run in sequence and it returns `{ due, failed }`. `dailySyncFanOut({ step, mode, pageSize?, send? })` is the handler, exported for tests.
 - `social-youtube-retention` (cron 03:45 UTC): `purgeExpiredYouTubeSnapshots()` deletes YouTube snapshots older than 30 days except each connection's newest; other providers are untouched; `{ skipped: true }` when `YOUTUBE_LONG_RETENTION=true`.
 - Open item: Google's other rule (delete within 30 days once a token can no longer be refreshed) is not implemented for expired YouTube connections; decide together with the retention flag.
 
@@ -922,18 +924,22 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
 - "Regenerate" (5 per user per hour) forces a new summary and clears `audience_summary_edited_at`.
 - Events:
   - `ai.generated` at generation: subject `creator_profile`, actor null for syncs, `accepted_by_user: null`, `fallback`.
-  - `ai.reviewed` when the creator confirms the AI text (`accepted`) or changes it (`edited`), on the review page or `/app/audience`.
+  - `ai.reviewed` when the creator confirms the AI text (`accepted`) or changes it (`edited`), on the review page or `/app/audience`: **once per generation** (an `ai.reviewed` on the profile since `audience_summary_generated_at` means it is decided), so saving the accepted text again, or editing it later, records no second decision. A new generation can be reviewed again.
   - `creator_profile.updated { fields, source }` for edits, which also set `audience_summary_edited_at`.
 - On `/onboarding/creator/review`, "Continue" saves the summary and topics, emits those events and records `creator.review` done, all in one transaction.
+- The form (`AudienceSummaryForm`) uses `useFormAction`, so a refused save keeps what was typed. The server normalises CRLF line breaks (how browsers submit a textarea) before the 1,200-character check, so a summary that fits the textarea's `maxLength` and counter always fits the schema.
 
 **Embedding:** `creatorProfileEmbeddingText()` (niche, topics, bio, audience summary, languages, country; no names or handles), with `embedding_model` `fake:hashed-bow-1024` or `voyage:<VOYAGE_MODEL>`. An embedding failure is reported and keeps the old vector. Phase 2's `embeddings/refresh` should reuse the same text builder.
 
 **Manual entry fallback**
-- Form: profile link (https, on the provider's domain; it is what the admin checks), follower count, screenshot.
+- Form: profile link (https, on the provider's domain; it is what the admin checks), follower count, screenshot. `checkManualEntryFields()` (client-safe) checks the link and count in the browser **before** anything is uploaded (with the screenshot's type and size; focus moves to the first invalid field) and again on the server. An empty count is missing, never 0.
 - Upload: a signed PUT (10 minutes) to the key `social-evidence/<userId>/<provider>-<uuid>.<ext>`.
   - The policy is the image MIME allow-list with a **25 MB** limit (the attachment limit, as the task asked; §19.7 lists screenshots under the 10 MB `image` purpose).
-  - The submit checks that the key is under the user's own prefix, then `statObject`s it (type and size); a refused object is deleted.
+  - The submit checks that the key is under the user's own prefix **for that provider** (`social-evidence/<userId>/<provider>-`), then `statObject`s it (type and size).
+  - **Any refusal deletes the upload** (`discardUnusedEvidence`: own prefix for the provider only, and never a key a connection still points at): invalid fields, wrong type or size, an OAuth row, the rate limit.
+  - Rate limit `social-manual-submit`: 10 per user per hour.
 - Refused while an OAuth row exists for the provider (resync or reconnect instead).
+- The screenshot already on file: the very same entry again (same key, count and link, e.g. a retried request) is a no-op (`unchanged: true`, nothing written, an admin's verification stands); other numbers or another link with it are refused ("Upload a new screenshot"): an admin may have checked that screenshot against the old number.
 - Storing it:
   - A new entry: a `manual` row (no tokens, `verified_at` null) and a snapshot holding only the followers (`raw = { source: "manual", v: 1 }`).
   - Events: `social.connected` (source `manual`) on the first entry, `social.synced` on every entry.
@@ -951,7 +957,12 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - The evidence screenshot is deleted.
   - The summary and embedding are refreshed. When nothing remains to summarise, the existing summary is kept.
 
-**Rate limits:** `oauth-start` 10 per 10 minutes per user; `social-resync` 3 per 15 minutes per connection; `social-evidence-upload` 10 per hour per user; `audience-summary-regenerate` 5 per hour per user.
+**Rate limits:** `oauth-start` 10 per 10 minutes per user; `social-resync` 3 per 15 minutes per connection; `social-evidence-upload` 10 per hour per user; `social-manual-submit` 10 per hour per user; `audience-summary-regenerate` 5 per hour per user.
+
+**Providers whose OAuth is not usable yet** (§7.1 "if a provider's API is not approved yet, allow manual entry")
+- `SOCIAL_OAUTH_DISABLED` (comma list of `youtube | instagram | tiktok | github`, `lib/env.ts`; unknown names fail validation; a variable beyond §17, documented in `.env.example`) switches a provider's OAuth off, e.g. `instagram,tiktok` while Meta and TikTok review the apps.
+- Its credentials are then **not required in production** (otherwise production could not boot before Meta/TikTok approve the apps). `isSocialOAuthEnabled(provider)` (env) / `isSocialOAuthAvailable(provider)` (`lib/social/availability.ts`) must be checked before `getProvider()`, which throws in production for a provider without credentials.
+- Effects: `ConnectButton` renders nothing; connection cards say "Connecting Instagram isn't available yet. Enter your numbers by hand for now; you can connect later." and offer manual entry (GitHub: "not available right now"); start and callback answer `?error=oauth_disabled`; existing connections keep their numbers ("Syncing … is paused"), their syncs are skipped (`oauth_disabled`), the daily fan-out leaves them out, and Resync is refused. Disconnecting still works.
 
 **Pages and background work**
 - `runInBackground` uses `after()` inside a request and runs inline elsewhere. Resync enqueues the job.
@@ -963,7 +974,8 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - Non-creators see "Become a creator"; creators without a profile get a link to the profile step (§19.11).
   - Demographics are shown per platform with their basis (YouTube: viewers over the last 90 days; Instagram: followers). Gender groups are female, male and "other or unspecified" (YouTube's user_specified and Instagram's U together).
   - Charts are ranked bar tables, and stacked age bars with a legend carrying totals and a table view. Colors come from the dataviz reference palette (blue, orange, aqua), checked for color-vision deficiency in both themes against the card surface.
-- `ConnectButton` / `connectHref(provider, returnTo)` (`components/social/connect-button.tsx`) is the link every Connect button uses, e.g. GitHub on `/onboarding/builder/portfolio`.
+- `ConnectButton` / `connectHref(provider, returnTo)` (`components/social/connect-button.tsx`) is the link every Connect button uses, e.g. GitHub on `/onboarding/builder/portfolio`. It is server-only now (it reads `SOCIAL_OAUTH_DISABLED`).
+- Mobile: the onboarding connect and review steps put their actions in `FormActions` (components/profiles/form-kit.tsx, §19.15's sticky bottom action bar on phones), like the other onboarding steps.
 
 **Public profiles** (`lib/public-profiles/load.ts`)
 - Each loader selects only the public fields listed in its header:
@@ -971,17 +983,19 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - The audience summary, and per platform: followers, average views, engagement, verified or unverified, and the date.
   - The channel link only for verified connections. Verified reach is the sum of the verified platforms.
   - Builder: skills, stack, availability, deal preference, portfolio, and GitHub stats.
-- No emails, ids, tokens, raw payloads, demographic breakdowns or screenshots. Only http(s) URLs reach an `href`.
+  - Portfolio images (uploaded through the builder's forms) are shown through their app route `portfolioImagePath(itemId, key)` → `/api/portfolio/<itemId>/image?v=…`; the storage key itself never reaches the page.
+- No emails, user ids, tokens, raw payloads, demographic breakdowns or screenshots. Only http(s) URLs reach an `href`.
 - Unknown, invalid or suspended → 404. Uppercase handles redirect (308) to lowercase.
 - ISR: `revalidate = 300` and an empty `generateStaticParams`, plus a best-effort `revalidatePath` after syncs, expiries, disconnects and summary changes. A 404 can stay cached for up to 5 minutes.
 - Metadata: title, description (bio, else summary, else a default; ≤ 160 characters), canonical URL, Open Graph `profile`, Twitter `summary`. No OG image.
 
 **Tests**
 - Integration (`tests/integration/social/`):
-  - `connection-flow.test.ts`: start and callback, the state cookie, wrong state or user, expiry, cancel, reconnect, `account_in_use`, manual → OAuth upgrade, disconnect.
-  - `sync.test.ts`: snapshot, summary, tier, embedding and events; edited summary kept; model fallback; token refresh; expiry with notification and email; retryable errors; GitHub; jobs; retention and its flag; manual entry and admin verification; review events.
+  - `connection-flow.test.ts`: start and callback, the state cookie, wrong state or user, expiry, cancel, reconnect, `account_in_use`, manual → OAuth upgrade (no typed number passes as verified), `SOCIAL_OAUTH_DISABLED` at start, callback and sync, disconnect.
+  - `sync.test.ts`: snapshot, summary, tier, embedding and events; edited summary kept; model fallback; token refresh; expiry with notification and email; retryable errors; a sync superseded by a reconnect (no snapshot, no expiry); GitHub; jobs, including the paged, batched fan-out under Inngest; retention and its flag; manual entry (refusals delete the upload, provider prefix, no-op and reuse rules) and admin verification; review events once per generation.
+  - `actions.test.ts`: the server actions with a mocked session: manual submit field errors and rate limit (uploads deleted), `ai.reviewed` once per generation.
   - `public-profiles.test.ts`.
-- Unit: `tests/unit/social/connection-pure.test.ts`.
+- Unit: `tests/unit/social/connection-pure.test.ts` (incl. `checkManualEntryFields`, CRLF), `tests/unit/social/oauth-availability.test.ts`.
 - E2E: `tests/e2e/phase1-acceptance.spec.ts`. Every step goes through the pages and the fakes, the profile forms included (only the manual-entry test sets its profile up in the database).
 
 ### 19.15 Phase 1: profiles, onboarding pages and settings
@@ -1002,23 +1016,21 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - emit `<role>_profile.created`, or `.updated { fields, source }` with changed column names only;
   - `completeOnboardingStep(<role>.profile, done)` (idempotent).
 - From onboarding it redirects to the next step. From settings it returns, and the form shows "Saved.".
-- **Creator form:** display name, handle, niche, bio, country, languages.
-  - Topics are not on it. The audience summary writes them, and the creator edits them next to the summary (review step, `/app/audience`).
-  - Editing topics sets `audience_summary_edited_at` (§19.14). On the profile step, that would stop the first sync from ever writing a summary.
+- **Creator form:** display name, handle, niche, bio, topics, country, languages. Topics joined the form in the second pass; see §19.17 for how they interact with the audience summary.
 - **Builder form:** display name, handle, bio, skills, stack, availability (default `open`), deal preference (default `either`).
-  - Skills and stack are comma lists: ≤ 12 items of ≤ 40 characters, duplicates dropped ignoring case, the first spelling kept.
+  - Skills and stack: ≤ 12 items of ≤ 40 characters, duplicates dropped ignoring case, the first spelling kept. Entered with a tag input since §19.17; the server still parses one comma list.
 - **Limits:** names 60 characters, bio 500, niche 80, ≤ 6 languages.
 - **Country:** optional, any ISO 3166-1 alpha-2 code (plus XK). It preselects the payout country (§19.12).
 - **Languages:** 49 ISO 639-1 codes (common creator languages plus the EU languages), stored lowercase in list order and shown by English name on public profiles. Twelve are shown up front, the rest under "More languages".
 - **After the commit, in the background:**
   - `runInBackground` moved to `lib/jobs/background.ts` and takes an `area` tag; `lib/social/background.ts` wraps it.
-  - The creator embedding (lib/social/derived.ts) is refreshed when niche, bio, languages or country changed.
+  - The creator embedding (lib/social/derived.ts) is refreshed when niche, bio, topics, languages or country changed.
   - The builder embedding (`builderProfileEmbeddingText`: skills, stack, bio, portfolio items; no names) is refreshed when bio, skills, stack or the portfolio changed. Phase 2's `embeddings/refresh` should reuse both text builders.
   - Public profiles are revalidated, and after a rename the old handle's paths too.
 
 **Handles**
 - **Input:** typed with or without `@`, in any case, and stored lowercase.
-- **Reserved:** `RESERVED_HANDLES` (admin, support, staff, official, vincera, …), so no profile can pose as the platform.
+- **Reserved:** `RESERVED_HANDLES` (admin, support, staff, official, vincera, …), so no profile can pose as the platform; route words were added in §19.17.
 - **Claiming:** `claimHandle` inserts into `handles` with `ON CONFLICT DO NOTHING`. A handle owned by someone else throws `HandleTakenError`.
   - `HandleTakenError` is an `ActionError` carrying `fieldErrors.handle`.
   - `ActionError` gained optional `fieldErrors`, which `defineAction` returns.
@@ -1037,25 +1049,25 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - Format: optional, `product_format`.
   - Shipped: a checkbox.
 - At most 12 items per builder.
-- `image_url` is not collected yet: there is no upload flow for portfolio images, and public pages show none.
+- Image: optional upload since §19.17 (`image_url` holds the storage key).
 - **Events:** changes emit `builder_profile.updated { fields: ["portfolio_items"], source }`. §11 has no portfolio event, and for matching it is the builder profile that changed.
 - **Onboarding:** "Continue" (`finishPortfolioStep`) needs ≥ 1 item or a GitHub connection, like the connect step; otherwise the page offers "Do this later".
 
 **Other pages**
-- **Role page:** roles the user already has are marked and disabled. A user with both roles sees a link to `/app` instead of the form.
+- **Role page:** roles the user already has are marked and disabled. A user with both roles sees a link to `/app` instead of the form. Each card lists what the role does (§19.17).
 - **`/app` home:**
   - Cards come from the real state: connections, portfolio, payouts.
   - A role without a profile shows "Set up your <role> profile" (§19.11).
 - **Settings:**
   - Every settings page has the tabs from `SETTINGS_NAV` (lib/nav.ts, also the sidebar's children): Profile, Connections, Payouts, Notifications, Account.
-  - **Profile:** the user's profiles, active role first, plus the portfolio for builders. A missing profile links to its onboarding step.
+  - **Profile:** the user's profiles, active role first, plus the portfolio for builders; in tabs when the user has both roles (§19.17). A missing profile links to its onboarding step.
   - **Notifications:** email and in-app switches per `NOTIFICATION_TYPES` entry, upserted into `notification_prefs`. Built ahead of Phase 3 because the sidebar links to it and `notify()` already reads the switches.
   - **Account:**
     - Name (`users.name`).
     - Sign-in email, read-only: changing it needs a verification flow that is not built.
     - Roles: the missing one can be added through `/onboarding/role`.
     - Session count, and "Sign out everywhere", which deletes every `sessions` row and then signs this browser out.
-    - Data export and deletion are described as coming (§14, Phase 6). There are no dead buttons.
+    - Data export and deletion: disabled buttons with a note (§19.17 replaced the earlier "no dead buttons" text, as the task asked). Active role and "Sign out" (this device) were added there too.
 
 **Forms:** `components/profiles/form-kit.tsx`
 - `useFormAction` keeps the submitted values when an action fails. React resets uncontrolled fields after every form action, so without it a typo would wipe the form.
@@ -1069,7 +1081,7 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - portfolio ownership and limits, and the builder embedding;
   - the actions, with a mocked session and `next/cache`;
   - account settings and notification preferences.
-- **E2E:** `tests/e2e/onboarding.spec.ts`:
+- **E2E:** `tests/e2e/onboarding-profiles.spec.ts` (was `onboarding.spec.ts`; renamed and extended in §19.17):
   - a creator, a builder, and a user with both roles;
   - validation errors that keep the typed values;
   - settings tabs, a handle rename and its public page, notification switches, sign out everywhere.
@@ -1093,3 +1105,135 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
 - **Without a `fake`:** the transport falls back to schema-shaped placeholders ("Stub …"). Never ship a prompt without `fake`: local runs, the Docker demo and screenshots should read naturally.
 - **Failure paths:** the markers `FAKE_AI_INVALID`, `FAKE_AI_REFUSAL` and `FAKE_AI_ERROR` still force them.
 - **Reference implementation:** `fakeAudienceSummary` in `lib/ai/prompts/audience-summary.ts`.
+
+### 19.17 Phase 1: profile forms, second pass (topics, live handle check, portfolio images, mobile actions)
+Decisions made while finishing the onboarding forms, profiles and settings against the Phase 1 task list.
+
+**Creator topics on the profile form**
+- The creator form has a Topics tag input (≤ 8, ≤ 40 characters each). Topics use the audience summary's rules: lowercase, `#` and duplicates dropped (`parseTopicsInput` from `lib/social/summary-form.ts`, each comma part trimmed first). §5 lists `topics` on `creator_profiles`, and the task asked for them on the form.
+- They interact with the AI summary (§19.14) like this:
+  - Before the profile has an audience summary, topics typed on the form only seed it. The first sync passes them to the model (`profileTopics`) and may replace them with its own; the creator then reviews them on the review step.
+  - Once a summary exists, a topic change on the form also sets `audience_summary_edited_at`, so later syncs keep the creator's topics and summary, as an edit on `/app/audience` would. "Regenerate" still clears it.
+  - Edits to other fields never set it.
+- `creator_profile.created.topic_count` now counts them. A topic change refreshes the embedding.
+
+**Tag inputs** (`components/profiles/tag-input.tsx`, pure logic in `tag-list.ts`)
+- Used for topics, skills and stack. Enter or a comma ends a tag, Backspace in the empty box removes the last one, and each chip has a "Remove <kind> <tag>" button.
+- The form gets one hidden field holding the tags, plus any text still being typed, as a comma list. So the server schemas did not change, a pasted list works, and nothing typed is lost without a blur.
+- Tags beyond the limit stay in the box and are submitted, so the server's message explains the limit.
+- `tagListSchema` also accepts repeated fields.
+
+**Handles**
+- **Live check** under the handle field:
+  - Format and reserved words are checked in the browser at once. After a 400 ms pause, `checkHandleAvailabilityAction` (`handleAvailability`, lib/profiles/handles.ts) answers `available | yours | taken | reserved | invalid`.
+  - Authorized with `canManageOwnAccount`; rate-limited at 60 per user per minute (bucket `handle-check`). A limited or failed check shows nothing.
+  - It is a hint only: saving claims the handle. Handles are public (`/c/<handle>`), so the check reveals nothing new.
+- **Reserved words** now include the app's route segments (access, api, app, auth, builders, creators, dev, discover, earnings, launches, legal, login, logout, messages, notifications, oauth, onboarding, payouts, pricing, privacy, proposals, settings, sign_in, sign_up, signin, signup, terms, webhooks). The one-letter public prefixes `c`, `b`, `p`, `r` are listed too, although the 3-character minimum already refuses them. No stored handle used any of these words (the seed creates no profiles).
+- **Concurrency:**
+  - Every profile save first locks the user's `users` row. Two saves of one user (a double submit, two tabs) run one after the other, so the second updates what the first created instead of failing on `creator_profiles_user_id_unique`.
+  - Two people racing for one handle are settled by `claimHandle`. The later insert waits for the earlier transaction, then finds the handle taken and gets `HandleTakenError`: "That handle is taken. Try another one." on the handle field.
+  - Any other unique violation during a save becomes a plain-language error (`withPlainUniqueErrors` in `lib/profiles/save.ts`).
+  - Integration tests cover the blocked-claim case deterministically (one transaction held open) and in parallel rounds.
+
+**Portfolio images** (`lib/profiles/image-policy.ts` client-safe, `lib/profiles/portfolio-image.ts` server)
+- **Policy:** the `image` upload purpose (§19.7): PNG, JPEG, WebP, GIF; 10 MB; never SVG.
+- **Upload:**
+  - The dialog checks the file, asks `requestPortfolioImageUpload` (builders only; 20 per user per hour, bucket `portfolio-image-upload`) for a 10-minute signed PUT, uploads the file directly, then submits the project with `imageKey`.
+  - Keys are `portfolio-images/<userId>/<uuidv7>.<ext>`. On save the key must match the user's own prefix and that exact shape (`isOwnPortfolioImageKey`), and the stored object is `statObject`-checked; an object of the wrong type or size is deleted (R2 cannot cap a presigned PUT). **Superseded by §19.19:** uploads go to `portfolio-uploads/` and a save copies them to a fresh `portfolio-images/` key.
+  - "Remove image" sends `removeImage`.
+- **Storage column (deviation):** `portfolio_items.image_url` stores the storage key, not a URL, because schema changes were off-limits in this wave and storage is private (§14). A later migration may rename it `image_storage_key`.
+- **Cleanup:** replaced, removed and deleted images are deleted from storage after the commit (best effort, `runInBackground`). An image uploaded in a dialog that is then cancelled stays orphaned (TODO: sweep `portfolio-uploads/` objects older than an hour, and unreferenced `portfolio-images/` ones, e.g. with the Phase 6 GDPR work). Refused saves clean up after themselves since §19.19.
+- **Display:** `GET /api/portfolio/<itemId>/image` (`app/api/portfolio/[itemId]/image/route.ts`, a redirect route handler, §4) answers 302 to a 10-minute signed GET URL with `Cache-Control: private, max-age=300`. It answers 404 for unknown ids, items without an image, keys outside the owner's prefix, and suspended owners.
+  - Pages use `portfolioImagePath(itemId, key)`, which adds `?v=<upload id>` so a replaced image is never served from cache.
+  - Portfolio images are public profile content, so the route needs no session. `/b/[handle]` (§19.14) shows them through the same `portfolioImagePath`, never the storage key.
+  - Plain `<img>` with a lint exception: `next/image` would need every storage host configured, and the source is a redirect.
+
+**Pages**
+- **Role page:** each card lists what the role does. Radios are named by the card title (`aria-labelledby`) and described by the rest. The cards use spans only (a list is not valid inside a `<label>`).
+- **Mobile action bar:** `FormActions` (`components/profiles/form-kit.tsx`) holds a form's Save / Continue. Below `sm` it sticks to the bottom of the screen above the home indicator (`env(safe-area-inset-bottom)`), like an app's action bar; from `sm` up it is a plain row. Used by both profile forms, the role picker and the portfolio step. This is the "like a mobile app" part of the user's request within this area.
+- **Settings → Profile:** with both roles, the two profiles sit in tabs (`Your profiles`), the active role first, and `?tab=creator|builder` opens one. Both panels stay mounted (`forceMount`, hidden when inactive), so unsaved edits survive switching tabs.
+- **Settings → Account:**
+  - Active role (`ActiveRoleForm`, the sidebar switcher's `switchActiveRole` action), and "Sign out" for this device next to "Sign out everywhere".
+  - "Export my data" and "Delete account" are disabled buttons whose description says they come with the data-protection tools later in this build (§14, Phase 6). The task asked for disabled buttons, so this replaces §19.15's "no dead buttons".
+
+**Tests**
+- Unit: `tests/unit/profiles/fields.test.ts` (topics, reserved route words, image fields and policy, `portfolioImagePath`), `tag-list.test.ts`, and `profile-ui.test.ts` (server-rendered forms: labels, hidden tag fields, live-status region, role cards, image thumbnails, active role).
+- Integration: `tests/integration/profiles/profile-forms.test.ts` covers the handle check and its action, handle races (blocked claim, parallel rounds, double submit), topics and `audience_summary_edited_at`, image upload URLs, key and object checks (other user's key, missing upload, HTML disguised as PNG, oversize), replace, remove and delete, the image route, and upload authorization. `profiles.test.ts` was updated for the new return shapes.
+- E2E: `tests/e2e/onboarding-profiles.spec.ts`, not run in this wave (e2e runs at the gate). It covers:
+  - creator: role cards → profile (reserved and available handle hints, validation that keeps input, topic tags) → connect "Do this later" → review (cannot be skipped) → payouts "Do this later" → `/app`; then settings edits persist after a reload, the public URL follows a rename, notification switches, and the account page (disabled GDPR buttons, rename, sign out everywhere);
+  - builder: taken-handle hint and refusal → profile with tags → portfolio (GitHub link target, SVG refused, image upload shown through the image route, image removed, edit, remove) → payouts later → `/app` → settings skill tags persist;
+  - both roles: shared handle ("This handle is yours."), profile tabs and `?tab=builder`, switching the active role changes `/app`, and sign out from Account.
+
+### 19.18 Phase 1 gate, second pass (W1b): Supabase, the mobile app shell, hardening
+The user asked to "put the DB on Supabase, make it like a mobile app and launch it on localhost". This pass ran the Phase 1 gate again after the second wave and covered the first two parts; the decisions:
+
+**Database on Supabase** (`lib/db/connection.ts`, README "Database on Supabase")
+- The platform keeps talking to Postgres directly (Drizzle over `pg`); Supabase is the host. No Supabase client library, no Data API.
+- `DATABASE_CA_CERT` (new, beyond §17, optional): the PEM of the CA that signs the server's certificate. Supabase uses its own root CA, so node-postgres's `sslmode=require` (which it treats as verify-full) fails without it. `databasePoolConfig(url, { caCert })` then drops the URL's `ssl*` parameters (node-postgres lets them override the `ssl` option) and verifies the server. One-line values with `\n` escapes are accepted. The app (`getDb`), `pnpm db:migrate` and `pnpm admin:grant` use it.
+- Production refuses a Supabase `DATABASE_URL` (`*.supabase.co`, `*.supabase.com`) unless the server is verified against a CA we supply: `DATABASE_CA_CERT`, or `sslrootcert` in the URL (§19.19; before, any `sslmode` but `disable` passed, including ones that fail on connect).
+- The transaction pooler (port 6543) works: drizzle sends unnamed statements, `app.gdpr_erasure` is transaction-local, and only the test tooling uses advisory locks. Migrations should use the session pooler or the direct host.
+- **Data API lockdown:** every table is created with row-level security on and no policies (`withRLS(pgTable(...))` from `lib/db/schema/columns.ts`, migration `0007`); `0008` revokes `anon` / `authenticated` grants and their default privileges in `public` when those roles exist (nothing happens elsewhere). The app connects as the tables' owner, which RLS does not restrict (not `FORCE`d). New tables must be wrapped in `withRLS`; `tests/integration/db/rls.test.ts` fails otherwise. `withRLS` keeps the table type (drizzle's `.enableRLS()` returns an `Omit<>` that Auth.js's adapter types reject).
+- The platform needs a Supabase project of its own: the legacy bot's project also has `events` and `messages` in `public` (the migrations would stop at `0001`), and `0008` revokes the API roles on every table in `public`.
+- **Verified on Supabase's Postgres** (`supabase/postgres:17.11.0.003`, the image `supabase start` runs, where `postgres` is not a superuser and the API roles have default privileges): all migrations apply (`CREATE EXTENSION vector`, the append-only triggers), `anon` / `authenticated` end with no grants and every table has RLS, the whole integration suite passes (213 tests), and the Phase 1 walk below ran with the app on that database. CI runs the migrations, the grant check and the integration suite on that image (job `supabase-postgres`). No real Supabase project was available: connecting a hosted one needs its connection string and CA certificate.
+
+**Mobile app shell** ("make it like a mobile app")
+- **Bottom tab bar** (`components/layout/mobile-tab-bar.tsx`, below `md`, signed-in app only): four tabs from `appTabs(role)` in `lib/nav.ts` (every tab is also a sidebar item), and "More", which opens the sidebar sheet with the full menu. Since §19.19 only built pages become tabs: Home, Audience, Profile, Payouts (creators) and Home, Profile, Connections, Payouts (builders) in Phase 1; Products, Discover and Collabs take their places as they land.
+- While the tab bar shows, `app/globals.css` sets `--sticky-bottom` (its height plus the home indicator) on `body`; page content pads by it, `FormActions` sticks above it (`bottom: var(--sticky-bottom)`), and toasts sit above it (`mobileOffset`). Onboarding has no tab bar; its `FormActions` stick to the bottom as before.
+- **Installable:** `app/manifest.ts` (standalone, `start_url` and `id` `/app`, dark tile colour), PNG icons rendered at build time from the logo mark (`app/pwa-icons/[file]` 192, 512 and maskable 512; `app/apple-icon.tsx` 180), `appleWebApp` metadata and `viewport-fit=cover` so the bottom bars can pad with `env(safe-area-inset-bottom)`. No service worker or offline mode: every page needs the server.
+- `/favicon.ico` answers 308 to `/icon.svg`: the raw HTML pages (fake provider pages, dev mailbox) link no icon, and browsers logged a 404 for them.
+
+**Hardening (review findings carried over from the second wave)**
+- **Dev mailbox:** `/api/dev/mailbox` (added with the Docker setup, not recorded before) lists every fake email, magic links included. It now needs `DEV_MAILBOX=1` as well as fake email and a non-production `APP_ENV` (`devMailboxEnabled()`); production refuses the flag. Docker Compose sets it and publishes port 3000 on `127.0.0.1` only.
+- **Database errors before Sentry and the logs:** drizzle's `DrizzleQueryError` message carries the query parameters, and Postgres errors carry row values in `detail`. `redactDbError` (`lib/db/errors.ts`) copies such errors with `params: [redacted]`, without `detail` / `where`, with quoted input in invalid-input messages redacted, and with SQLSTATE, constraint and table kept (so `isPgError` still works). `reportError` and the scripts' `describeError` use it; Sentry's `beforeSend` (`scrubEvent`) also strips failed-query parameters from exception values, breadcrumbs and messages that reach Sentry another way.
+- **`notify` dedupe with in-app off:** see §19.11 (`notifications.in_app`, migration `0006`). Before, a user with in-app switched off got the email again on every retry.
+
+**Gate results (2026-10-05)**
+- CI on the pushed head (`b35494e`): green (the `supabase-postgres` job is new and has not run on GitHub yet; it was simulated locally with a clean environment on a fresh container: migrations, the grant check and 213 integration tests pass). Locally: typecheck, lint, format, unit + integration (71 files, 769 tests), build, and e2e under `next dev` and under `CI=1` (build + start), 19/19 each.
+- The Phase 1 walk on `pnpm dev` (`FAKE_SERVICES=all`, database: the Supabase Postgres container), scripted with Playwright: a creator connects YouTube (fixture "Ada Codes") and `/app/audience` shows 48.2K subscribers, countries and age bars; a builder connects GitHub; both finish fake Stripe Connect (signed `account.updated` delivered and processed, `stripe_accounts` payouts enabled with transfers active, Settings → Payouts "Payouts are ready", `payouts.ready` notified once); `/c/<handle>` and `/b/<handle>` render; at 390 px in dark mode no page scrolls sideways, the tab bar and "More" work, and the profile form's Save bar sits above the tab bar. Tokens are stored encrypted (`v1:` ciphertext) and no event property holds an email or a token.
+- E2E: `tests/e2e/mobile.spec.ts` (new) covers the tab bar, "More", the Save bar above the tabs, dark mode, no sideways scroll, and the manifest and icons.
+
+
+### 19.19 Phase 1 gate, third pass (W1c): review findings
+Decisions made while fixing the W1 review findings.
+
+**No dead ends in the app** (`lib/nav.ts`)
+- `BUILT_ROUTES` lists the menu pages that exist in this build; `isBuiltRoute(href)` reads it. `tests/unit/nav.test.ts` compares it with the `page.tsx` files under `app/` in both directions, so **a phase that adds a page must add it there** (the test fails otherwise), and its tab, menu link and home card come back by themselves.
+- Tabs: `appTabs(role)` takes the first four built pages from a preference list (Home, Audience | Products, Discover, Collabs, then Profile, Payouts / Connections). Phase 1: creator Home, Audience, Profile, Payouts; builder Home, Profile, Connections, Payouts.
+- Sidebar (app and admin): §12 items that are not built yet stay listed, dimmed and not linked, with a "Soon" badge (`aria-label "<title> (coming soon)"`); §19.8's "menus list §12 routes" still holds. Their unbuilt children are not shown.
+- `/app` home: cards for unbuilt pages show a "Coming soon" badge instead of a link; the "Proposals" button and the header's notifications bell appear when their pages exist. The admin overview's cards link only to built pages.
+- 404s keep the shell: `app/app/[...missing]/page.tsx` and `app/admin/[...missing]/page.tsx` call `notFound()` (after `requireOnboardedUser()` / `requireAdmin()`), so `app/app/not-found.tsx` / `app/admin/not-found.tsx` render inside the layouts with the sidebar and tab bar. `ShellNotFound` says "Coming soon" for a path under a planned menu item (`plannedNavItem`, e.g. `/app/ideas/new` → Ideas) and "Page not found" otherwise, with "Go to home". Status 404 either way.
+- Errors keep the shell too: `app/app/error.tsx` and `app/admin/error.tsx` (`ShellError`: "Try again" with Next 16's `retry`, and a way home); `app/error.tsx` covers everything else, including a failing app layout. Browser-side errors (no `digest`) are reported to Sentry there; server errors were already reported by `onRequestError`.
+- `app/not-found.tsx`: the site header and footer, "Go to the home page" and "Open the app", for unmatched URLs outside `/app` and `/admin` and for unknown public profiles. `/app/settings` redirects to `/app/settings/profile`.
+- Not built: no global-error.tsx (the root layout has no data), no `/app/notifications` page (Phase 3; in-app notifications are stored but not listed yet).
+- `next.config.ts` sets `devIndicators: false`: under `pnpm dev` on a phone, Next's route indicator (bottom-left) covered the tab bar's Home, and every other corner holds a control too. Compile and runtime errors still show.
+- next-themes' inline theme script gets `type="application/json"` when rendered in the browser (`scriptProps`, `components/theme-provider.tsx`): Next renders not-found pages' root layout on the client, where React 19 logged "Encountered a script tag while rendering React component" as an error (an Issues badge over Home under `pnpm dev`). The server's script still runs before the first paint. The mobile 404 e2e test fails on any console error.
+
+**Topics:** `normalizeTopic` (`lib/social/summary-form.ts`) is the one rule: trim, lowercase, drop leading `#`, `_` and whitespace runs to one space. `parseTopicsInput` (both forms) and `normalizeAudienceSummary` (the AI's topics) use it, so ", #budget" is "budget" everywhere. The profile form's own pre-split is gone.
+
+**Page authorization:** `authorizePage(allowed, fallback?)` (`lib/auth/session.ts`) redirects when a rule says no (default: the sign-in page's "account suspended" message). Every signed-in page now calls a rule itself: `/app` (`canManageOwnAccount` and the active role's `canEdit<Role>Profile`, else the role step), `/app/settings/payouts` and `/onboarding/payouts` (before the Stripe re-fetch), `/app/settings/notifications`, `/onboarding/role`, `/admin` (`canAccessAdmin`). `tests/unit/auth/page-authz.test.ts` reads every `page.tsx` under `app/app`, `app/onboarding` and `app/admin` and fails when one imports and calls no rule with the user; pages that load no data (the catch-alls, the settings redirect) are listed with the reason.
+
+**Supabase TLS in production** (`lib/db/connection.ts`): `databaseTls(url, { caCert })` classifies a connection as `own_ca`, `public_ca`, `unverified` or `none`, mirroring the installed pg-connection-string (a unit test compares the two over every `sslmode` / `sslrootcert` / `uselibpqcompat` combination, so a `pg` upgrade that changes the semantics fails it). `supabaseTlsProblem()` accepts a Supabase host only with `own_ca`: `DATABASE_CA_CERT`, or an `sslrootcert` file in the URL. `sslmode=require`, `prefer`, `verify-ca` and `verify-full` without a CA would validate but fail on connect against Supabase's private CA; `no-verify` and libpq-compatible `require` skip verification. The message names where the certificate is (Database settings → SSL configuration).
+
+**Portfolio images** (`lib/profiles/portfolio-image.ts`; supersedes the key and check rules of §19.17)
+- Upload URLs point at `portfolio-uploads/<userId>/<uuidv7>.<ext>` only. A save accepts only such a key (`isOwnPortfolioUploadKey`), copies it on the server to a fresh `portfolio-images/<userId>/<uuidv7>.<ext>` key that was never presigned (`ObjectStorage.copyObject`, new: R2 `CopyObject`, a file copy in the local fake), and checks the **copy** (type, size, and the type the extension names). The copy is what `image_url` stores and the image route serves, so the reusable 10-minute PUT URL can no longer change or enlarge a saved image (nor can a re-PUT between the check and the copy).
+- Keys are per project: the same upload saved twice fails the second time (it was used up), and another project's saved key is refused (not an upload key). The item's own current key keeps its image. `deletePortfolioImage(db, key)` skips a key any row still references (rows saved before this change may share one). No unique index on `image_url`: the app can no longer produce duplicates, and a migration would fail on existing duplicated rows.
+- Cleanup: the upload is deleted after every save, accepted or refused (`discardPortfolioUpload`, own upload keys only); a promoted copy is deleted when the transaction fails (the 12-project limit, a missing profile) or the item is gone. The project actions parse the fields in `run` (`portfolioActionInput` is a loose object with `from` and `imageKey`), so invalid fields delete the upload too; the response has the same `fieldErrors` as before.
+- Existing `image_url` keys stay valid (same `portfolio-images/` shape). Their old PUT URLs expired within 10 minutes of being issued.
+- Deferred: manual-entry evidence screenshots keep their upload key (§19.14). Only admins see them, through 5-minute signed URLs; promoting them would change the "same entry again is a no-op" rule. Revisit with the Phase 6 admin UI.
+
+**Sentry breadcrumbs:** `scrubBreadcrumb` (`sentry.shared.ts`) drops console breadcrumbs' `data.arguments` (raw console arguments; a `DrizzleQueryError` among them carries `query` and `params`) and scrubs every breadcrumb's message. It is installed as `beforeBreadcrumb` and applied again by `scrubEvent`.
+
+**Sign-in codes for the installed app** (`lib/auth/sign-in-code.ts`, `lib/auth/email-callback.ts`)
+- iOS home-screen web apps keep their own cookie jar, so a magic link tapped in Mail signs Safari in, never the installed app (from Apple's documented storage behaviour; not tried on a device here). Auth.js's email provider now generates the token as an 8-character Crockford base32 code (`generateVerificationToken`), which the email shows as `ABCD-EFGH` next to the link. The link is unchanged in form (`?token=<code>&email=…`), still single use and 24 hours.
+- "Check your email" (after requesting) has a code field; the sign-in page has "Have a sign-in code?" (email and code); Auth.js's verify-request state has one too. They are plain GET forms to `/api/auth/callback/email` with `email`, `token` and the same `callbackUrl` the link carries, so the session cookie is set in whatever app or browser the code is typed into.
+- The auth route runs `prepareEmailCallback` first: every callback (click or code) counts against `email-callback`, 10 per 10 minutes per client IP and per email, answered with `/sign-in?error=RateLimited` (303) before Auth.js sees it (a wrong guess consumes nothing there). A typed code is normalised (case, dashes, spaces; O → 0, I/L → 1) and the email lowercased as Auth.js stores it. A code only matches the email it was sent to (the adapter looks tokens up by identifier and token). 40 bits with that limit: at most 1,440 guesses a day per address.
+- Older links (64-hex tokens) still work: only code-shaped tokens are rewritten.
+
+**Tests added:** `tests/unit/nav.test.ts` (built routes against the file system, tabs, `plannedNavItem`), `tests/unit/auth/page-authz.test.ts`, `tests/unit/auth/sign-in-code.test.ts`, `tests/unit/db/connection.test.ts` (`databaseTls` against pg-connection-string, `supabaseTlsProblem`), `tests/unit/env.test.ts` (Supabase TLS), `tests/unit/sentry.test.ts` (console breadcrumb with a DrizzleQueryError-like argument), `tests/unit/social/connection-pure.test.ts` and `tests/unit/profiles/fields.test.ts` (", #b" on both forms and the AI), `tests/unit/storage.test.ts` (`copyObject`), `tests/integration/profiles/profile-forms.test.ts` (the upload URL reused after a save, shared keys, refused saves and invalid fields leave no objects), `tests/integration/auth/auth-flow.test.ts` (codes: typed in lower case with a dash, once only, per email, guess limits), `tests/e2e/mobile.spec.ts` (every tab opens a real page; no link on `/app` answers ≥ 400; "Coming soon" and "Page not found" inside the shell with the tab bar; the site 404; `/app/settings`), `tests/e2e/auth.spec.ts` (signing in by typing the code).
+- `tests/e2e/onboarding-profiles.spec.ts`: after the refused taken-handle submit, the builder test now waits for the server's field error (`aria-describedby` with `-error`) instead of the identical live hint, which was already on screen. Under `next dev` the refused form's restore of the submitted values could land after the next fill and overwrite the new handle (seen once in this pass).
+
+**Running it on localhost against Supabase** (the user's "put the DB on Supabase … launch it on localhost")
+- `.env.local` (gitignored) now points `DATABASE_URL` at the Supabase Postgres container from §19.18 (`supabase-db`, image `supabase/postgres:17.11.0.003`, `postgres://postgres:postgres@127.0.0.1:54322/postgres`; the old local URL is kept there as a comment) and sets `DEV_MAILBOX=1`. Tests keep their own databases on the local Postgres (`TEST_DATABASE_URL`, `E2E_DATABASE_URL`). `pnpm db:migrate` applied nothing new (all 9 migrations were there); `anon` / `authenticated` hold no grants and every table has RLS. `pnpm db:seed` is still a no-op (Phase 2).
+- `pnpm dev` (`FAKE_SERVICES=all`) was left running on http://localhost:3000 for the user. A scripted phone walk (390 px, dark) on it: sign up, sign in by typing the emailed code, builder onboarding to `/app`, each tab (Home, Profile, Connections, Payouts) opens its page, `/app/discover` shows "Coming soon" in the shell (404), no console errors; the rows landed in the Supabase database.
+
+**Gate results (2026-10-05, W1c):** typecheck, lint, format, unit + integration (73 files, 809 tests), build, and e2e under `next dev` and `CI=1` (build + start): 21/21 each.

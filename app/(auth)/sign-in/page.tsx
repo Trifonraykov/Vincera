@@ -32,7 +32,7 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
       }
     >
       {checkEmail ? (
-        <CheckEmailNotice />
+        <CheckEmailNotice callbackUrl={callbackUrl} />
       ) : (
         <>
           <OAuthButtons providers={configuredOAuthProviders()} callbackUrl={callbackUrl} />

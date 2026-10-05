@@ -14,6 +14,7 @@ import { reportError } from "@/lib/observability"
 import { createAuthAdapter } from "./adapter"
 import { parsePendingName, PENDING_NAME_COOKIE } from "./pending-name"
 import { AUTH_ROUTES, signInUrl } from "./routes"
+import { generateSignInCode } from "./sign-in-code"
 import { isSuspendedSignIn } from "./suspension"
 import { parseAuthUser, toSessionUser } from "./user"
 
@@ -65,12 +66,16 @@ function emailProvider(): EmailConfig {
     type: "email",
     name: "Email",
     maxAge: MAGIC_LINK_MAX_AGE_SECONDS,
-    async sendVerificationRequest({ identifier, url }) {
+    // The link's token doubles as a code to type where the link was requested (an installed iOS
+    // web app cannot receive the link's cookie; lib/auth/sign-in-code.ts).
+    generateVerificationToken: generateSignInCode,
+    async sendVerificationRequest({ identifier, url, token }) {
       // Loaded on demand: the proxy imports this config on every request but never sends email.
       const { sendMagicLinkEmail } = await import("@/lib/email/magic-link")
       await sendMagicLinkEmail({
         to: identifier,
         url,
+        code: token,
         expiresInMinutes: MAGIC_LINK_MAX_AGE_SECONDS / 60,
       })
     },

@@ -1,10 +1,10 @@
 import "server-only"
 
-import { eq } from "drizzle-orm"
+import { and, eq, gte } from "drizzle-orm"
 
 import { now } from "@/lib/clock"
 import { withTransaction, type DbOrTx } from "@/lib/db/client"
-import { creatorProfiles } from "@/lib/db/schema"
+import { creatorProfiles, events } from "@/lib/db/schema"
 import type { ProfileEditSource } from "@/lib/events/types"
 import { track } from "@/lib/events/track"
 
@@ -18,7 +18,8 @@ import type { AudienceSummaryForm } from "./summary-form"
  *   changed fields.
  * - When the current summary was AI-generated, `ai.reviewed` records the decision: accepted as is,
  *   or edited. (`ai.generated` was emitted at generation with `accepted_by_user: null`; events are
- *   append-only, so the decision is its own event.)
+ *   append-only, so the decision is its own event.) One decision per generation: saving the same
+ *   accepted text again (the review step, then /app/audience) records nothing new.
  */
 
 export type SummaryReview = {
@@ -36,6 +37,26 @@ export class CreatorProfileMissingError extends Error {
 
 function sameTopics(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((topic, index) => topic === b[index])
+}
+
+/** Whether the creator already recorded a decision on the summary generated at `generatedAt`. */
+async function reviewedSince(
+  database: DbOrTx,
+  profileId: string,
+  generatedAt: Date,
+): Promise<boolean> {
+  const [row] = await database
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        eq(events.subjectId, profileId),
+        eq(events.type, "ai.reviewed"),
+        gte(events.occurredAt, generatedAt),
+      ),
+    )
+    .limit(1)
+  return row !== undefined
 }
 
 export async function reviewAudienceSummary(
@@ -82,7 +103,12 @@ export async function reviewAudienceSummary(
         tx,
       )
     }
-    if (wasGenerated && profile.audienceSummaryPromptVersion) {
+    if (
+      wasGenerated &&
+      profile.audienceSummaryPromptVersion &&
+      profile.audienceSummaryGeneratedAt &&
+      !(await reviewedSince(tx, profile.id, profile.audienceSummaryGeneratedAt))
+    ) {
       await track(
         "ai.reviewed",
         {

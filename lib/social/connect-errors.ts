@@ -20,6 +20,8 @@ export const CONNECT_FLOW_ERROR_CODES = [
   "account_in_use",
   /** The user's roles do not allow this provider (e.g. a builder connecting YouTube). */
   "not_allowed",
+  /** The provider's OAuth is switched off (SOCIAL_OAUTH_DISABLED, e.g. app review pending). */
+  "oauth_disabled",
 ] as const
 export type ConnectFlowErrorCode = (typeof CONNECT_FLOW_ERROR_CODES)[number]
 
@@ -44,6 +46,10 @@ export function connectErrorMessage(code: string, provider: SocialProviderId | n
       return `That ${label} account is already connected to a different account on our platform. Sign in with that account instead, or connect another ${label} account.`
     case "not_allowed":
       return `${label} isn't available for your role. Creators connect YouTube, Instagram or TikTok; builders connect GitHub.`
+    case "oauth_disabled":
+      return provider === "github" || provider === null
+        ? `Connecting ${label} isn't available right now. Please try again later.`
+        : `Connecting ${label} isn't available yet. Enter your numbers by hand for now; you can connect later.`
     default:
       return isSocialErrorCode(code)
         ? socialErrorMessage(code, label)

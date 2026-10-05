@@ -1,6 +1,6 @@
 import "server-only"
 
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import { createElement } from "react"
 
 import type { ClaudeDeps } from "@/lib/ai/claude"
@@ -17,6 +17,7 @@ import { notify } from "@/lib/notifications/notify"
 import { reportError } from "@/lib/observability"
 import { absoluteUrl } from "@/lib/urls"
 
+import { isSocialOAuthAvailable } from "./availability"
 import { SOCIAL_PROVIDER_META } from "./catalog"
 import { findConnection, tokenColumns, tokenSetOf, type SocialConnectionRow } from "./connections"
 import {
@@ -55,6 +56,11 @@ import {
  * A token failure (`SocialTokenError`) sets `status = expired`, emits `social.expired` and
  * notifies the user (in-app + email). Rate limits and outages record `last_sync_error` and come
  * back as `retryable` so the job retries; other provider failures are reported to Sentry.
+ *
+ * Every write is conditional on the token the sync started with (the access token ciphertext,
+ * unique per encryption): when the user reconnects or disconnects while the provider is
+ * answering, the sync's refreshed tokens, snapshot, errors and expiry are dropped instead of
+ * overwriting the new connection (`skipped: superseded`).
  */
 
 export type SyncOptions = {
@@ -77,7 +83,14 @@ export type SyncResult =
       summary: SummaryOutcome | "not_applicable"
       embedding: EmbeddingOutcome | "not_applicable"
     }
-  | { status: "skipped"; reason: "not_found" | "revoked" | "expired" | "manual" }
+  | {
+      status: "skipped"
+      /**
+       * `superseded`: reconnected (new tokens) or disconnected while this sync ran.
+       * `oauth_disabled`: the provider's OAuth is switched off (SOCIAL_OAUTH_DISABLED).
+       */
+      reason: "not_found" | "revoked" | "expired" | "manual" | "superseded" | "oauth_disabled"
+    }
   | { status: "expired"; provider: SocialProviderId; reason: SocialExpiryReason }
   | { status: "failed"; provider: SocialProviderId; code: SocialErrorCode; retryable: boolean }
 
@@ -99,28 +112,49 @@ async function syncNow(
   if (row.source === "manual") return { status: "skipped", reason: "manual" }
   if (row.status === "revoked") return { status: "skipped", reason: "revoked" }
   if (row.status === "expired") return { status: "skipped", reason: "expired" }
+  // The app may have no credentials now; the stored numbers stay as they are.
+  if (!isSocialOAuthAvailable(row.provider)) return { status: "skipped", reason: "oauth_disabled" }
 
+  // The token this sync works with; every write below requires it to still be the stored one.
+  let tokenEnc = row.accessTokenEnc
   let tokens: TokenSet | null = tokenSetOf(row)
-  if (!tokens) return markExpired(database, row, "unauthorized")
+  if (!tokens || !tokenEnc) return markExpired(database, row, "unauthorized", tokenEnc)
 
   const provider = options.provider ?? getProvider(row.provider)
   let stage: "refresh" | "fetch" = "fetch"
-  let written: { snapshotId: string; followers: number | null; sizeTier: SizeTier | null }
+  let written:
+    { snapshotId: string; followers: number | null; sizeTier: SizeTier | null } | "superseded"
   try {
     if (tokenNeedsRefresh(row.provider, tokens, now())) {
       stage = "refresh"
       tokens = await provider.refresh(tokens)
       // Store at once: TikTok rotates refresh tokens, so losing this write loses the connection.
-      await database
+      const columns = tokenColumns(row.id, tokens)
+      const stored = await database
         .update(socialConnections)
-        .set(tokenColumns(row.id, tokens))
-        .where(eq(socialConnections.id, row.id))
+        .set(columns)
+        .where(
+          and(eq(socialConnections.id, row.id), eq(socialConnections.accessTokenEnc, tokenEnc)),
+        )
+        .returning({ id: socialConnections.id })
+      if (stored.length === 0) return { status: "skipped", reason: "superseded" }
+      tokenEnc = columns.accessTokenEnc
       stage = "fetch"
     }
     const profile = await provider.fetchProfile(tokens)
     const audience = audienceSnapshotInputSchema.parse(await provider.fetchAudience(tokens))
+    const syncedTokenEnc = tokenEnc
 
     written = await withTransaction(async (tx) => {
+      // Lock the row and check it still holds this sync's token (not reconnected meanwhile).
+      const [current] = await tx
+        .select({ tokenEnc: socialConnections.accessTokenEnc, status: socialConnections.status })
+        .from(socialConnections)
+        .where(eq(socialConnections.id, row.id))
+        .for("update")
+      if (!current || current.tokenEnc !== syncedTokenEnc || current.status !== "active") {
+        return "superseded" as const
+      }
       const takenAt = now()
       const [snapshot] = await tx
         .insert(audienceSnapshots)
@@ -163,7 +197,8 @@ async function syncNow(
     }, database)
   } catch (error) {
     if (error instanceof SocialTokenError) {
-      return markExpired(database, row, stage === "refresh" ? "refresh_failed" : "unauthorized")
+      const reason = stage === "refresh" ? "refresh_failed" : "unauthorized"
+      return markExpired(database, row, reason, tokenEnc)
     }
     // Disconnected while the provider was answering: the snapshot has nowhere to go.
     if (isPgError(error, PG_ERROR.foreignKeyViolation)) {
@@ -174,13 +209,15 @@ async function syncNow(
       throw error
     }
     const code = socialErrorCode(error)
-    await recordSyncError(database, row.id, code)
+    await recordSyncError(database, row.id, tokenEnc, code)
     const retryable = error instanceof SocialRetryableError
     if (!retryable) {
       reportError(error, { tags: { area: "social", provider: row.provider, code } })
     }
     return { status: "failed", provider: row.provider, code, retryable }
   }
+
+  if (written === "superseded") return { status: "skipped", reason: "superseded" }
 
   // Creator audiences feed the profile's summary and embedding; GitHub (builders) does not.
   const isCreatorProvider = row.provider !== "github"
@@ -195,35 +232,49 @@ async function syncNow(
   return { status: "synced", provider: row.provider, ...written, summary, embedding }
 }
 
+/** Record a failed sync, unless the connection got other tokens meanwhile (a reconnect). */
 async function recordSyncError(
   database: DbOrTx,
   connectionId: string,
+  tokenEnc: string,
   code: SocialErrorCode,
 ): Promise<void> {
   await database
     .update(socialConnections)
     .set({ lastSyncError: code, lastSyncErrorAt: now() })
-    .where(eq(socialConnections.id, connectionId))
+    .where(
+      and(eq(socialConnections.id, connectionId), eq(socialConnections.accessTokenEnc, tokenEnc)),
+    )
 }
 
 /**
  * The token is dead: mark the connection expired (once; concurrent syncs race on the status),
  * emit `social.expired`, recompute the size tier (an expired connection no longer counts as
- * verified) and notify the user in-app and by email (§7.1).
+ * verified) and notify the user in-app and by email (§7.1). Only while the connection still holds
+ * the dead token (`tokenEnc`): a reconnect in the meantime stored a working one.
  */
 async function markExpired(
   database: DbOrTx,
   row: SocialConnectionRow,
   reason: SocialExpiryReason,
+  tokenEnc: string | null,
 ): Promise<SyncResult> {
-  await withTransaction(async (tx) => {
+  const expired = await withTransaction(async (tx) => {
     const at = now()
     const updated = await tx
       .update(socialConnections)
       .set({ status: "expired", lastSyncError: "token_expired", lastSyncErrorAt: at })
-      .where(and(eq(socialConnections.id, row.id), eq(socialConnections.status, "active")))
+      .where(
+        and(
+          eq(socialConnections.id, row.id),
+          eq(socialConnections.status, "active"),
+          tokenEnc === null
+            ? isNull(socialConnections.accessTokenEnc)
+            : eq(socialConnections.accessTokenEnc, tokenEnc),
+        ),
+      )
       .returning({ id: socialConnections.id })
-    if (updated.length === 0) return
+    if (updated.length === 0) return false
 
     await track(
       "social.expired",
@@ -258,7 +309,14 @@ async function markExpired(
       },
       tx,
     )
+    return true
   }, database)
+  if (!expired) {
+    // Already expired by a concurrent sync, or reconnected / disconnected meanwhile.
+    const current = await findConnection(database, row.id)
+    if (current?.status !== "expired") return { status: "skipped", reason: "superseded" }
+    return { status: "expired", provider: row.provider, reason }
+  }
   await revalidatePublicProfiles(database, row.userId)
   return { status: "expired", provider: row.provider, reason }
 }

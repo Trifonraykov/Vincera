@@ -58,3 +58,16 @@ export const embeddingModel = () => text("embedding_model")
 export function handleFormatCheck(column: AnyPgColumn): SQL {
   return sql`${column} ~ ${sql.raw(`'${HANDLE_PATTERN}'`)}`
 }
+
+/**
+ * Every table is created with row-level security on and no policies. The app connects as the
+ * tables' owner (the role that ran the migrations), which RLS does not restrict. On Supabase this
+ * keeps the auto-generated Data API (PostgREST, roles `anon` / `authenticated`) from reading or
+ * writing anything; elsewhere it changes nothing. Wrap every new `pgTable(...)` in it
+ * (tests/integration/db/rls.test.ts checks every table). Unlike chaining drizzle's
+ * `.enableRLS()`, it keeps the table's type, which Auth.js's adapter types require.
+ */
+export function withRLS<Table extends { enableRLS: () => unknown }>(table: Table): Table {
+  table.enableRLS()
+  return table
+}

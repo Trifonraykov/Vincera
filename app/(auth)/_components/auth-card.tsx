@@ -1,6 +1,7 @@
 import { CircleAlert, MailCheck } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { SignInCodeForm } from "@/components/auth/sign-in-code-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -42,14 +43,17 @@ export function AuthCard({
 }
 
 /** Shown when Auth.js redirects to its verify-request page (`?type=email`). */
-export function CheckEmailNotice() {
+export function CheckEmailNotice({ callbackUrl }: { callbackUrl?: string }) {
   return (
-    <div className="grid gap-2 text-center" role="status">
-      <MailCheck className="mx-auto size-10 text-primary" aria-hidden="true" />
-      <h2 className="text-lg font-semibold">Check your email</h2>
-      <p className="text-sm text-muted-foreground">
-        We sent you a sign-in link. It works once and expires in 24 hours.
-      </p>
+    <div className="grid gap-4">
+      <div className="grid gap-2 text-center" role="status">
+        <MailCheck className="mx-auto size-10 text-primary" aria-hidden="true" />
+        <h2 className="text-lg font-semibold">Check your email</h2>
+        <p className="text-sm text-muted-foreground">
+          We sent you a sign-in link and code. They work once and expire in 24 hours.
+        </p>
+      </div>
+      <SignInCodeForm callbackUrl={callbackUrl} />
     </div>
   )
 }

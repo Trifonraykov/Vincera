@@ -16,6 +16,7 @@ export type CreatorProfileFormValues = {
   handle: string
   niche: string | null
   bio: string | null
+  topics: string[]
   country: string | null
   languages: string[]
 }
@@ -42,6 +43,7 @@ export async function loadCreatorProfileForm(
       handle: creatorProfiles.handle,
       niche: creatorProfiles.niche,
       bio: creatorProfiles.bio,
+      topics: creatorProfiles.topics,
       country: creatorProfiles.country,
       languages: creatorProfiles.languages,
     })

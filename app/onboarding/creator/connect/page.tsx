@@ -1,17 +1,21 @@
 import { ArrowLeft, Info } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { SkipStepButton } from "@/components/onboarding/skip-step-button"
+import { FormActions } from "@/components/profiles/form-kit"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConnectionCard } from "@/components/social/connection-card"
 import { ConnectResultAlert } from "@/components/social/connect-result-alert"
 import { SyncRefresher } from "@/components/social/sync-refresher"
 import { Button } from "@/components/ui/button"
+import { canEditCreatorProfile } from "@/lib/auth/authz"
 import { now } from "@/lib/clock"
 import { getDb } from "@/lib/db/client"
 import { requireOnboardingStep } from "@/lib/onboarding/page"
+import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { listUserConnections } from "@/lib/social/queries"
 import { CREATOR_SOCIAL_PROVIDERS, type SocialProviderId } from "@/lib/social/types"
 import { hasPendingSync, toConnectionView, type ConnectionView } from "@/lib/social/view"
@@ -31,6 +35,8 @@ const RETURN_TO = "/onboarding/creator/connect"
  */
 export default async function OnboardingConnectPage({ searchParams }: Props) {
   const { user, progress } = await requireOnboardingStep("creator.connect")
+  // The step's own rule too (§6 defence in depth): the creator path of an active account.
+  if (!canEditCreatorProfile(user)) redirect(ONBOARDING_STEP_PATHS.role)
   const params = await searchParams
   const views = (await listUserConnections(getDb(), user.id)).map(toConnectionView)
   const byProvider = new Map<SocialProviderId, ConnectionView>(
@@ -74,7 +80,7 @@ export default async function OnboardingConnectPage({ searchParams }: Props) {
         </span>
       </p>
 
-      <div className="flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between">
+      <FormActions className="flex-col-reverse sm:justify-between">
         {progress.previousHref ? (
           <Button asChild variant="ghost" className="self-start">
             <Link href={progress.previousHref}>
@@ -86,7 +92,7 @@ export default async function OnboardingConnectPage({ searchParams }: Props) {
           <span />
         )}
         {connectedCount > 0 ? <ContinueButton /> : <SkipStepButton step="creator.connect" />}
-      </div>
+      </FormActions>
     </div>
   )
 }

@@ -19,10 +19,11 @@ import { SOCIAL_PROVIDER_META } from "./catalog"
 import { recomputeSizeTier } from "./derived"
 import {
   checkEvidenceFile,
+  checkManualEntryFields,
   EVIDENCE_EXTENSIONS,
   EVIDENCE_POLICY,
-  isProfileUrlFor,
 } from "./manual-policy"
+import { latestSnapshotsFor } from "./queries"
 import type { CreatorSocialProviderId } from "./types"
 
 /**
@@ -31,10 +32,12 @@ import type { CreatorSocialProviderId } from "./types"
  * audience snapshot holding just the follower count. An admin verifies it after checking the
  * screenshot (`verifyManualConnection`, written to `admin_audit_log`).
  *
- * Screenshot upload: the browser asks for a signed PUT URL (`createEvidenceUpload`), uploads the
- * file directly to storage, then submits the form with the object key. The key must be under the
- * user's own prefix, and the object is checked again (type, size) before it is accepted, because
- * an R2 presigned PUT cannot enforce a size limit (§19.7).
+ * Screenshot upload: the browser checks the typed fields, asks for a signed PUT URL
+ * (`createEvidenceUpload`), uploads the file directly to storage, then submits the form with the
+ * object key. The key must be under the user's own prefix for that provider, and the object is
+ * checked again (type, size) before it is accepted, because an R2 presigned PUT cannot enforce a
+ * size limit (§19.7). A refused entry deletes the screenshot it uploaded, unless a connection
+ * still points at it.
  */
 
 const EVIDENCE_PREFIX = "social-evidence"
@@ -42,8 +45,9 @@ const UPLOAD_URL_TTL_SECONDS = 10 * 60
 /** How long an admin's screenshot link stays valid. */
 const EVIDENCE_VIEW_TTL_SECONDS = 5 * 60
 
-function evidencePrefix(userId: string): string {
-  return `${EVIDENCE_PREFIX}/${userId}/`
+/** `social-evidence/<userId>/<provider>-`: where that user's screenshots for that provider go. */
+function evidencePrefix(userId: string, provider: CreatorSocialProviderId): string {
+  return `${EVIDENCE_PREFIX}/${userId}/${provider}-`
 }
 
 export type EvidenceUpload = {
@@ -78,7 +82,8 @@ export async function createEvidenceUpload(
 export type ManualEntryInput = {
   userId: string
   provider: CreatorSocialProviderId
-  followers: number
+  /** As typed ("12,500") or a number; checked with `checkManualEntryFields`. */
+  followers: number | string
   profileUrl: string
   evidenceKey: string
 }
@@ -87,39 +92,88 @@ export type ManualEntryResult = {
   connectionId: string
   snapshotId: string
   created: boolean
+  /**
+   * The same entry was submitted again (same screenshot, count and link, e.g. a retried
+   * request): nothing was written.
+   */
+  unchanged: boolean
   /** The previous screenshot, now replaced; deleted from storage by the caller. */
   replacedEvidenceKey: string | null
 }
 
-/** Check the uploaded screenshot; anything unacceptable is deleted and refused. */
-async function assertEvidence(userId: string, key: string, storage: ObjectStorage): Promise<void> {
-  if (!key.startsWith(evidencePrefix(userId))) {
-    throw new ActionError("Upload your screenshot again, then submit the form.")
+function screenshotError(message: string): ActionError {
+  return new ActionError(message, { fieldErrors: { screenshot: [message] } })
+}
+
+/** Check the uploaded screenshot; anything unacceptable is refused (and deleted by the caller). */
+async function assertEvidence(
+  input: Pick<ManualEntryInput, "userId" | "provider" | "evidenceKey">,
+  storage: ObjectStorage,
+): Promise<void> {
+  if (!input.evidenceKey.startsWith(evidencePrefix(input.userId, input.provider))) {
+    throw screenshotError("Upload your screenshot again, then submit the form.")
   }
-  const info = await storage.statObject(key)
-  if (!info) throw new ActionError("We didn't receive your screenshot. Please upload it again.")
+  const info = await storage.statObject(input.evidenceKey)
+  if (!info) throw screenshotError("We didn't receive your screenshot. Please upload it again.")
   const check = checkEvidenceFile({ contentType: info.contentType, sizeBytes: info.sizeBytes })
-  if (!check.ok) {
-    await storage.deleteObject(key)
-    throw new ActionError(check.message)
+  if (!check.ok) throw screenshotError(check.message)
+}
+
+/**
+ * Delete a screenshot this user uploaded for `provider` that no connection points at: the
+ * upload of a refused (or unchanged) entry. Keys outside the user's own prefix for the provider
+ * are never touched. Best effort: failures are reported, never thrown.
+ */
+export async function discardUnusedEvidence(
+  database: DbOrTx,
+  input: Pick<ManualEntryInput, "userId" | "provider" | "evidenceKey">,
+  storage: ObjectStorage = getStorage(),
+): Promise<void> {
+  if (!input.evidenceKey.startsWith(evidencePrefix(input.userId, input.provider))) return
+  try {
+    const [inUse] = await database
+      .select({ id: socialConnections.id })
+      .from(socialConnections)
+      .where(eq(socialConnections.evidenceStorageKey, input.evidenceKey))
+      .limit(1)
+    if (!inUse) await storage.deleteObject(input.evidenceKey)
+  } catch (error) {
+    reportError(error, { tags: { area: "social", step: "discard_evidence" } })
   }
 }
 
 /**
  * Store (or update) a manual entry and its snapshot. Refused while an OAuth connection for the
- * provider exists: verified data always wins, so the user resyncs or reconnects instead.
+ * provider exists: verified data always wins, so the user resyncs or reconnects instead. A
+ * refusal deletes the uploaded screenshot (`discardUnusedEvidence`).
  */
 export async function submitManualEntry(
   database: DbOrTx,
   input: ManualEntryInput,
   storage: ObjectStorage = getStorage(),
 ): Promise<ManualEntryResult> {
-  const label = SOCIAL_PROVIDER_META[input.provider].label
-  if (!isProfileUrlFor(input.provider, input.profileUrl)) {
-    throw new ActionError(`Enter the https:// link to your ${label} profile.`)
+  try {
+    const fields = checkManualEntryFields(input.provider, input)
+    if (!fields.ok) {
+      const message =
+        fields.fieldErrors.profileUrl?.[0] ??
+        fields.fieldErrors.followers?.[0] ??
+        "Check the highlighted fields."
+      throw new ActionError(message, { fieldErrors: fields.fieldErrors })
+    }
+    await assertEvidence(input, storage)
+    return await storeManualEntry(database, { ...input, ...fields.data })
+  } catch (error) {
+    if (error instanceof ActionError) await discardUnusedEvidence(database, input, storage)
+    throw error
   }
-  await assertEvidence(input.userId, input.evidenceKey, storage)
+}
 
+async function storeManualEntry(
+  database: DbOrTx,
+  input: ManualEntryInput & { followers: number },
+): Promise<ManualEntryResult> {
+  const label = SOCIAL_PROVIDER_META[input.provider].label
   return withTransaction(async (tx) => {
     const at = now()
     const [existing] = await tx
@@ -138,6 +192,25 @@ export async function submitManualEntry(
           ? `Your ${label} account is connected but its access expired. Reconnect it instead of entering numbers by hand.`
           : `Your ${label} account is already connected, so its numbers are verified. Use Resync to update them.`,
       )
+    }
+    if (existing && existing.evidenceStorageKey === input.evidenceKey) {
+      // The screenshot this entry already stands on. The very same entry again is a no-op; new
+      // numbers or a new link need a new screenshot (an admin may have checked the old one).
+      const latest = (await latestSnapshotsFor(tx, [existing.id])).get(existing.id)
+      if (
+        latest &&
+        latest.followers === input.followers &&
+        existing.profileUrl === input.profileUrl
+      ) {
+        return {
+          connectionId: existing.id,
+          snapshotId: latest.id,
+          created: false,
+          unchanged: true,
+          replacedEvidenceKey: null,
+        }
+      }
+      throw screenshotError("Upload a new screenshot that shows this number.")
     }
 
     const values = {
@@ -225,6 +298,7 @@ export async function submitManualEntry(
       connectionId: connection.id,
       snapshotId: snapshot.id,
       created: !existing,
+      unchanged: false,
       replacedEvidenceKey: previousKey && previousKey !== input.evidenceKey ? previousKey : null,
     }
   }, database)

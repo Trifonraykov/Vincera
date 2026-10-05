@@ -12,6 +12,8 @@ import MagicLinkEmail, { magicLinkSubject } from "./templates/magic-link"
 export async function sendMagicLinkEmail(input: {
   to: string
   url: string
+  /** The link's token as a code to type (lib/auth/sign-in-code.ts). */
+  code?: string
   expiresInMinutes?: number
 }): Promise<SendEmailResult> {
   return sendEmail({
@@ -20,6 +22,7 @@ export async function sendMagicLinkEmail(input: {
     react: (
       <MagicLinkEmail
         url={input.url}
+        code={input.code}
         appName={env.APP_NAME}
         expiresInMinutes={input.expiresInMinutes}
       />

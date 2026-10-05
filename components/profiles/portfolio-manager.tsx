@@ -57,7 +57,18 @@ export function PortfolioManager({
         {items.map((item) => (
           <li key={item.id} className="rounded-xl border bg-card p-4 shadow-xs">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0 space-y-1.5">
+              {item.imageSrc ? (
+                // Redirects to a short-lived signed URL (lib/profiles/portfolio-image.ts), which
+                // next/image would need every storage host configured for.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.imageSrc}
+                  alt=""
+                  loading="lazy"
+                  className="aspect-[4/3] w-full shrink-0 rounded-lg border bg-muted object-cover sm:w-28"
+                />
+              ) : null}
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Heading className="font-medium break-words">{item.title}</Heading>
                   {item.isShipped ? <Badge variant="secondary">Shipped</Badge> : null}

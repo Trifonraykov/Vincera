@@ -4,6 +4,7 @@ import { z } from "zod"
 
 import { generateStructured, type AiResult, type ClaudeDeps } from "@/lib/ai/claude"
 import type { AgeGender, CountryShare } from "@/lib/db/schema/types"
+import { normalizeTopic } from "@/lib/social/summary-form"
 import type { AudienceBasis, SocialProviderId } from "@/lib/social/types"
 
 import { definePrompt } from "./index"
@@ -182,11 +183,7 @@ export const AUDIENCE_SUMMARY_PROMPT = audienceSummaryPromptV1
 export function normalizeAudienceSummary(output: AudienceSummaryOutput): AudienceSummaryOutput {
   const topics: string[] = []
   for (const topic of output.topics) {
-    const cleaned = topic
-      .toLowerCase()
-      .replace(/^#+/, "")
-      .replace(/[\s_]+/g, " ")
-      .trim()
+    const cleaned = normalizeTopic(topic)
     if (cleaned && cleaned.length <= 40 && !topics.includes(cleaned)) topics.push(cleaned)
   }
   return {

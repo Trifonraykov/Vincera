@@ -1,14 +1,40 @@
+import { readdirSync } from "node:fs"
+import path from "node:path"
+
 import { describe, expect, it } from "vitest"
 
 import {
   adminNav,
   appNav,
+  appTabs,
   isActiveItem,
   isActivePath,
+  isBuiltRoute,
   LEGAL_NAV,
   marketingNav,
+  MOBILE_TAB_COUNT,
   navHrefs,
+  plannedNavItem,
 } from "@/lib/nav"
+
+/** URL paths of the static pages under app/ (route groups dropped, dynamic segments skipped). */
+function staticPagePaths(): Set<string> {
+  const root = path.join(process.cwd(), "app")
+  const found = new Set<string>()
+  const walk = (dir: string, segments: string[]) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith("[") || entry.name.startsWith("_")) continue
+        const group = entry.name.startsWith("(") && entry.name.endsWith(")")
+        walk(path.join(dir, entry.name), group ? segments : [...segments, entry.name])
+      } else if (/^page\.(tsx|ts|jsx|js|mdx)$/.test(entry.name)) {
+        found.add(`/${segments.join("/")}`)
+      }
+    }
+  }
+  walk(root, [])
+  return found
+}
 
 /** Static routes from CLAUDE.md §12 that menus may link to. */
 const SPEC_ROUTES = new Set([
@@ -90,6 +116,58 @@ describe("navigation", () => {
       expect(creator).toContain(shared)
       expect(builder).toContain(shared)
     }
+  })
+
+  it("knows which menu pages are built: exactly those with a page file under app/", () => {
+    const pages = staticPagePaths()
+    expect(pages).toContain("/app/settings/profile")
+    for (const href of new Set(all))
+      expect([href, isBuiltRoute(href)]).toEqual([href, pages.has(href)])
+  })
+
+  it("gives phones four tabs per role, built pages only, all of them in the sidebar menu too", () => {
+    const pages = staticPagePaths()
+    for (const role of ["creator", "builder"] as const) {
+      const tabs = appTabs(role).map((tab) => tab.href)
+      expect(tabs).toHaveLength(MOBILE_TAB_COUNT)
+      expect(tabs[0]).toBe("/app")
+      expect(new Set(tabs).size).toBe(tabs.length)
+      for (const href of tabs) {
+        expect(SPEC_ROUTES).toContain(href)
+        expect(navHrefs(appNav(role))).toContain(href)
+        // A tab never leads to a 404 (the page exists in this build).
+        expect(pages).toContain(href)
+      }
+    }
+    // Phase 1: Products, Discover and Collabs are not built yet, so the next candidates fill in.
+    expect(appTabs("creator").map((tab) => tab.title)).toEqual([
+      "Home",
+      "Audience",
+      "Profile",
+      "Payouts",
+    ])
+    expect(appTabs("builder").map((tab) => tab.title)).toEqual([
+      "Home",
+      "Profile",
+      "Connections",
+      "Payouts",
+    ])
+  })
+
+  it("names the menu item of a page a later phase builds, for the shell's coming-soon page", () => {
+    expect(plannedNavItem("/app/discover")?.title).toBe("Discover")
+    expect(plannedNavItem("/app/discover/briefs")?.title).toBe("Discover")
+    expect(plannedNavItem("/app/ideas/new")?.title).toBe("Ideas")
+    expect(plannedNavItem("/app/collabs/0190/agreement")?.title).toBe("Collabs")
+    expect(plannedNavItem("/app/earnings/payouts")?.title).toBe("Earnings")
+    expect(plannedNavItem("/app/notifications")?.title).toBe("Notifications")
+    expect(plannedNavItem("/admin/users")?.title).toBe("Users")
+    // Built pages and unknown paths are not "coming soon".
+    expect(plannedNavItem("/app")).toBeNull()
+    expect(plannedNavItem("/app/settings/payouts")).toBeNull()
+    expect(plannedNavItem("/app/settings/nope")).toBeNull()
+    expect(plannedNavItem("/app/nope")).toBeNull()
+    expect(plannedNavItem("/app/ideasx")).toBeNull()
   })
 
   it("matches active paths by prefix, with root routes exact", () => {

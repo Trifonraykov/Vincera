@@ -5,8 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { setClockForTests } from "@/lib/clock"
 import { allowGdprErasure } from "@/lib/db/append-only"
 import { audienceSnapshots, socialConnections } from "@/lib/db/schema"
+import { loadPublicCreatorProfile } from "@/lib/public-profiles/load"
 import { resetMemoryRateLimits } from "@/lib/ratelimit"
+import { loadAudienceOverview } from "@/lib/social/audience"
 import { disconnectConnection, tokenSetOf } from "@/lib/social/connections"
+import { recomputeSizeTier } from "@/lib/social/derived"
 import { oauthStateCookieName } from "@/lib/social/oauth-cookie"
 import { oauthCallbackResponse, oauthStartResponse } from "@/lib/social/oauth-flow"
 import { syncConnection } from "@/lib/social/sync"
@@ -149,6 +152,46 @@ describe("GET /api/oauth/[provider]/start", () => {
     const limited = new URL((await start()).headers.get("location") ?? "")
     expect(limited.pathname).toBe("/app/audience")
     expect(limited.searchParams.get("error")).toBe("rate_limited")
+  })
+
+  it("refuses providers switched off with SOCIAL_OAUTH_DISABLED, at the start and the callback", async () => {
+    const creator = await newCreator(testDb.db)
+    stubSocialEnv({ SOCIAL_OAUTH_DISABLED: "instagram" })
+    const response = await oauthStartResponse(
+      new NextRequest(`${TEST_APP_URL}/api/oauth/instagram/start?returnTo=/app/audience`),
+      "instagram",
+      { user: creator.auth, db: testDb.db },
+    )
+    expect(response.headers.get("location")).toBe(
+      `${TEST_APP_URL}/app/audience?error=oauth_disabled&provider=instagram`,
+    )
+
+    // A flow that started before the switch is refused when it comes back.
+    const run = await runOAuthFlow(testDb.db, {
+      user: creator.auth,
+      provider: "youtube",
+      account: "ada-codes",
+      mutate: () => stubSocialEnv({ SOCIAL_OAUTH_DISABLED: "youtube" }),
+    })
+    expect(run.landing).toBe("/onboarding/creator/connect?error=oauth_disabled&provider=youtube")
+    expect(await connectionsOf(creator.user.id)).toEqual([])
+  })
+
+  it("pauses the syncs of a provider switched off after it was connected", async () => {
+    const creator = await newCreator(testDb.db)
+    await runOAuthFlow(testDb.db, { user: creator.auth, provider: "youtube", account: "ada-codes" })
+    const [connection] = await connectionsOf(creator.user.id)
+    stubSocialEnv({ SOCIAL_OAUTH_DISABLED: "youtube" })
+    expect(await syncConnection(connection!.id, { db: testDb.db })).toEqual({
+      status: "skipped",
+      reason: "oauth_disabled",
+    })
+    expect(
+      await testDb.db
+        .select()
+        .from(audienceSnapshots)
+        .where(eq(audienceSnapshots.socialConnectionId, connection!.id)),
+    ).toEqual([])
   })
 })
 
@@ -347,7 +390,7 @@ describe("GET /api/oauth/[provider]/callback", () => {
     expect(await connectionsOf(other.user.id)).toEqual([])
   })
 
-  it("upgrades a manual entry to OAuth in place", async () => {
+  it("upgrades a manual entry to OAuth in place, without passing the typed number as verified", async () => {
     const creator = await newCreator(testDb.db)
     const [manual] = await testDb.db
       .insert(socialConnections)
@@ -357,9 +400,26 @@ describe("GET /api/oauth/[provider]/callback", () => {
         source: "manual",
         profileUrl: "https://www.youtube.com/@ada",
         evidenceStorageKey: `social-evidence/${creator.user.id}/youtube-x.png`,
+        lastSyncedAt: NOW,
       })
       .returning()
-    await runOAuthFlow(testDb.db, { user: creator.auth, provider: "youtube", account: "ada-codes" })
+    // The creator typed a far larger number than the channel has.
+    await testDb.db.insert(audienceSnapshots).values({
+      socialConnectionId: manual!.id,
+      takenAt: NOW,
+      followers: 900_000,
+      topCountries: [],
+      topTopics: [],
+      raw: { source: "manual", v: 1 },
+    })
+    await recomputeSizeTier(testDb.db, creator.user.id)
+
+    const run = await runOAuthFlow(testDb.db, {
+      user: creator.auth,
+      provider: "youtube",
+      account: "ada-codes",
+    })
+    expect(run.landing).toBe("/onboarding/creator/connect?connected=youtube")
     const rows = await connectionsOf(creator.user.id)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
@@ -367,7 +427,29 @@ describe("GET /api/oauth/[provider]/callback", () => {
       source: "oauth",
       verifiedAt: NOW,
       evidenceStorageKey: null,
+      lastSyncedAt: null,
     })
+
+    // Until the first OAuth sync, nothing reads the typed number as verified.
+    expect(
+      await testDb.db
+        .select()
+        .from(audienceSnapshots)
+        .where(eq(audienceSnapshots.socialConnectionId, manual!.id)),
+    ).toEqual([])
+    const overview = await loadAudienceOverview(testDb.db, creator.user.id)
+    expect(overview.connections[0]).toMatchObject({ health: "syncing", latest: null })
+    expect(overview.syncPending).toBe(true)
+    expect(overview.profile?.sizeTier).toBeNull()
+    const publicProfile = await loadPublicCreatorProfile(testDb.db, creator.profile.handle)
+    expect(publicProfile).toMatchObject({ sizeTier: null, verifiedReach: null })
+    expect(publicProfile?.platforms.some((platform) => platform.followers === 900_000)).toBe(false)
+
+    // The first sync brings the platform's own numbers.
+    expect((await syncConnection(manual!.id, { db: testDb.db })).status).toBe("synced")
+    const synced = await loadAudienceOverview(testDb.db, creator.user.id)
+    expect(synced.connections[0]).toMatchObject({ health: "ok", verified: true })
+    expect(synced.connections[0]?.latest?.followers).not.toBe(900_000)
   })
 })
 

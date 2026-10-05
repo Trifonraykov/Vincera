@@ -1,6 +1,7 @@
 import "server-only"
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -119,6 +120,27 @@ export function createR2Storage(config: R2Config = configFromEnv()): ObjectStora
     async deleteObject(key: string): Promise<void> {
       assertValidKey(key)
       await client.send(new DeleteObjectCommand({ Bucket, Key: key }))
+    },
+
+    async copyObject(sourceKey: string, destinationKey: string): Promise<boolean> {
+      assertValidKey(sourceKey)
+      assertValidKey(destinationKey)
+      try {
+        // CopySource is "<bucket>/<key>", URL-encoded; keys only hold URL-safe characters except
+        // the few that encodeURIComponent escapes per segment.
+        await client.send(
+          new CopyObjectCommand({
+            Bucket,
+            Key: destinationKey,
+            CopySource: `${Bucket}/${sourceKey.split("/").map(encodeURIComponent).join("/")}`,
+            MetadataDirective: "COPY",
+          }),
+        )
+        return true
+      } catch (error) {
+        if (isNotFound(error)) return false
+        throw error
+      }
     },
 
     async signedGetUrl(key: string, options: SignedGetOptions): Promise<string> {

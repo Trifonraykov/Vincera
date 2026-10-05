@@ -3,6 +3,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 
 import {
+  devMailboxEnabled,
   EnvValidationError,
   FAKEABLE_SERVICES,
   isAdminEmail,
@@ -220,6 +221,13 @@ describe("parseEnv: production", () => {
     ])
   })
 
+  it("forbids the dev mailbox, which shows every user's magic links", () => {
+    expect(problemsOf({ ...production, DEV_MAILBOX: "1" })).toEqual([
+      "DEV_MAILBOX: the dev mailbox is not allowed in production",
+    ])
+    expect(problemsOf({ ...production, DEV_MAILBOX: "false" })).toEqual([])
+  })
+
   it("forbids Inngest dev mode, which accepts unsigned requests", () => {
     for (const value of ["1", "true", "http://localhost:8288", "0"]) {
       expect(problemsOf({ ...production, INNGEST_DEV: value })).toEqual([
@@ -376,6 +384,78 @@ describe("testRoutesEnabled", () => {
           NODE_ENV: "production",
           NEXT_PHASE: "phase-production-build",
           E2E_TEST_ROUTES: "1",
+        }),
+      ),
+    ).toBe(false)
+  })
+})
+
+describe("DATABASE_URL on Supabase", () => {
+  const supabase =
+    "postgresql://postgres.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+  const pem =
+    "-----BEGIN CERTIFICATE-----\\nMIIDxTCCAq2gAwIBAgIBADANBgkqhkiG9w0BAQsFADA=\\n-----END CERTIFICATE-----"
+
+  it("requires TLS verified against Supabase's CA in production", () => {
+    const fix =
+      "set DATABASE_CA_CERT to the CA certificate from the Supabase dashboard (Database settings → SSL configuration → Download certificate)"
+    expect(problemsOf({ ...production, DATABASE_URL: supabase })).toEqual([
+      `DATABASE_URL: Supabase connections must use TLS: ${fix}`,
+    ])
+    expect(problemsOf({ ...production, DATABASE_URL: supabase, DATABASE_CA_CERT: pem })).toEqual([])
+    expect(
+      problemsOf({
+        ...production,
+        DATABASE_URL: `${supabase}?sslmode=require`,
+        DATABASE_CA_CERT: pem,
+      }),
+    ).toEqual([])
+    // node-postgres verifies these against Node's public CAs: they validate but every query
+    // would fail with "self-signed certificate in certificate chain".
+    for (const mode of ["require", "prefer", "verify-ca", "verify-full"]) {
+      expect(problemsOf({ ...production, DATABASE_URL: `${supabase}?sslmode=${mode}` })).toEqual([
+        `DATABASE_URL: Supabase signs its certificates with its own CA, which Node does not trust, so this connection would fail: ${fix}`,
+      ])
+    }
+    // Encrypted but unverified.
+    for (const query of ["sslmode=no-verify", "sslmode=require&uselibpqcompat=true"]) {
+      expect(problemsOf({ ...production, DATABASE_URL: `${supabase}?${query}` })).toEqual([
+        `DATABASE_URL: this sslmode does not verify the Supabase server: ${fix}`,
+      ])
+    }
+    // A root certificate file in the URL is a CA of our own too.
+    expect(
+      problemsOf({
+        ...production,
+        DATABASE_URL: `${supabase}?sslmode=verify-full&sslrootcert=/etc/ssl/supabase.crt`,
+      }),
+    ).toEqual([])
+    // Outside production a plain connection is allowed (e.g. a quick local test).
+    expect(problemsOf({ ...base, DATABASE_URL: supabase })).toEqual([])
+    expect(problemsOf({ ...base, DATABASE_URL: `${supabase}?sslmode=require` })).toEqual([])
+  })
+
+  it("checks that DATABASE_CA_CERT is a PEM certificate", () => {
+    expect(problemsOf({ ...base, DATABASE_CA_CERT: "abc" })).toEqual([
+      "DATABASE_CA_CERT: must be a PEM certificate",
+    ])
+  })
+})
+
+describe("devMailboxEnabled", () => {
+  it("is opt-in, needs the fake email service and never runs in production", () => {
+    expect(devMailboxEnabled(parseEnv(base))).toBe(false)
+    expect(devMailboxEnabled(parseEnv({ ...base, DEV_MAILBOX: "1" }))).toBe(true)
+    expect(
+      devMailboxEnabled(parseEnv({ ...base, DEV_MAILBOX: "1", RESEND_API_KEY: "re_123" })),
+    ).toBe(false)
+    expect(
+      devMailboxEnabled(
+        parseEnv({
+          ...base,
+          NODE_ENV: "production",
+          NEXT_PHASE: "phase-production-build",
+          DEV_MAILBOX: "1",
         }),
       ),
     ).toBe(false)

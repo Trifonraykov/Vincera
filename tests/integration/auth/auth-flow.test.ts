@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { POST as authRoutePOST } from "@/app/api/auth/[...nextauth]/route"
 import { configuredOAuthProviders, createAuthConfig, signUpMethodFrom } from "@/lib/auth/config"
+import { EMAIL_CALLBACK_RATE_LIMIT, prepareEmailCallback } from "@/lib/auth/email-callback"
 import { PENDING_NAME_COOKIE, withPendingNameCleared } from "@/lib/auth/pending-name"
 import { parseAuthUser } from "@/lib/auth/user"
 import { events, sessions, users, verificationTokens } from "@/lib/db/schema"
@@ -23,9 +24,9 @@ import { stubServiceEnv } from "../../helpers/service-env"
  * actions make (the route itself closes POST /api/auth/signin/*; see the last tests).
  */
 
-const sent = vi.hoisted(() => [] as { to: string; url: string }[])
+const sent = vi.hoisted(() => [] as { to: string; url: string; code?: string }[])
 vi.mock("@/lib/email/magic-link", () => ({
-  sendMagicLinkEmail: async (input: { to: string; url: string }) => {
+  sendMagicLinkEmail: async (input: { to: string; url: string; code?: string }) => {
     sent.push(input)
     return { id: "test" }
   },
@@ -68,12 +69,15 @@ class Browser {
       headers.set("cookie", [...this.cookies].map(([name, value]) => `${name}=${value}`).join("; "))
     }
     if (form) headers.set("content-type", "application/x-www-form-urlencoded")
-    const request = new NextRequest(new URL(path, BASE_URL), {
+    const raw = new NextRequest(new URL(path, BASE_URL), {
       method,
       headers,
       body: form ? new URLSearchParams(form).toString() : undefined,
     })
     // Same wrapping as app/api/auth/[...nextauth]/route.ts.
+    const prepared = method === "GET" ? await prepareEmailCallback(raw) : raw
+    if (prepared instanceof Response) return prepared
+    const request = prepared
     const response = withPendingNameCleared(
       request,
       await (method === "GET" ? this.auth.GET(request) : this.auth.POST(request)),
@@ -337,6 +341,83 @@ describe("rate limiting (§14)", () => {
     const link = lastLink()
     for (let i = 0; i < limit; i++) await browser.request("GET", link)
     expect(await browser.requestMagicLink("clicker-2@example.test")).toBe(LINK_SENT)
+  })
+})
+
+describe("sign-in codes (the installed app on iOS, CLAUDE.md §19.19)", () => {
+  const RATE_LIMITED = `${BASE_URL}/sign-in?error=RateLimited`
+  const callbackPath = (email: string, token: string) =>
+    `/api/auth/callback/email?${new URLSearchParams({ email, token, callbackUrl: "/app" })}`
+
+  it("emails the link's token as a code that signs in where it is typed", async () => {
+    // The phone's installed app asks for the link...
+    const app = new Browser("2001:db8::d:1")
+    await app.requestMagicLink("phone@example.test")
+    const email = sent.at(-1)
+    expect(email?.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/)
+    expect(new URL(email?.url ?? "").searchParams.get("token")).toBe(email?.code)
+
+    // ...and the person types the code there, in lower case with a dash, the email as they gave
+    // it. (Tapping the link in Mail would sign Safari in instead.)
+    const code = email?.code ?? ""
+    const typed = `${code.slice(0, 4)}-${code.slice(4)}`.toLowerCase()
+    const response = await app.request("GET", callbackPath("Phone@Example.test", typed))
+    expect(response.headers.get("location")).toBe(`${BASE_URL}/app`)
+    expect((await app.sessionUser())?.email).toBe("phone@example.test")
+
+    // Once only, like the link.
+    const again = await new Browser("2001:db8::d:2").request(
+      "GET",
+      callbackPath("phone@example.test", code),
+    )
+    expect(again.headers.get("location")).toBe(`${BASE_URL}/sign-in?error=Verification`)
+  })
+
+  it("only matches the email it was sent to", async () => {
+    const browser = new Browser("2001:db8::d:3")
+    await browser.requestMagicLink("owner@example.test")
+    const code = sent.at(-1)?.code ?? ""
+    const response = await new Browser("2001:db8::d:4").request(
+      "GET",
+      callbackPath("someone-else@example.test", code),
+    )
+    expect(response.headers.get("location")).toBe(`${BASE_URL}/sign-in?error=Verification`)
+    // The right person can still use it.
+    const owner = await browser.request("GET", callbackPath("owner@example.test", code))
+    expect(owner.headers.get("location")).toBe(`${BASE_URL}/app`)
+  })
+
+  it("limits guesses per email, from any number of IPs, and per IP", async () => {
+    const { limit } = EMAIL_CALLBACK_RATE_LIMIT
+    await new Browser("2001:db8::e:1").requestMagicLink("guess@example.test")
+    const real = sent.at(-1)?.code ?? ""
+    for (let i = 1; i <= limit; i++) {
+      const wrong = await new Browser(`2001:db8::e:${i + 1}`).request(
+        "GET",
+        callbackPath("guess@example.test", "ZZZZZZZZ"),
+      )
+      expect(wrong.headers.get("location")).toBe(`${BASE_URL}/sign-in?error=Verification`)
+    }
+    // Even the right code is refused now, without reaching Auth.js (the token is not used up).
+    const blocked = await new Browser("2001:db8::e:ff").request(
+      "GET",
+      callbackPath("guess@example.test", real),
+    )
+    expect(blocked.status).toBe(303)
+    expect(blocked.headers.get("location")).toBe(RATE_LIMITED)
+    expect(
+      await testDb.db
+        .select()
+        .from(verificationTokens)
+        .where(eq(verificationTokens.identifier, "guess@example.test")),
+    ).toHaveLength(1)
+
+    const browser = new Browser("2001:db8::e:100")
+    for (let i = 1; i <= limit; i++) {
+      await browser.request("GET", callbackPath(`ip-guess-${i}@example.test`, "ZZZZZZZZ"))
+    }
+    const ipBlocked = await browser.request("GET", callbackPath("fresh@example.test", "ZZZZZZZZ"))
+    expect(ipBlocked.headers.get("location")).toBe(RATE_LIMITED)
   })
 })
 

@@ -5,7 +5,9 @@ import Link from "next/link"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { requireAdmin } from "@/lib/auth/session"
+import { canAccessAdmin } from "@/lib/auth/authz"
+import { authorizePage, requireAdmin } from "@/lib/auth/session"
+import { isBuiltRoute } from "@/lib/nav"
 
 export const metadata: Metadata = { title: "Overview" }
 
@@ -26,7 +28,8 @@ const STATS: Stat[] = [
 ]
 
 export default async function AdminOverviewPage() {
-  await requireAdmin()
+  const user = await requireAdmin()
+  authorizePage(canAccessAdmin(user), "/app")
 
   return (
     <div className="space-y-8">
@@ -35,12 +38,8 @@ export default async function AdminOverviewPage() {
         description="Platform health at a glance. Every admin action is written to the audit log."
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {STATS.map(({ label, href, icon: Icon, hint }) => (
-          <Link
-            key={href}
-            href={href}
-            className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
+        {STATS.map(({ label, href, icon: Icon, hint }) => {
+          const card = (
             <Card className="h-full gap-2 transition-colors hover:bg-accent/50">
               <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <CardTitle className="text-sm font-medium">{label}</CardTitle>
@@ -51,8 +50,20 @@ export default async function AdminOverviewPage() {
                 <p className="text-xs text-muted-foreground">{hint}</p>
               </CardContent>
             </Card>
-          </Link>
-        ))}
+          )
+          // Linked once its page is built (Phase 6); until then the card only describes it.
+          return isBuiltRoute(href) ? (
+            <Link
+              key={href}
+              href={href}
+              className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {card}
+            </Link>
+          ) : (
+            <div key={href}>{card}</div>
+          )
+        })}
       </div>
       <EmptyState
         icon={ListChecks}

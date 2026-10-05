@@ -7,7 +7,8 @@ import { StartPayoutsForm } from "@/components/payouts/start-payouts-form"
 import { StripeDashboardButton } from "@/components/payouts/stripe-dashboard-button"
 import { PageHeader } from "@/components/shared/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { requireOnboardedUser } from "@/lib/auth/session"
+import { canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage, requireOnboardedUser } from "@/lib/auth/session"
 import { env } from "@/lib/env"
 import { formatMoney } from "@/lib/money"
 import { payoutsStatusOf, type PayoutsStatus } from "@/lib/payouts/readiness"
@@ -28,6 +29,8 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 export default async function PayoutsSettingsPage({ searchParams }: Props) {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
+  // The user's own Stripe account only; checked before the page re-fetches it from Stripe.
+  authorizePage(canManageOwnAccount(user))
   const params = await searchParams
   const { account, defaultCountry, refreshFailed } = await loadPayoutsPageState(user.id, {
     returned: params.return === "1",

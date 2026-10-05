@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { authUser } from "../../helpers/auth-users"
+import { normalizeAudienceSummary } from "@/lib/ai/prompts/audience-summary"
 import {
   canConnectSocial,
   canManageSocialConnection,
@@ -12,10 +13,19 @@ import {
   isConnectErrorCode,
   withConnectResult,
 } from "@/lib/social/connect-errors"
-import { checkEvidenceFile, followerCountSchema, isProfileUrlFor } from "@/lib/social/manual-policy"
+import {
+  checkEvidenceFile,
+  checkManualEntryFields,
+  followerCountSchema,
+  isProfileUrlFor,
+} from "@/lib/social/manual-policy"
 import { revokeTokens } from "@/lib/social/revoke"
 import { computeSizeTier, sizeTierFor } from "@/lib/social/size-tier"
-import { audienceSummaryFormSchema, parseTopicsInput } from "@/lib/social/summary-form"
+import {
+  audienceSummaryFormSchema,
+  normalizeTopic,
+  parseTopicsInput,
+} from "@/lib/social/summary-form"
 import type { TokenSet } from "@/lib/social/types"
 import { hasPendingSync, healthOf, type ConnectionView } from "@/lib/social/view"
 
@@ -135,6 +145,41 @@ describe("manual entry policy", () => {
     expect(followerCountSchema.parse("1 200 000")).toBe(1_200_000)
     expect(followerCountSchema.safeParse("12k").success).toBe(false)
     expect(followerCountSchema.safeParse("-5").success).toBe(false)
+    // An empty field is missing, not zero followers.
+    expect(followerCountSchema.safeParse("").success).toBe(false)
+    expect(followerCountSchema.safeParse(" , ").success).toBe(false)
+    expect(followerCountSchema.parse("0")).toBe(0)
+  })
+
+  it("checks the typed fields the same way in the browser and on the server", () => {
+    expect(
+      checkManualEntryFields("instagram", {
+        followers: "12,500",
+        profileUrl: "  https://www.instagram.com/luna ",
+      }),
+    ).toEqual({
+      ok: true,
+      data: { followers: 12_500, profileUrl: "https://www.instagram.com/luna" },
+    })
+    expect(
+      checkManualEntryFields("instagram", { followers: "", profileUrl: "https://example.com/x" }),
+    ).toEqual({
+      ok: false,
+      fieldErrors: {
+        followers: ["Enter your follower count as a whole number."],
+        profileUrl: ["Enter the https:// link to your Instagram profile."],
+      },
+    })
+    expect(checkManualEntryFields("tiktok", { followers: 5, profileUrl: "" })).toMatchObject({
+      ok: false,
+      fieldErrors: { profileUrl: ["Enter the link to your profile."] },
+    })
+    expect(
+      checkManualEntryFields("youtube", {
+        followers: 5,
+        profileUrl: `https://www.youtube.com/@${"a".repeat(500)}`,
+      }),
+    ).toMatchObject({ ok: false, fieldErrors: { profileUrl: ["That link is too long."] } })
   })
 })
 
@@ -148,6 +193,20 @@ describe("audience summary form", () => {
     ])
   })
 
+  it("drops a hashtag's # after a comma and space, like the profile form and the AI topics", () => {
+    // " #budget" (after ", ") must become "budget", not "#budget" (§8 topic overlap, §19.17).
+    expect(
+      audienceSummaryFormSchema.parse({ summary: "x", topics: "fitness, #budget, # Meal_Prep" })
+        .topics,
+    ).toEqual(["fitness", "budget", "meal prep"])
+    expect(parseTopicsInput("a, #b,\n  ##c")).toEqual(["a", "b", "c"])
+    expect(normalizeTopic("  #Home  Cooking ")).toBe("home cooking")
+    expect(
+      normalizeAudienceSummary({ summary: "S.", topics: [" #Budget", "budget", "#meal prep"] })
+        .topics,
+    ).toEqual(["budget", "meal prep"])
+  })
+
   it("limits the summary and the number of topics", () => {
     expect(
       audienceSummaryFormSchema.parse({ summary: "  Two   spaces. ", topics: "a, b" }),
@@ -157,6 +216,17 @@ describe("audience summary form", () => {
     ).toBe(false)
     expect(
       audienceSummaryFormSchema.safeParse({ summary: "", topics: "1,2,3,4,5,6,7,8,9" }).success,
+    ).toBe(false)
+  })
+
+  it("counts a submitted CRLF line break as one character, like the textarea", () => {
+    // 1,200 characters on screen (599 + LF + 600); the browser submits the break as CRLF.
+    const submitted = `${"a".repeat(599)}\r\n${"b".repeat(600)}`
+    const parsed = audienceSummaryFormSchema.safeParse({ summary: submitted, topics: "" })
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.summary).toBe(`${"a".repeat(599)} ${"b".repeat(600)}`)
+    expect(
+      audienceSummaryFormSchema.safeParse({ summary: `${submitted}c`, topics: "" }).success,
     ).toBe(false)
   })
 })

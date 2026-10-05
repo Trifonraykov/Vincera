@@ -6,6 +6,7 @@ import { safeUrl } from "@/lib/social/metrics"
 
 import type { BuilderProfileForm, CreatorProfileForm } from "./fields"
 import { suggestHandle } from "./handles"
+import { portfolioImagePath } from "./image-policy"
 import { listPortfolioItems } from "./portfolio"
 import { loadBuilderProfileForm, loadCreatorProfileForm } from "./queries"
 
@@ -15,6 +16,7 @@ import { loadBuilderProfileForm, loadCreatorProfileForm } from "./queries"
  * same handle, so one handle can serve both public pages) or from the account name.
  */
 
+/** The form's fields as the page prefills them (not the action-only image fields). */
 type FormDefaults<T> = { [K in keyof T]: T[K] extends readonly string[] ? readonly string[] : T[K] }
 
 export type ProfilePageData<Form> = {
@@ -40,6 +42,7 @@ export async function creatorProfilePageData(
         handle: profile.handle,
         niche: profile.niche,
         bio: profile.bio,
+        topics: profile.topics,
         country: profile.country as CreatorProfileForm["country"],
         languages: profile.languages,
       },
@@ -54,6 +57,7 @@ export async function creatorProfilePageData(
       handle: other?.handle ?? (await suggestHandle(database, user)),
       niche: null,
       bio: other?.bio ?? null,
+      topics: [],
       country: null,
       languages: [],
     },
@@ -108,5 +112,6 @@ export async function portfolioPageItems(database: DbOrTx, userId: string) {
     description: item.description,
     format: item.format,
     isShipped: item.isShipped,
+    imageSrc: portfolioImagePath(item.id, item.imageUrl),
   }))
 }

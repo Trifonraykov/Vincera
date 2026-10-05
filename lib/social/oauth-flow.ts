@@ -13,6 +13,7 @@ import { getStorage } from "@/lib/storage/r2"
 import { absoluteUrl } from "@/lib/urls"
 
 import { canConnectSocial } from "./authz"
+import { isSocialOAuthAvailable } from "./availability"
 import { withConnectResult, type ConnectErrorCode } from "./connect-errors"
 import { SocialConnectError, upsertOAuthConnection } from "./connections"
 import { SocialProviderError, SocialRetryableError, socialErrorCode } from "./errors"
@@ -25,6 +26,7 @@ import {
   type OAuthCookie,
 } from "./oauth-cookie"
 import { getProvider } from "./registry"
+import { revalidatePublicProfiles } from "./revalidate"
 import {
   socialProviderIdSchema,
   SocialTokenError,
@@ -102,6 +104,7 @@ export async function oauthStartResponse(
   if (!user) return redirectTo(signInUrl({ callbackUrl: returnTo }))
   if (!isActive(user)) return redirectTo(signInUrl({ error: "AccountSuspended" }))
   if (!canConnectSocial(user, provider)) return failTo(returnTo, provider, "not_allowed")
+  if (!isSocialOAuthAvailable(provider)) return failTo(returnTo, provider, "oauth_disabled")
 
   const limit = await rateLimit("oauth-start", user.id, OAUTH_START_RATE_LIMIT)
   if (!limit.success) return failTo(returnTo, provider, "rate_limited")
@@ -149,6 +152,10 @@ export async function oauthCallbackResponse(
     return failTo(returnTo, provider, error, cleared)
   }
   if (!canConnectSocial(user, provider)) return failTo(returnTo, provider, "not_allowed", cleared)
+  // Switched off after this flow started: no exchange with an app that may not be configured.
+  if (!isSocialOAuthAvailable(provider)) {
+    return failTo(returnTo, provider, "oauth_disabled", cleared)
+  }
   const code = params.get("code")
   if (!code) return failTo(returnTo, provider, "invalid_code", cleared)
 
@@ -183,6 +190,8 @@ export async function oauthCallbackResponse(
     return failTo(returnTo, provider, errorCode, cleared)
   }
 
+  // The connection is verified now (and a manual entry's numbers may be gone): best effort.
+  await revalidatePublicProfiles(deps.db, user.id)
   try {
     await (deps.enqueueSync ?? enqueueConnectedSync)(connectionId)
   } catch (error) {

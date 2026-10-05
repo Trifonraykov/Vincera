@@ -36,6 +36,7 @@ const CREDENTIALS = [
   "NEXT_PUBLIC_POSTHOG_KEY",
   "APP_ENV",
   "E2E_TEST_ROUTES",
+  "DEV_MAILBOX",
 ] as const
 
 export const TEST_AUTH_SECRET = "test-auth-secret-0123456789abcdefghijklmnop"

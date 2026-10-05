@@ -15,6 +15,14 @@ import {
 import { HANDLE_PATTERN } from "@/lib/profiles/handle-format"
 import { handleBase } from "@/lib/profiles/handles"
 import {
+  checkPortfolioImage,
+  isOwnPortfolioImageKey,
+  isOwnPortfolioUploadKey,
+  portfolioImagePath,
+  portfolioImagePrefix,
+  portfolioUploadPrefix,
+} from "@/lib/profiles/image-policy"
+import {
   COUNTRY_CODES,
   countryName,
   countryOptions,
@@ -23,6 +31,7 @@ import {
   LANGUAGE_CODES,
   languageName,
 } from "@/lib/profiles/locale"
+import { audienceSummaryFormSchema } from "@/lib/social/summary-form"
 
 function firstIssue(result: { success: boolean; error?: { issues: { message: string }[] } }) {
   return result.success ? null : (result.error?.issues[0]?.message ?? null)
@@ -48,6 +57,18 @@ describe("handles", () => {
     )
     for (const handle of RESERVED_HANDLES)
       expect(handleSchema.safeParse(handle).success).toBe(false)
+  })
+
+  it("reserves the app's route words and the one-letter public prefixes", () => {
+    for (const word of ["admin", "app", "api", "settings", "onboarding", "c", "b", "p", "r"]) {
+      expect(RESERVED_HANDLES.has(word)).toBe(true)
+    }
+    expect(firstIssue(handleSchema.safeParse("@Settings"))).toBe(
+      "That handle is reserved. Try another.",
+    )
+    // Too short anyway: the format message comes first.
+    expect(firstIssue(handleSchema.safeParse("c"))).toMatch(/3–30 lowercase letters/)
+    expect(handleSchema.safeParse("settings_fan").success).toBe(true)
   })
 
   it("derives a handle base from names and emails", () => {
@@ -96,9 +117,43 @@ describe("creatorProfileFormSchema", () => {
       handle: "ada_codes",
       niche: "Notion tutorials",
       bio: "Line one\nLine two",
+      topics: [],
       country: "DE",
       languages: ["en", "es"],
     })
+  })
+
+  it("gives the same topics as the audience summary form for the same text", () => {
+    for (const topics of ["fitness, #budget, #Meal Prep", " #a,#b ,  ##c\nd_e", "x, X, #x"]) {
+      expect(creatorProfileFormSchema.parse({ ...valid, topics }).topics).toEqual(
+        audienceSummaryFormSchema.parse({ summary: "s", topics }).topics,
+      )
+    }
+    expect(
+      creatorProfileFormSchema.parse({ ...valid, topics: "fitness, #budget, #Meal Prep" }).topics,
+    ).toEqual(["fitness", "budget", "meal prep"])
+  })
+
+  it("normalizes topics like the audience summary (lowercase, no #, deduplicated)", () => {
+    expect(
+      creatorProfileFormSchema.parse({ ...valid, topics: "Meal Prep, #budget, meal prep,  " })
+        .topics,
+    ).toEqual(["meal prep", "budget"])
+    // Repeated fields (a tag input posting one value per tag) work too.
+    expect(
+      creatorProfileFormSchema.parse({ ...valid, topics: ["Fitness", "yoga"] }).topics,
+    ).toEqual(["fitness", "yoga"])
+    expect(
+      firstIssue(
+        creatorProfileFormSchema.safeParse({
+          ...valid,
+          topics: Array.from({ length: 9 }, (_, index) => `topic ${index}`).join(","),
+        }),
+      ),
+    ).toBe("Pick at most 8 topics.")
+    expect(
+      firstIssue(creatorProfileFormSchema.safeParse({ ...valid, topics: "x".repeat(41) })),
+    ).toBe("Keep each topic under 40 characters.")
   })
 
   it("treats blank optional fields as empty and a single language as a list", () => {
@@ -206,6 +261,8 @@ describe("portfolioItemFormSchema", () => {
       description: null,
       format: "tool",
       isShipped: true,
+      imageKey: null,
+      removeImage: false,
     })
     expect(portfolioItemFormSchema.parse({ title: "Draft", format: "" })).toEqual({
       title: "Draft",
@@ -213,7 +270,16 @@ describe("portfolioItemFormSchema", () => {
       description: null,
       format: null,
       isShipped: false,
+      imageKey: null,
+      removeImage: false,
     })
+    expect(
+      portfolioItemFormSchema.parse({
+        title: "X",
+        imageKey: " portfolio-images/u/i.png ",
+        removeImage: "on",
+      }),
+    ).toMatchObject({ imageKey: "portfolio-images/u/i.png", removeImage: true })
   })
 
   it("refuses script links and unknown formats", () => {
@@ -224,6 +290,54 @@ describe("portfolioItemFormSchema", () => {
       "Pick a format from the list.",
     )
     expect(firstIssue(portfolioItemFormSchema.safeParse({ title: " " }))).toBe("Give it a title.")
+  })
+})
+
+describe("portfolio image policy", () => {
+  const userId = "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"
+
+  it("allows PNG, JPEG, WebP and GIF up to 10 MB, never SVG", () => {
+    expect(checkPortfolioImage({ contentType: "image/PNG", sizeBytes: 1000 })).toEqual({
+      ok: true,
+      contentType: "image/png",
+    })
+    expect(checkPortfolioImage({ contentType: "image/svg+xml", sizeBytes: 1000 })).toEqual({
+      ok: false,
+      message: "Upload a PNG, JPEG, WebP or GIF image.",
+    })
+    expect(checkPortfolioImage({ contentType: "image/gif", sizeBytes: 0 })).toEqual({
+      ok: false,
+      message: "This image is empty.",
+    })
+    expect(
+      checkPortfolioImage({ contentType: "image/jpeg", sizeBytes: 10 * 1024 * 1024 + 1 }),
+    ).toEqual({ ok: false, message: "This image is too large. The limit is 10 MB." })
+  })
+
+  it("accepts only the user's own generated keys", () => {
+    const prefix = portfolioImagePrefix(userId)
+    expect(isOwnPortfolioImageKey(userId, `${prefix}0199a1b2-aaaa.png`)).toBe(true)
+    expect(isOwnPortfolioImageKey(userId, `${prefix}../other/x.png`)).toBe(false)
+    expect(isOwnPortfolioImageKey(userId, `${prefix}nested/x.png`)).toBe(false)
+    expect(isOwnPortfolioImageKey(userId, `${prefix}x.svg`)).toBe(false)
+    expect(isOwnPortfolioImageKey(userId, `portfolio-images/someone-else/x.png`)).toBe(false)
+    expect(isOwnPortfolioImageKey(userId, `social-evidence/${userId}/x.png`)).toBe(false)
+  })
+
+  it("keeps uploads and saved images apart: a save accepts upload keys only", () => {
+    const upload = `${portfolioUploadPrefix(userId)}0199a1b2-aaaa.png`
+    const saved = `${portfolioImagePrefix(userId)}0199a1b2-aaaa.png`
+    expect(isOwnPortfolioUploadKey(userId, upload)).toBe(true)
+    expect(isOwnPortfolioUploadKey(userId, saved)).toBe(false)
+    expect(isOwnPortfolioImageKey(userId, upload)).toBe(false)
+    expect(isOwnPortfolioUploadKey(userId, `portfolio-uploads/someone-else/x.png`)).toBe(false)
+  })
+
+  it("points pages at the image route, versioned by the upload", () => {
+    expect(portfolioImagePath("item-1", null)).toBeNull()
+    expect(portfolioImagePath("item-1", "portfolio-images/u/0199-abc.webp")).toBe(
+      "/api/portfolio/item-1/image?v=0199-abc",
+    )
   })
 })
 

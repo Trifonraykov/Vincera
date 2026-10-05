@@ -22,7 +22,7 @@ export const PATHNAME_HEADER = "x-pathname"
  */
 export const SIGN_IN_ERROR_MESSAGES = {
   Verification:
-    "That sign-in link is invalid or has expired. Links work once and expire after 24 hours. Request a new one below.",
+    "That sign-in link or code is invalid or has expired. Each works once and expires after 24 hours. Request a new one below.",
   AccessDenied: "This account can't sign in. If you think this is a mistake, contact support.",
   AccountSuspended:
     "Your account is suspended, so you can't use the app right now. If you think this is a mistake, contact support.",

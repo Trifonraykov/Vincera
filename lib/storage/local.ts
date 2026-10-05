@@ -1,6 +1,6 @@
 import "server-only"
 
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { z } from "zod"
@@ -104,6 +104,28 @@ export function createLocalStorage(root: string = dataDir("storage")): ObjectSto
     async deleteObject(key: string): Promise<void> {
       await rm(resolveIn(objectsRoot, key), { force: true })
       await rm(resolveIn(metaRoot, key, ".json"), { force: true })
+    },
+
+    async copyObject(sourceKey: string, destinationKey: string): Promise<boolean> {
+      const info = await readMeta(sourceKey)
+      if (!info) return false
+      const objectPath = resolveIn(objectsRoot, destinationKey)
+      const metaPath = resolveIn(metaRoot, destinationKey, ".json")
+      await mkdir(path.dirname(objectPath), { recursive: true })
+      await mkdir(path.dirname(metaPath), { recursive: true })
+      try {
+        await copyFile(resolveIn(objectsRoot, sourceKey), objectPath)
+      } catch (error) {
+        if (isNotFound(error)) return false
+        throw error
+      }
+      const meta = {
+        ...info,
+        sizeBytes: (await stat(objectPath)).size,
+        createdAt: now().toISOString(),
+      }
+      await writeFile(metaPath, JSON.stringify(meta), "utf8")
+      return true
     },
 
     async signedGetUrl(key: string, options: SignedGetOptions): Promise<string> {

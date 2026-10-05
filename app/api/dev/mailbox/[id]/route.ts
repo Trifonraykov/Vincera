@@ -1,4 +1,4 @@
-import { isFake, isProduction } from "@/lib/env"
+import { devMailboxEnabled } from "@/lib/env"
 import { listOutbox } from "@/lib/email/outbox"
 
 /** One email from the dev mailbox, rendered as sent. Same gating as the list (404 otherwise). */
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 type Context = { params: Promise<{ id: string }> }
 
 export async function GET(_request: Request, context: Context): Promise<Response> {
-  if (isProduction() || !isFake("email")) return new Response("Not found", { status: 404 })
+  if (!devMailboxEnabled()) return new Response("Not found", { status: 404 })
 
   const { id } = await context.params
   const email = (await listOutbox()).find((candidate) => candidate.id === id)

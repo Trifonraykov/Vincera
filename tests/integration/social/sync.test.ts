@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { findJob } from "@/inngest/functions"
+import { dailySyncFanOut } from "@/inngest/functions/social-daily-sync"
 import { setClockForTests } from "@/lib/clock"
 import { allowGdprErasure } from "@/lib/db/append-only"
 import { closeDb } from "@/lib/db/client"
@@ -25,6 +26,7 @@ import { getProvider } from "@/lib/social/registry"
 import { purgeExpiredYouTubeSnapshots } from "@/lib/social/retention"
 import { reviewAudienceSummary } from "@/lib/social/summary"
 import { syncConnection } from "@/lib/social/sync"
+import { SocialTokenError } from "@/lib/social/types"
 import { createLocalStorage } from "@/lib/storage/local"
 
 import { setupTestDatabase } from "../../helpers/db"
@@ -98,6 +100,10 @@ async function snapshotsOf(connectionId: string) {
     .select()
     .from(audienceSnapshots)
     .where(eq(audienceSnapshots.socialConnectionId, connectionId))
+}
+
+async function connectionsOf(userId: string) {
+  return testDb.db.select().from(socialConnections).where(eq(socialConnections.userId, userId))
 }
 
 describe("syncConnection", () => {
@@ -294,6 +300,63 @@ describe("syncConnection", () => {
     expect(await snapshotsOf(connection.id)).toEqual([])
   })
 
+  it("drops a sync whose connection was reconnected meanwhile", async () => {
+    const { connection, user, auth } = await connectYouTube()
+    const real = getProvider("youtube")
+    const result = await syncConnection(connection.id, {
+      db: testDb.db,
+      provider: {
+        ...real,
+        authUrl: real.authUrl.bind(real),
+        exchangeCode: real.exchangeCode.bind(real),
+        refresh: real.refresh.bind(real),
+        fetchProfile: real.fetchProfile.bind(real),
+        fetchAudience: async (tokens) => {
+          const audience = await real.fetchAudience(tokens)
+          // The creator connects another channel while YouTube is answering.
+          await runOAuthFlow(testDb.db, {
+            user: auth,
+            provider: "youtube",
+            account: "quiet-kitchen",
+          })
+          return audience
+        },
+      },
+    })
+    expect(result).toEqual({ status: "skipped", reason: "superseded" })
+    // The old channel's numbers never land on the new connection.
+    expect(await snapshotsOf(connection.id)).toEqual([])
+    expect(await eventsOf(testDb.db, "social.synced", connection.id)).toEqual([])
+    const [row] = await connectionsOf(user.id)
+    expect(row).toMatchObject({ status: "active", lastSyncedAt: null, username: "@quietkitchen" })
+  })
+
+  it("never expires a connection that was reconnected while its old token failed", async () => {
+    const { connection, user, auth } = await connectYouTube()
+    const real = getProvider("youtube")
+    const result = await syncConnection(connection.id, {
+      db: testDb.db,
+      provider: {
+        ...real,
+        authUrl: real.authUrl.bind(real),
+        exchangeCode: real.exchangeCode.bind(real),
+        refresh: real.refresh.bind(real),
+        fetchProfile: real.fetchProfile.bind(real),
+        fetchAudience: async () => {
+          await runOAuthFlow(testDb.db, { user: auth, provider: "youtube", account: "ada-codes" })
+          throw new SocialTokenError("youtube", "revoked")
+        },
+      },
+    })
+    expect(result).toEqual({ status: "skipped", reason: "superseded" })
+    const [row] = await connectionsOf(user.id)
+    expect(row).toMatchObject({ status: "active", lastSyncError: null })
+    expect(await eventsOf(testDb.db, "social.expired", connection.id)).toEqual([])
+    expect(
+      await testDb.db.select().from(notifications).where(eq(notifications.userId, user.id)),
+    ).toEqual([])
+  })
+
   it("syncs a builder's GitHub account without touching creator fields", async () => {
     const builder = await insertBuilder(testDb.db)
     await runOAuthFlow(testDb.db, {
@@ -363,6 +426,42 @@ describe("jobs", () => {
     expect(await snapshotsOf(stale.connection.id)).toHaveLength(1)
     expect(await snapshotsOf(fresh.connection.id)).toEqual([])
     expect(await snapshotsOf(manual.id)).toEqual([])
+  })
+
+  it("under Inngest, sends the due connections page by page, one batch per step", async () => {
+    stubSocialEnv({ DATABASE_URL: testDb.url })
+    await closeDb()
+    const due = [
+      await connectYouTube("ada-codes"),
+      await connectYouTube("quiet-kitchen"),
+      await connectYouTube("lapsed-lens"),
+    ]
+      .map(({ connection }) => connection.id)
+      .sort()
+    const steps: string[] = []
+    const batches: { ids: readonly string[]; day: string }[] = []
+
+    const result = await dailySyncFanOut({
+      mode: "inngest",
+      pageSize: 2,
+      step: {
+        run: async (id, fn) => {
+          steps.push(id)
+          return fn()
+        },
+      },
+      send: async (ids, day) => {
+        batches.push({ ids, day })
+      },
+    })
+    expect(result).toEqual({ due: 3, failed: 0 })
+    expect(steps).toEqual(["sync-window", "enqueue-page-0", "enqueue-page-1"])
+    expect(batches).toEqual([
+      { ids: due.slice(0, 2), day: "2026-10-05" },
+      { ids: due.slice(2), day: "2026-10-05" },
+    ])
+    // Nothing ran inline: the syncs are Inngest's runs.
+    for (const id of due) expect(await snapshotsOf(id)).toEqual([])
   })
 })
 
@@ -524,6 +623,8 @@ describe("manual entry fallback", () => {
         storage(),
       ),
     ).rejects.toThrow("Upload your screenshot again")
+    // Someone else's screenshot is never deleted on their behalf.
+    expect(await storage().statObject(foreign.key)).not.toBeNull()
 
     const pdf = await uploadEvidence(creator.user.id, "application/pdf")
     await expect(
@@ -575,6 +676,92 @@ describe("manual entry fallback", () => {
         store,
       ),
     ).rejects.toThrow("already connected")
+    // The refused entry's upload is gone.
+    expect(await store.statObject(upload.key)).toBeNull()
+  })
+
+  it("checks the typed fields on the server, deleting the upload of a refused entry", async () => {
+    const creator = await newCreator(testDb.db)
+    const upload = await uploadEvidence(creator.user.id)
+    const refused = submitManualEntry(
+      testDb.db,
+      {
+        userId: creator.user.id,
+        provider: "instagram",
+        followers: "",
+        profileUrl: "https://www.instagram.com/luna",
+        evidenceKey: upload.key,
+      },
+      storage(),
+    )
+    await expect(refused).rejects.toMatchObject({
+      fieldErrors: { followers: ["Enter your follower count as a whole number."] },
+    })
+    expect(await storage().statObject(upload.key)).toBeNull()
+    expect(await connectionsOf(creator.user.id)).toEqual([])
+  })
+
+  it("refuses a screenshot uploaded for another provider", async () => {
+    const creator = await newCreator(testDb.db)
+    const instagram = await uploadEvidence(creator.user.id)
+    await expect(
+      submitManualEntry(
+        testDb.db,
+        {
+          userId: creator.user.id,
+          provider: "tiktok",
+          followers: 10,
+          profileUrl: "https://www.tiktok.com/@luna",
+          evidenceKey: instagram.key,
+        },
+        storage(),
+      ),
+    ).rejects.toThrow("Upload your screenshot again")
+  })
+
+  it("treats the same entry again as a no-op, and refuses new numbers on the old screenshot", async () => {
+    const creator = await newCreator(testDb.db)
+    const upload = await uploadEvidence(creator.user.id)
+    const entry = {
+      userId: creator.user.id,
+      provider: "instagram" as const,
+      followers: "12,500",
+      profileUrl: "https://www.instagram.com/luna",
+      evidenceKey: upload.key,
+    }
+    const first = await submitManualEntry(testDb.db, entry, storage())
+    const adminRow = await insertUser(testDb.db, { roles: ["admin"] })
+    await verifyManualConnection(testDb.db, authUserOf(adminRow), first.connectionId)
+
+    // A retried request: nothing changes, the admin's check stands.
+    const again = await submitManualEntry(testDb.db, entry, storage())
+    expect(again).toMatchObject({
+      connectionId: first.connectionId,
+      snapshotId: first.snapshotId,
+      unchanged: true,
+      replacedEvidenceKey: null,
+    })
+    expect(await snapshotsOf(first.connectionId)).toHaveLength(1)
+    const [row] = await connectionsOf(creator.user.id)
+    expect(row?.verifiedAt).toEqual(NOW)
+
+    // Other numbers need a new screenshot; the one on file is kept.
+    await expect(
+      submitManualEntry(testDb.db, { ...entry, followers: 90_000 }, storage()),
+    ).rejects.toThrow("Upload a new screenshot")
+    expect(await storage().statObject(upload.key)).not.toBeNull()
+    expect(await snapshotsOf(first.connectionId)).toHaveLength(1)
+
+    // A new screenshot replaces the old one and needs a new check.
+    const next = await uploadEvidence(creator.user.id)
+    const updated = await submitManualEntry(
+      testDb.db,
+      { ...entry, followers: 90_000, evidenceKey: next.key },
+      storage(),
+    )
+    expect(updated).toMatchObject({ unchanged: false, replacedEvidenceKey: upload.key })
+    const [after] = await connectionsOf(creator.user.id)
+    expect(after).toMatchObject({ verifiedAt: null, evidenceStorageKey: next.key })
   })
 
   it("an admin verifies a manual entry (audited); the tier becomes verified", async () => {
@@ -640,7 +827,17 @@ describe("reviewing the audience summary", () => {
     })
     expect(accepted).toMatchObject({ changed: false, fields: [] })
     expect((await profileOf(user.id))?.audienceSummaryEditedAt).toBeNull()
+    // Saving the same text again (e.g. later on /app/audience) is not a second decision.
+    await reviewAudienceSummary(testDb.db, {
+      userId: user.id,
+      form: { summary: before?.audienceSummary ?? "", topics: before?.topics ?? [] },
+      source: "settings",
+    })
+    expect(await eventsOf(testDb.db, "ai.reviewed", before?.id)).toHaveLength(1)
 
+    // A new generation can be reviewed again.
+    setClockForTests(new Date(NOW.getTime() + HOUR))
+    await syncConnection(connection.id, { db: testDb.db })
     const edited = await reviewAudienceSummary(testDb.db, {
       userId: user.id,
       form: { summary: "Home cooks on a budget.", topics: ["budget cooking"] },
@@ -650,7 +847,13 @@ describe("reviewing the audience summary", () => {
     expect(await profileOf(user.id)).toMatchObject({
       audienceSummary: "Home cooks on a budget.",
       topics: ["budget cooking"],
-      audienceSummaryEditedAt: NOW,
+      audienceSummaryEditedAt: new Date(NOW.getTime() + HOUR),
+    })
+    // Further edits of the creator's own text are not decisions on AI text.
+    await reviewAudienceSummary(testDb.db, {
+      userId: user.id,
+      form: { summary: "Home cooks on a tight budget.", topics: ["budget cooking"] },
+      source: "settings",
     })
 
     const reviews = await eventsOf(testDb.db, "ai.reviewed", before?.id)
@@ -671,6 +874,9 @@ describe("reviewing the audience summary", () => {
     expect(await eventsOf(testDb.db, "creator_profile.updated", before?.id)).toEqual([
       expect.objectContaining({
         properties: { fields: ["audience_summary", "topics"], source: "onboarding" },
+      }),
+      expect.objectContaining({
+        properties: { fields: ["audience_summary"], source: "settings" },
       }),
     ])
   })

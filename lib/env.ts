@@ -2,6 +2,8 @@ import "server-only"
 
 import { z } from "zod"
 
+import { normalizePem, supabaseTlsProblem } from "@/lib/db/connection"
+
 export { publicEnv, type PublicEnv } from "@/lib/public-env"
 
 /**
@@ -76,6 +78,34 @@ const fakeServices = z
     return services
   })
 
+function isSocialProvider(value: string): value is SocialProvider {
+  return (SOCIAL_PROVIDERS as readonly string[]).includes(value)
+}
+
+/** The providers named in SOCIAL_OAUTH_DISABLED (unknown names are ignored here). */
+function disabledSocialProviders(value: string | undefined): ReadonlySet<SocialProvider> {
+  const providers = new Set<SocialProvider>()
+  for (const token of (value ?? "").split(",").map((t) => t.trim().toLowerCase())) {
+    if (isSocialProvider(token)) providers.add(token)
+  }
+  return providers
+}
+
+const socialProviderList = z
+  .string()
+  .default("")
+  .transform((value, ctx): ReadonlySet<SocialProvider> => {
+    for (const token of value.split(",").map((t) => t.trim().toLowerCase())) {
+      if (token !== "" && !isSocialProvider(token)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `unknown provider "${token}"; expected a comma list of: ${SOCIAL_PROVIDERS.join(", ")}`,
+        })
+      }
+    }
+    return disabledSocialProviders(value)
+  })
+
 const emailList = z
   .string()
   .default("")
@@ -99,6 +129,12 @@ const envSchema = z.object({
 
   // Core: required in every environment.
   DATABASE_URL: postgresUrl,
+  // PEM of the CA that signs the database server's certificate (Supabase: Database settings →
+  // SSL configuration). Set, the connection uses TLS and verifies the server (lib/db/connection.ts).
+  DATABASE_CA_CERT: z
+    .string()
+    .refine((value) => normalizePem(value) !== null, "must be a PEM certificate")
+    .optional(),
   AUTH_SECRET: z.string().min(32, "must be at least 32 characters (generate: npx auth secret)"),
   ENCRYPTION_KEY: z
     .string()
@@ -148,6 +184,10 @@ const envSchema = z.object({
   TIKTOK_CLIENT_SECRET: nonEmpty.optional(),
   GITHUB_DATA_CLIENT_ID: nonEmpty.optional(),
   GITHUB_DATA_CLIENT_SECRET: nonEmpty.optional(),
+  // Providers whose OAuth app is not usable yet (e.g. Meta/TikTok app review pending): their
+  // Connect buttons are hidden, creators enter numbers by hand (§7.1 fallback), and their
+  // credentials are not required in production. Comma list, e.g. "instagram,tiktok".
+  SOCIAL_OAUTH_DISABLED: socialProviderList,
   // Keep YouTube statistics longer than 30 days (needs Google's derived-metrics policy; §19.10).
   YOUTUBE_LONG_RETENTION: flag,
 
@@ -190,6 +230,10 @@ const envSchema = z.object({
   // Development & tests (§19.3, §19.4)
   FAKE_SERVICES: fakeServices,
   E2E_TEST_ROUTES: flag,
+  // Serves the fake email outbox at /api/dev/mailbox (magic links clickable in a browser, e.g. in
+  // Docker). Anyone who can reach the server can then sign in as anyone, so it is opt-in and
+  // never allowed in production.
+  DEV_MAILBOX: flag,
   TEST_DATABASE_URL: postgresUrl.optional(),
   E2E_DATABASE_URL: postgresUrl.optional(),
 })
@@ -326,7 +370,14 @@ export function parseEnv(source: EnvSource = process.env): Env {
     if (!problems.has(key)) problems.set(key, `${key}: ${message}`)
   }
 
-  const required: readonly EnvKey[] = strict ? PRODUCTION_REQUIRED : CORE_REQUIRED
+  // A provider whose OAuth is switched off needs no credentials (§7.1 manual fallback).
+  const disabledSocial = disabledSocialProviders(input.SOCIAL_OAUTH_DISABLED)
+  const notNeeded = new Set<EnvKey>(
+    [...disabledSocial].flatMap((provider) => SOCIAL_CREDENTIALS[provider]),
+  )
+  const required: readonly EnvKey[] = (strict ? PRODUCTION_REQUIRED : CORE_REQUIRED).filter(
+    (key) => !notNeeded.has(key),
+  )
   for (const key of required) {
     if (input[key] === undefined) report(key, strict ? "is required in production" : "is required")
   }
@@ -356,6 +407,13 @@ export function parseEnv(source: EnvSource = process.env): Env {
     if (strict && data.E2E_TEST_ROUTES) {
       report("E2E_TEST_ROUTES", "test routes are not allowed in production")
     }
+    if (strict && data.DEV_MAILBOX) {
+      report("DEV_MAILBOX", "the dev mailbox is not allowed in production")
+    }
+    const tlsProblem = strict
+      ? supabaseTlsProblem(data.DATABASE_URL, { caCert: data.DATABASE_CA_CERT })
+      : null
+    if (tlsProblem) report("DATABASE_URL", tlsProblem)
     if (
       appEnv !== "production" &&
       data.STRIPE_SECRET_KEY &&
@@ -428,6 +486,15 @@ export function isSocialProviderFake(provider: SocialProvider, e: Env = getEnv()
 }
 
 /**
+ * Whether users can connect `provider` through OAuth: false when SOCIAL_OAUTH_DISABLED names it
+ * (its app is not approved yet). Check this before `getProvider()`: a disabled provider may have
+ * no credentials, and in production that makes `isSocialProviderFake` throw.
+ */
+export function isSocialOAuthEnabled(provider: SocialProvider, e: Env = getEnv()): boolean {
+  return !e.SOCIAL_OAUTH_DISABLED.has(provider)
+}
+
+/**
  * Whether `service` should use its fake implementation (§19.3):
  * forced by `FAKE_SERVICES` (`all` or a list naming it), otherwise fake iff its credentials are
  * missing. In production a fake is a configuration error and this throws.
@@ -466,6 +533,15 @@ export function stripeWebhookSecrets(e: Env = getEnv()): {
 /** `/api/test/*` routes exist only when explicitly enabled and never in production (§19.4). */
 export function testRoutesEnabled(e: Env = getEnv()): boolean {
   return e.E2E_TEST_ROUTES && e.APP_ENV !== "production"
+}
+
+/**
+ * `/api/dev/mailbox` (the fake outbox in a browser) exists only when DEV_MAILBOX is set, email is
+ * fake and APP_ENV is not production. It shows every user's magic links, so it is opt-in: the
+ * Docker demo sets it and publishes the port on 127.0.0.1 only.
+ */
+export function devMailboxEnabled(e: Env = getEnv()): boolean {
+  return e.DEV_MAILBOX && e.APP_ENV !== "production" && isFake("email", e)
 }
 
 /** Emails listed in ADMIN_EMAILS get the admin role when they sign up. */

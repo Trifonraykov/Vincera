@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 
 import { handlers } from "@/lib/auth/auth"
+import { prepareEmailCallback } from "@/lib/auth/email-callback"
 import { withPendingNameCleared } from "@/lib/auth/pending-name"
 
 /**
@@ -10,12 +11,15 @@ import { withPendingNameCleared } from "@/lib/auth/pending-name"
  * run Auth.js in-process, never through this route. Auth.js's own HTTP sign-in endpoint
  * (`POST /api/auth/signin/<provider>`) would skip that validation and the OAuth rate limit, so it
  * is closed. Magic-link rate limiting does not depend on this: it lives in the signIn callback.
+ * The magic-link callback is rate-limited here and takes typed codes (lib/auth/email-callback.ts).
  */
 
 const SIGN_IN_ACTION = /^\/api\/auth\/signin(\/|$)/
 
 export async function GET(request: NextRequest): Promise<Response> {
-  return withPendingNameCleared(request, await handlers.GET(request))
+  const prepared = await prepareEmailCallback(request)
+  if (prepared instanceof Response) return prepared
+  return withPendingNameCleared(prepared, await handlers.GET(prepared))
 }
 
 export async function POST(request: NextRequest): Promise<Response> {

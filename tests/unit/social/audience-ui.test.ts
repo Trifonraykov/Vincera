@@ -159,14 +159,24 @@ describe("public profile parts", () => {
             description: "Bills",
             isShipped: true,
             format: "tool",
+            imageSrc: "/api/portfolio/0199a000-0000-7000-8000-000000000001/image?v=abc",
           },
-          { title: "Draft idea", url: null, description: null, isShipped: false, format: null },
+          {
+            title: "Draft idea",
+            url: null,
+            description: null,
+            isShipped: false,
+            format: null,
+            imageSrc: null,
+          },
         ],
       }),
     )
     expect(portfolio).toContain("Shipped")
     expect(portfolio).toContain('rel="noopener noreferrer nofollow ugc"')
     expect(portfolio.match(/href=/g)).toHaveLength(1)
+    expect(portfolio.match(/<img /g)).toHaveLength(1)
+    expect(portfolio).toContain('alt="Invoice CLI: project image"')
   })
 
   it("flags an unverified size tier", () => {

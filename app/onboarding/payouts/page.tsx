@@ -11,6 +11,8 @@ import { StripeDashboardButton } from "@/components/payouts/stripe-dashboard-but
 import { PageHeader } from "@/components/shared/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage } from "@/lib/auth/session"
 import { env } from "@/lib/env"
 import { requireOnboardingStep } from "@/lib/onboarding/page"
 import { payoutsStatusOf, type PayoutsStatus } from "@/lib/payouts/readiness"
@@ -32,6 +34,8 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
  */
 export default async function OnboardingPayoutsPage({ searchParams }: Props) {
   const { user, progress } = await requireOnboardingStep("payouts")
+  // The user's own Stripe account only; checked before the page re-fetches it from Stripe.
+  authorizePage(canManageOwnAccount(user))
   const params = await searchParams
   const { account, defaultCountry, refreshFailed } = await loadPayoutsPageState(user.id, {
     returned: params.return === "1",

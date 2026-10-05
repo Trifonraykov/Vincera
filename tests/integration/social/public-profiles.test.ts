@@ -122,6 +122,7 @@ describe("/b/[handle]", () => {
         title: "Invoice CLI",
         url: "https://example.test/cli",
         isShipped: true,
+        imageUrl: `portfolio-images/${builder.user.id}/0199a000-0000-7000-8000-00000000abcd.png`,
       },
       { builderProfileId: builder.profile.id, title: "Sketchy", url: "javascript:alert(1)" },
     ])
@@ -142,14 +143,22 @@ describe("/b/[handle]", () => {
       availability: "open",
       dealPreference: "either",
       portfolio: [
-        expect.objectContaining({ title: "Invoice CLI", url: "https://example.test/cli" }),
-        expect.objectContaining({ title: "Sketchy", url: null }),
+        expect.objectContaining({
+          title: "Invoice CLI",
+          url: "https://example.test/cli",
+          imageSrc: expect.stringMatching(
+            /^\/api\/portfolio\/[0-9a-f-]{36}\/image\?v=0199a000-0000-7000-8000-00000000abcd$/,
+          ),
+        }),
+        expect.objectContaining({ title: "Sketchy", url: null, imageSrc: null }),
       ],
       github: expect.objectContaining({ current: true, login: expect.any(String) }),
     })
     expect(profile?.github?.stats?.totalStars).toBeGreaterThan(0)
     expect(profile?.github?.stats?.topLanguages.length).toBeGreaterThan(0)
     expect(JSON.stringify(profile)).not.toContain(builder.user.email ?? "@")
+    // The image is served through its app route; the storage key itself is not public.
+    expect(JSON.stringify(profile)).not.toContain("portfolio-images/")
 
     expect(await loadPublicBuilderProfile(testDb.db, "missing_builder")).toBeNull()
   })

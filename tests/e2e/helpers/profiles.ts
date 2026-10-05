@@ -20,6 +20,8 @@ export type CreatorProfileInput = {
   country?: string
   /** Language names as the checkboxes show them, e.g. ["English", "Spanish"]. */
   languages?: string[]
+  /** Topics typed into the tag input, one Enter each. */
+  topics?: string[]
 }
 
 export async function fillCreatorProfile(page: Page, input: CreatorProfileInput) {
@@ -32,6 +34,11 @@ export async function fillCreatorProfile(page: Page, input: CreatorProfileInput)
   }
   for (const language of input.languages ?? []) {
     await page.getByRole("checkbox", { name: language, exact: true }).check()
+  }
+  for (const topic of input.topics ?? []) {
+    const topics = page.getByLabel(/^Topics/)
+    await topics.fill(topic)
+    await topics.press("Enter")
   }
 }
 
@@ -62,6 +69,12 @@ export async function fillBuilderProfile(page: Page, input: BuilderProfileInput)
   }
 }
 
+/** A 1×1 PNG, for project image uploads. */
+export const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+)
+
 /** Add a project in the portfolio dialog. */
 export async function addProject(
   page: Page,
@@ -71,6 +84,8 @@ export async function addProject(
     description?: string
     format?: string
     shipped?: boolean
+    /** Upload this PNG as the project image. */
+    image?: Buffer
   },
 ) {
   await page.getByRole("button", { name: "Add a project" }).first().click()
@@ -84,6 +99,14 @@ export async function addProject(
     await dialog.getByLabel(/^Format/).selectOption({ label: project.format })
   }
   if (project.shipped) await dialog.getByLabel(/It's shipped/).check()
+  if (project.image) {
+    await dialog.getByLabel("Choose image").setInputFiles({
+      name: "cover.png",
+      mimeType: "image/png",
+      buffer: project.image,
+    })
+    await expect(dialog.getByText("Uploaded. Save the project to use it.")).toBeVisible()
+  }
   await dialog.getByRole("button", { name: "Add project" }).click()
   await expect(dialog).toBeHidden()
 }

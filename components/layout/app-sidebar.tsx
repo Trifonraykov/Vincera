@@ -14,6 +14,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -22,7 +23,15 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { adminNav, appNav, isActiveItem, isActivePath, type NavItem, type NavLink } from "@/lib/nav"
+import {
+  adminNav,
+  appNav,
+  isActiveItem,
+  isActivePath,
+  isBuiltRoute,
+  type NavItem,
+  type NavLink,
+} from "@/lib/nav"
 
 import { RoleSwitcher } from "./role-switcher"
 import type { ShellProps } from "./types"
@@ -106,6 +115,24 @@ function NavMenuItem({ item, pathname }: { item: NavItem; pathname: string }) {
     if (isMobile) setOpenMobile(false)
   }
 
+  // §12 pages that later phases build are listed, but dimmed and not linked (lib/nav.ts).
+  if (!isBuiltRoute(item.href)) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          type="button"
+          disabled
+          aria-label={`${item.title} (coming soon)`}
+          data-coming-soon=""
+        >
+          <Icon />
+          <span>{item.title}</span>
+        </SidebarMenuButton>
+        <SidebarMenuBadge aria-hidden="true">Soon</SidebarMenuBadge>
+      </SidebarMenuItem>
+    )
+  }
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
@@ -116,22 +143,24 @@ function NavMenuItem({ item, pathname }: { item: NavItem; pathname: string }) {
       </SidebarMenuButton>
       {active && item.children && item.children.length > 0 ? (
         <SidebarMenuSub>
-          {item.children.map((child) => {
-            const childActive = isChildActive(pathname, item, child)
-            return (
-              <SidebarMenuSubItem key={child.href}>
-                <SidebarMenuSubButton asChild isActive={childActive}>
-                  <Link
-                    href={child.href}
-                    onClick={closeOnMobile}
-                    aria-current={childActive ? "page" : undefined}
-                  >
-                    <span>{child.title}</span>
-                  </Link>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            )
-          })}
+          {item.children
+            .filter((child) => isBuiltRoute(child.href))
+            .map((child) => {
+              const childActive = isChildActive(pathname, item, child)
+              return (
+                <SidebarMenuSubItem key={child.href}>
+                  <SidebarMenuSubButton asChild isActive={childActive}>
+                    <Link
+                      href={child.href}
+                      onClick={closeOnMobile}
+                      aria-current={childActive ? "page" : undefined}
+                    >
+                      <span>{child.title}</span>
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              )
+            })}
         </SidebarMenuSub>
       ) : null}
     </SidebarMenuItem>

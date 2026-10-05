@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import type { Availability, DealPreference, ProductFormat } from "@/lib/db/schema/enums"
+import { parseTopicsInput, TOPIC_MAX_LENGTH, TOPICS_MAX } from "@/lib/social/summary-form"
 
 import { HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH, HANDLE_REGEX } from "./handle-format"
 import { isCountryCode, isLanguageCode, type CountryCode, type LanguageCode } from "./locale"
@@ -10,8 +11,8 @@ import { isCountryCode, isLanguageCode, type CountryCode, type LanguageCode } fr
  * settings pages): limits, labels and the Zod schemas shared by the forms and the server actions.
  * Client-safe (type-only schema import).
  *
- * Topics are not on the creator form: the audience summary writes them and the creator edits them
- * next to it (review step, /app/audience), see CLAUDE.md §19.15.
+ * Creator topics use the audience summary's rules (lowercase, ≤ 8, lib/social/summary-form.ts), so
+ * the creator's own topics and the AI topics are interchangeable (CLAUDE.md §19.17).
  */
 
 export const DISPLAY_NAME_MAX = 60
@@ -25,6 +26,7 @@ export const PORTFOLIO_DESCRIPTION_MAX = 300
 export const PORTFOLIO_URL_MAX = 500
 /** Portfolio items per builder profile. */
 export const PORTFOLIO_MAX_ITEMS = 12
+export { TOPIC_MAX_LENGTH, TOPICS_MAX }
 
 // --- Labels ------------------------------------------------------------------------------------
 
@@ -78,26 +80,25 @@ export const PRODUCT_FORMAT_LABELS: Record<ProductFormat, string> = {
 // --- Handles -----------------------------------------------------------------------------------
 
 /**
- * Handles nobody may take: words that would read as the platform speaking, plus route-like words.
- * Public URLs are /c/<handle> and /b/<handle>, so none of these collide with routes; they are
- * reserved so a profile cannot pose as staff.
+ * Handles nobody may take: words that would read as the platform speaking, and the app's route
+ * segments (§12), so a handle never looks like a page of the site. Public URLs are /c/<handle>
+ * and /b/<handle>, so none of these collide with routes; they are reserved so a profile cannot
+ * pose as staff or as a page. One-letter route prefixes (c, b, p, r) are listed for completeness;
+ * the 3-character minimum already refuses them.
  */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
+  // The platform and its staff
   "admin",
   "administrator",
-  "api",
-  "app",
   "billing",
   "help",
   "mod",
   "moderator",
   "null",
   "official",
-  "payouts",
   "platform",
   "root",
   "security",
-  "settings",
   "staff",
   "stripe",
   "support",
@@ -105,6 +106,39 @@ export const RESERVED_HANDLES: ReadonlySet<string> = new Set([
   "team",
   "undefined",
   "vincera",
+  // Route segments (§12)
+  "access",
+  "api",
+  "app",
+  "auth",
+  "b",
+  "builders",
+  "c",
+  "creators",
+  "dev",
+  "discover",
+  "earnings",
+  "launches",
+  "legal",
+  "login",
+  "logout",
+  "messages",
+  "notifications",
+  "oauth",
+  "onboarding",
+  "p",
+  "payouts",
+  "pricing",
+  "privacy",
+  "proposals",
+  "r",
+  "settings",
+  "sign_in",
+  "sign_up",
+  "signin",
+  "signup",
+  "terms",
+  "webhooks",
 ])
 
 /** " @Ada.Codes " → "ada.codes" (still invalid: dots are not allowed; the schema says so). */
@@ -124,6 +158,15 @@ export const handleSchema = z
       .regex(HANDLE_REGEX, HANDLE_FORMAT_MESSAGE)
       .refine((handle) => !RESERVED_HANDLES.has(handle), "That handle is reserved. Try another."),
   )
+
+/** The live handle check's answer (`handleAvailability`, lib/profiles/handles.ts). */
+export type HandleAvailability = {
+  /** The handle as it would be stored (lowercase, without `@`). */
+  handle: string
+  status: "available" | "yours" | "taken" | "reserved" | "invalid"
+  /** Plain-language text for the field. */
+  message: string
+}
 
 // --- Field helpers -----------------------------------------------------------------------------
 
@@ -183,11 +226,15 @@ export function parseTagList(value: string): string[] {
   return tags
 }
 
+/** A form value that may be one string, several (repeated inputs) or missing, as one string. */
+const joinedText = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((value) => (Array.isArray(value) ? value.join(",") : (value ?? "")))
+
 function tagListSchema(noun: string) {
-  return z
-    .string()
-    .optional()
-    .transform((value) => parseTagList(value ?? ""))
+  return joinedText
+    .transform(parseTagList)
     .pipe(
       z
         .array(
@@ -208,6 +255,24 @@ const languagesSchema = stringList.pipe(
     .array(z.string().refine(isLanguageCode, "Pick languages from the list."))
     .max(LANGUAGES_MAX, `Pick at most ${LANGUAGES_MAX} languages.`)
     .transform((codes) => [...new Set(codes)] as LanguageCode[]),
+)
+
+/**
+ * Creator topics (§5 creator_profiles.topics): the tag input's comma list, normalised like the AI
+ * topics (lowercase, `#` and duplicates dropped).
+ */
+const topicsSchema = joinedText.pipe(
+  z
+    .string()
+    .max(1000, "That's too many topics.")
+    .transform(parseTopicsInput)
+    .pipe(
+      z
+        .array(
+          z.string().max(TOPIC_MAX_LENGTH, `Keep each topic under ${TOPIC_MAX_LENGTH} characters.`),
+        )
+        .max(TOPICS_MAX, `Pick at most ${TOPICS_MAX} topics.`),
+    ),
 )
 
 const countrySchema = z
@@ -274,6 +339,7 @@ export const creatorProfileFormSchema = z.object({
   handle: handleSchema,
   niche: optionalLine(NICHE_MAX, `Keep your niche under ${NICHE_MAX} characters.`),
   bio: optionalText(BIO_MAX, `Keep your bio under ${BIO_MAX} characters.`),
+  topics: topicsSchema,
   country: countrySchema,
   languages: languagesSchema,
 })
@@ -312,6 +378,17 @@ export const portfolioItemFormSchema = z.object({
     .optional()
     .transform((value) => (value === "" || value === undefined ? null : value)),
   isShipped: checkbox,
+  /** A freshly uploaded image (`requestPortfolioImageUpload`); empty keeps the current one. */
+  imageKey: z
+    .string()
+    .max(512, "Upload the image again.")
+    .optional()
+    .transform((value) => {
+      const trimmed = (value ?? "").trim()
+      return trimmed === "" ? null : trimmed
+    }),
+  /** "Remove image" on an item that has one. */
+  removeImage: checkbox,
 })
 export type PortfolioItemForm = z.output<typeof portfolioItemFormSchema>
 

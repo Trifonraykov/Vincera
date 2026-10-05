@@ -1,13 +1,16 @@
 import { ArrowLeft } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { CreatorProfileForm } from "@/components/profiles/creator-profile-form"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
+import { canEditCreatorProfile } from "@/lib/auth/authz"
 import { getDb } from "@/lib/db/client"
 import { requireOnboardingStep } from "@/lib/onboarding/page"
+import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { countryOptions, languageOptions } from "@/lib/profiles/locale"
 import { creatorProfilePageData } from "@/lib/profiles/page-data"
 
@@ -20,6 +23,8 @@ export const metadata: Metadata = { title: "Your creator profile" }
  */
 export default async function OnboardingCreatorProfilePage() {
   const { user, progress } = await requireOnboardingStep("creator.profile")
+  // Defence in depth (§19.9): the step guard already checks the path; the rule checks the role.
+  if (!canEditCreatorProfile(user)) redirect(ONBOARDING_STEP_PATHS.role)
   const data = await creatorProfilePageData(getDb(), user)
 
   return (

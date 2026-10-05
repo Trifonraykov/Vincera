@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/shared/page-header"
 import { ConnectionCard } from "@/components/social/connection-card"
 import { ConnectResultAlert } from "@/components/social/connect-result-alert"
 import { SyncRefresher } from "@/components/social/sync-refresher"
-import { requireOnboardedUser } from "@/lib/auth/session"
+import { canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage, requireOnboardedUser } from "@/lib/auth/session"
 import { now } from "@/lib/clock"
 import { getDb } from "@/lib/db/client"
 import { canConnectSocial } from "@/lib/social/authz"
@@ -28,6 +29,8 @@ const RETURN_TO = "/app/settings/connections"
 export default async function ConnectionsSettingsPage({ searchParams }: Props) {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
+  // The user's own connections only; each provider below is also checked (canConnectSocial).
+  authorizePage(canManageOwnAccount(user))
   const params = await searchParams
   const views = (await listUserConnections(getDb(), user.id)).map(toConnectionView)
   const byProvider = new Map<SocialProviderId, ConnectionView>(

@@ -18,6 +18,7 @@ import {
   canVerifySocialConnection,
   canViewOwnAudience,
 } from "./authz"
+import { isSocialOAuthAvailable } from "./availability"
 import { runInBackground } from "./background"
 import { SOCIAL_PROVIDER_META } from "./catalog"
 import { disconnectConnection } from "./connections"
@@ -25,10 +26,11 @@ import { recomputeSizeTier, refreshAudienceSummary, refreshCreatorEmbedding } fr
 import {
   createEvidenceUpload,
   deleteEvidenceObject,
+  discardUnusedEvidence,
   submitManualEntry,
   verifyManualConnection,
 } from "./manual"
-import { followerCountSchema, manualProviderSchema } from "./manual-policy"
+import { manualProviderSchema } from "./manual-policy"
 import { findConnectionInfo } from "./queries"
 import { revalidatePublicProfiles } from "./revalidate"
 import { revokeTokens } from "./revoke"
@@ -46,6 +48,8 @@ import { audienceSummaryFormSchema } from "./summary-form"
 const RESYNC_RATE_LIMIT: RateLimitRule = { limit: 3, window: "15 m" }
 /** Screenshot upload URLs: 10 per user per hour. */
 const EVIDENCE_UPLOAD_RATE_LIMIT: RateLimitRule = { limit: 10, window: "1 h" }
+/** Saving manual numbers: 10 per user per hour (each writes a snapshot and a new summary). */
+const MANUAL_SUBMIT_RATE_LIMIT: RateLimitRule = { limit: 10, window: "1 h" }
 /** "Regenerate" the audience summary: 5 per user per hour (each is a model call). */
 const REGENERATE_RATE_LIMIT: RateLimitRule = { limit: 5, window: "1 h" }
 
@@ -94,6 +98,9 @@ export const resyncSocialConnection = defineAction({
       throw new ActionError(
         `Numbers you entered by hand don't sync. Update them, or connect ${label} to sync automatically.`,
       )
+    }
+    if (!isSocialOAuthAvailable(connection.provider)) {
+      throw new ActionError(`Syncing ${label} isn't available right now. Please try again later.`)
     }
     if (connection.status !== "active") {
       throw new ActionError(`Your ${label} access expired. Reconnect ${label} to sync again.`)
@@ -158,24 +165,32 @@ export const requestEvidenceUpload = defineAction({
 
 export const submitManualConnection = defineAction({
   name: "social.manual_submit",
+  // The count and link are checked in `submitManualEntry` (checkManualEntryFields), after the
+  // screenshot was uploaded, so that a refusal can delete the upload.
   input: z.object({
     provider: manualProviderSchema,
-    followers: followerCountSchema,
-    profileUrl: z
-      .string()
-      .trim()
-      .min(1, "Enter the link to your profile.")
-      .max(500, "That link is too long."),
+    followers: z.union([z.string().max(100), z.number()]),
+    profileUrl: z.string().max(2000),
     evidenceKey: z.string().min(1, "Upload a screenshot of your follower count.").max(512),
   }),
   authorize: (user, { provider }) => canConnectSocial(user, provider),
   run: async ({ input, user, db }) => {
-    const result = await submitManualEntry(db, { userId: user.id, ...input })
-    await runInBackground("social_evidence_cleanup", () =>
-      deleteEvidenceObject(result.replacedEvidenceKey),
-    )
-    await refreshCreatorInBackground(user.id)
-    revalidateSocialPages()
+    const entry = { userId: user.id, ...input }
+    const limit = await rateLimit("social-manual-submit", user.id, MANUAL_SUBMIT_RATE_LIMIT)
+    if (!limit.success) {
+      await discardUnusedEvidence(db, entry)
+      throw new ActionError(
+        "You've saved your numbers several times in a short time. Please try again later.",
+      )
+    }
+    const result = await submitManualEntry(db, entry)
+    if (!result.unchanged) {
+      await runInBackground("social_evidence_cleanup", () =>
+        deleteEvidenceObject(result.replacedEvidenceKey),
+      )
+      await refreshCreatorInBackground(user.id)
+      revalidateSocialPages()
+    }
     return { connectionId: result.connectionId, created: result.created }
   },
 })

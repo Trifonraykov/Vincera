@@ -129,3 +129,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * Phone layout of the signed-in app (components/layout/mobile-tab-bar.tsx). While the bottom tab
+ * bar is on screen, --sticky-bottom is the space it takes (with the home indicator), so page
+ * content, sticky form actions (FormActions) and toasts sit above it.
+ */
+:root {
+  --app-tab-bar: 3.5rem;
+}
+@media (width < 48rem) {
+  body:has([data-mobile-tab-bar]) {
+    --sticky-bottom: calc(var(--app-tab-bar) + env(safe-area-inset-bottom));
+    --sticky-safe-area: 0px;
+  }
+}

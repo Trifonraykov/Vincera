@@ -6,7 +6,9 @@ One command starts Postgres (with pgvector) and the app, with every external ser
 docker compose up --build
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:3000>. The port is published on `127.0.0.1` only: with every
+service fake and the dev mailbox on (`DEV_MAILBOX=1`), anyone who could reach it could sign in as
+any user, admin included. Do not expose this setup to a network.
 
 - **Sign in / sign up:** enter any email. No real email is sent: open the dev mailbox at
   <http://localhost:3000/api/dev/mailbox> and click the magic link.

@@ -8,11 +8,12 @@ import { PortfolioManager } from "@/components/profiles/portfolio-manager"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { canEditBuilderProfile, canEditCreatorProfile } from "@/lib/auth/authz"
 import { requireOnboardedUser } from "@/lib/auth/session"
 import { appRolesOf } from "@/lib/auth/user"
 import { getDb } from "@/lib/db/client"
-import type { AppRole } from "@/lib/nav"
+import { ROLE_LABELS, type AppRole } from "@/lib/nav"
 import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { countryOptions, languageOptions } from "@/lib/profiles/locale"
 import {
@@ -23,12 +24,15 @@ import {
 
 export const metadata: Metadata = { title: "Profile" }
 
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
+
 /**
  * Settings → Profile (§12): the user's creator and/or builder profile, and the builder's
- * portfolio. The active role's profile comes first. A role without a profile (added later and
- * left midway, §19.11) links to its onboarding step.
+ * portfolio. With both roles the profiles sit in tabs, the active role's first (`?tab=creator`
+ * or `?tab=builder` opens the other). A role without a profile (added later and left midway,
+ * §19.11) links to its onboarding step.
  */
-export default async function ProfileSettingsPage() {
+export default async function ProfileSettingsPage({ searchParams }: Props) {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
   const db = getDb()
@@ -37,21 +41,30 @@ export default async function ProfileSettingsPage() {
     a === user.activeRole ? -1 : b === user.activeRole ? 1 : 0,
   )
 
-  const sections = await Promise.all(
-    ordered.map(async (role) => {
-      if (role === "creator" && canEditCreatorProfile(user)) {
-        return <CreatorSection key={role} data={await creatorProfilePageData(db, user)} />
-      }
-      if (role === "builder" && canEditBuilderProfile(user)) {
-        const [data, items] = await Promise.all([
-          builderProfilePageData(db, user),
-          portfolioPageItems(db, user.id),
-        ])
-        return <BuilderSection key={role} data={data} items={items} />
-      }
-      return null
-    }),
-  )
+  const sections = (
+    await Promise.all(
+      ordered.map(async (role) => {
+        if (role === "creator" && canEditCreatorProfile(user)) {
+          return {
+            role,
+            node: <CreatorSection data={await creatorProfilePageData(db, user)} />,
+          }
+        }
+        if (role === "builder" && canEditBuilderProfile(user)) {
+          const [data, items] = await Promise.all([
+            builderProfilePageData(db, user),
+            portfolioPageItems(db, user.id),
+          ])
+          return { role, node: <BuilderSection data={data} items={items} /> }
+        }
+        return null
+      }),
+    )
+  ).filter((section) => section !== null)
+
+  const requested = (await searchParams).tab
+  const initialTab =
+    sections.find((section) => section.role === requested)?.role ?? sections[0]?.role
 
   return (
     <div className="max-w-3xl space-y-10">
@@ -59,7 +72,30 @@ export default async function ProfileSettingsPage() {
         title="Profile"
         description="What other people see on your public profile and in their matches."
       />
-      {sections}
+      {sections.length > 1 && initialTab ? (
+        <Tabs defaultValue={initialTab} className="gap-6">
+          <TabsList className="w-full sm:w-fit" aria-label="Your profiles">
+            {sections.map((section) => (
+              <TabsTrigger key={section.role} value={section.role} className="px-4">
+                {ROLE_LABELS[section.role]} profile
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {sections.map((section) => (
+            // Kept mounted, so unsaved edits survive switching tabs.
+            <TabsContent
+              key={section.role}
+              value={section.role}
+              forceMount
+              className="data-[state=inactive]:hidden"
+            >
+              {section.node}
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : (
+        sections.map((section) => <div key={section.role}>{section.node}</div>)
+      )}
     </div>
   )
 }
@@ -104,7 +140,7 @@ function CreatorSection({ data }: { data: Awaited<ReturnType<typeof creatorProfi
             Creator profile
           </h2>
           <p className="text-sm text-muted-foreground">
-            Your audience summary and topics are edited on the{" "}
+            Your audience summary is edited on the{" "}
             <Link href="/app/audience" className="font-medium text-foreground underline">
               Audience
             </Link>{" "}

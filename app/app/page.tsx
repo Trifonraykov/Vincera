@@ -17,10 +17,12 @@ import { toShellViewer } from "@/components/layout/viewer"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { requireOnboardedUser } from "@/lib/auth/session"
+import { canEditBuilderProfile, canEditCreatorProfile, canManageOwnAccount } from "@/lib/auth/authz"
+import { authorizePage, requireOnboardedUser } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
-import type { AppRole } from "@/lib/nav"
+import { isBuiltRoute, type AppRole } from "@/lib/nav"
 import type { OnboardingSnapshot } from "@/lib/onboarding/next-step"
 import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
 import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
@@ -47,7 +49,8 @@ const TITLES: Record<AppRole, { title: string; description: string }> = {
 
 /**
  * Cards per active role (§12: `/app` is role-aware). Setup cards come from the user's real state
- * (connections, portfolio, payouts); the rest point at the next phases' pages.
+ * (connections, portfolio, payouts); the rest describe the next phases' pages, and say "Coming
+ * soon" instead of linking until those pages are built (`isBuiltRoute`).
  */
 function homeCards(role: AppRole, snapshot: OnboardingSnapshot): HomeCard[] {
   const payoutsCard: HomeCard | null =
@@ -123,7 +126,13 @@ function homeCards(role: AppRole, snapshot: OnboardingSnapshot): HomeCard[] {
 export default async function AppHomePage() {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
   const user = await requireOnboardedUser()
+  authorizePage(canManageOwnAccount(user))
   const { activeRole } = toShellViewer(user)
+  // The home page shows the active role's own setup state (profile, connections, portfolio).
+  authorizePage(
+    activeRole === "creator" ? canEditCreatorProfile(user) : canEditBuilderProfile(user),
+    ONBOARDING_STEP_PATHS.role,
+  )
   const snapshot = await loadOnboardingSnapshot(getDb(), user.id)
   const home = TITLES[activeRole]
   const hasProfile =
@@ -137,12 +146,14 @@ export default async function AppHomePage() {
         title={home.title}
         description={home.description}
         actions={
-          <Button asChild variant="outline">
-            <Link href="/app/proposals">
-              <Send aria-hidden="true" />
-              Proposals
-            </Link>
-          </Button>
+          isBuiltRoute("/app/proposals") ? (
+            <Button asChild variant="outline">
+              <Link href="/app/proposals">
+                <Send aria-hidden="true" />
+                Proposals
+              </Link>
+            </Button>
+          ) : null
         }
       />
 
@@ -187,9 +198,13 @@ export default async function AppHomePage() {
             title={card.title}
             description={card.description}
             action={
-              <Button asChild size="sm">
-                <Link href={card.action.href}>{card.action.label}</Link>
-              </Button>
+              isBuiltRoute(card.action.href.split(/[?#]/, 1)[0] ?? "") ? (
+                <Button asChild size="sm">
+                  <Link href={card.action.href}>{card.action.label}</Link>
+                </Button>
+              ) : (
+                <Badge variant="secondary">Coming soon</Badge>
+              )
             }
           />
         ))}

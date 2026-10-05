@@ -103,6 +103,7 @@ function creatorForm(overrides: Partial<CreatorProfileForm> = {}): CreatorProfil
     handle: `ada_${Math.random().toString(36).slice(2, 8)}`,
     niche: "Notion tutorials",
     bio: "Weekly videos about getting organised.",
+    topics: [],
     country: "DE",
     languages: ["en", "es"],
     ...overrides,
@@ -405,6 +406,8 @@ describe("portfolio", () => {
     description: "Invoices for freelancers.",
     format: "tool" as const,
     isShipped: true,
+    imageKey: null,
+    removeImage: false,
   }
 
   it("adds, updates, lists and deletes items with builder_profile.updated events", async () => {
@@ -432,13 +435,13 @@ describe("portfolio", () => {
         form: { ...item, title: "Invoice tool" },
         source: "settings",
       }),
-    ).toBe(true)
+    ).toEqual({ itemId, removedImageKey: null })
     expect(
       await deletePortfolioItem(testDb.db, { userId: row.id, itemId, source: "settings" }),
-    ).toBe(true)
+    ).toEqual({ itemId, removedImageKey: null })
     expect(
       await deletePortfolioItem(testDb.db, { userId: row.id, itemId, source: "settings" }),
-    ).toBe(false)
+    ).toBeNull()
 
     const updates = await eventsOf(profileId, "builder_profile.updated")
     expect(updates.map((event) => event.properties)).toEqual([
@@ -464,14 +467,14 @@ describe("portfolio", () => {
         form: { ...item, title: "Hijacked" },
         source: "settings",
       }),
-    ).toBe(false)
+    ).toBeNull()
     expect(
       await deletePortfolioItem(testDb.db, {
         userId: intruder.row.id,
         itemId,
         source: "settings",
       }),
-    ).toBe(false)
+    ).toBeNull()
     expect((await listPortfolioItems(testDb.db, owner.row.id))[0]?.title).toBe("Invoice generator")
 
     const noProfile = await newUser(["builder"])

@@ -159,6 +159,23 @@ describe("local storage fake", () => {
     await expect(storage.putObject("../escape", "x", "text/plain")).rejects.toThrow()
   })
 
+  it("copies objects server-side; the copy does not follow later writes to the source", async () => {
+    const storage = createLocalStorage(dataRoot.dir)
+    expect(await storage.copyObject("up/missing.png", "final/x.png")).toBe(false)
+    expect(await storage.statObject("final/x.png")).toBeNull()
+
+    await storage.putObject("up/a.png", "png-bytes", "image/png")
+    expect(await storage.copyObject("up/a.png", "final/a.png")).toBe(true)
+    await storage.putObject("up/a.png", "<html>swapped</html>", "image/png")
+    const copy = await storage.getObject("final/a.png")
+    expect(copy && Buffer.from(copy.body).toString()).toBe("png-bytes")
+    expect(await storage.statObject("final/a.png")).toEqual({
+      contentType: "image/png",
+      sizeBytes: 9,
+    })
+    await expect(storage.copyObject("up/a.png", "../escape")).rejects.toThrow()
+  })
+
   it("signs URLs against the app URL with AUTH_SECRET and the app clock", async () => {
     const url = await createLocalStorage(dataRoot.dir).signedGetUrl("a/b.txt", {
       expiresInSeconds: 300,
