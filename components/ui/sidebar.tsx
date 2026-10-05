@@ -179,7 +179,12 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          // Safe areas (viewport-fit=cover): the notch and status bar on top, the home indicator
+          // under the footer's user menu, and the screen's rounded edge on its side.
+          className={cn(
+            "w-(--sidebar-width) bg-sidebar p-0 pt-safe pb-safe text-sidebar-foreground [&>button]:hidden",
+            side === "left" ? "pl-safe" : "pr-safe",
+          )}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -205,30 +210,39 @@ function Sidebar({
       data-variant={variant}
       data-side={side}
       data-slot="sidebar"
+      // A phone in landscape is wide enough for this layout: the sidebar grows by the safe area
+      // on its side (the notch, the rounded corners) and pads its content by it, so nothing is
+      // clipped. Zero on every other screen.
+      style={
+        {
+          "--sidebar-inset":
+            side === "left" ? "env(safe-area-inset-left, 0px)" : "env(safe-area-inset-right, 0px)",
+        } as React.CSSProperties
+      }
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
+          "relative w-[calc(var(--sidebar-width)+var(--sidebar-inset,0px))] bg-transparent transition-[width] duration-200 ease-linear",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
-            ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4)))]"
-            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon)",
+            ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+var(--sidebar-inset,0px))]"
+            : "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+var(--sidebar-inset,0px))]",
         )}
       />
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-[calc(var(--sidebar-width)+var(--sidebar-inset,0px))] pb-safe transition-[left,right,width] duration-200 ease-linear md:flex",
           side === "left"
-            ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-            : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+            ? "left-0 pl-safe group-data-[collapsible=offcanvas]:left-[calc((var(--sidebar-width)+var(--sidebar-inset,0px))*-1)]"
+            : "right-0 pr-safe group-data-[collapsible=offcanvas]:right-[calc((var(--sidebar-width)+var(--sidebar-inset,0px))*-1)]",
           // Adjust the padding for floating and inset variants.
           variant === "floating" || variant === "inset"
-            ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
-            : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+            ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px+var(--sidebar-inset,0px))]"
+            : "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+var(--sidebar-inset,0px))] group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className,
         )}
         {...props}

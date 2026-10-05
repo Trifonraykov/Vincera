@@ -26,6 +26,13 @@ function resolveE2eDatabaseUrl(): string {
 const e2eDatabaseUrl = resolveE2eDatabaseUrl()
 process.env.E2E_DATABASE_URL = e2eDatabaseUrl
 
+/**
+ * Specs for the phone layout run in the "mobile" project: tests/e2e/mobile.spec.ts and
+ * mobile-<topic>.spec.ts. mobile-desktop.spec.ts checks the desktop layout next to them and runs
+ * in the desktop project.
+ */
+const MOBILE_SPECS = /\/mobile(?!-desktop)(-[\w-]+)?\.spec\.ts$/
+
 // This sandbox ships a pre-installed Chromium; elsewhere (CI) Playwright uses its own download.
 const sandboxChromium = "/opt/pw-browsers/chromium"
 const executablePath = existsSync(sandboxChromium) ? sandboxChromium : undefined
@@ -52,8 +59,20 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: MOBILE_SPECS,
       use: {
         ...devices["Desktop Chrome"],
+        launchOptions: executablePath ? { executablePath } : {},
+      },
+    },
+    {
+      // The platform as a phone app (CLAUDE.md §19, "Mobile app (PWA) patterns"): an iPhone's
+      // screen, touch and user agent, on Chromium (the browser this sandbox and CI install).
+      name: "mobile",
+      testMatch: MOBILE_SPECS,
+      use: {
+        ...devices["iPhone 13"],
+        browserName: "chromium",
         launchOptions: executablePath ? { executablePath } : {},
       },
     },
@@ -76,6 +95,8 @@ export default defineConfig({
       NEXT_PUBLIC_APP_URL: baseURL,
       AUTH_URL: baseURL,
       ADMIN_EMAILS: E2E_ADMIN_EMAIL,
+      // The service worker registers under `next dev` too, as it does in CI's production build.
+      NEXT_PUBLIC_ENABLE_SW: "1",
     },
   },
 })

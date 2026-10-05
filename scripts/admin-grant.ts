@@ -8,12 +8,12 @@
 import { eq } from "drizzle-orm"
 
 import { normalizeEmail } from "@/lib/auth/email"
-import { createDb } from "@/lib/db/client"
 import { users } from "@/lib/db/schema"
 import { grantAdminRole } from "@/lib/users/roles"
 
 import { parseDatabaseUrl, runScript } from "./lib/db-admin"
-import { loadEnvFiles, requireEnv } from "./lib/load-env"
+import { loadEnvFiles } from "./lib/load-env"
+import { connectScriptDatabase } from "./lib/script-db"
 
 loadEnvFiles()
 
@@ -23,11 +23,7 @@ runScript(async () => {
     throw new Error("Usage: pnpm admin:grant <email>")
   }
 
-  const databaseUrl = requireEnv("DATABASE_URL")
-  const database = createDb(databaseUrl, {
-    max: 1,
-    caCert: process.env.DATABASE_CA_CERT?.trim() || undefined,
-  })
+  const database = connectScriptDatabase()
   try {
     const [user] = await database.db
       .select({ id: users.id })
@@ -38,7 +34,7 @@ runScript(async () => {
     }
 
     const granted = await grantAdminRole(database.db, { userId: user.id, source: "admin_cli" })
-    const { name } = parseDatabaseUrl(databaseUrl)
+    const { name } = parseDatabaseUrl(database.url)
     console.log(
       granted
         ? `Granted the admin role to ${email} (database "${name}").`

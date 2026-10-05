@@ -9,7 +9,10 @@ export default function PublicProfilesLayout({ children }: { children: ReactNode
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader appName={env.APP_NAME} />
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+      <main
+        id="main"
+        className="mx-auto w-full max-w-5xl flex-1 py-8 px-safe-4 sm:py-10 sm:px-safe-6"
+      >
         {children}
       </main>
       <SiteFooter appName={env.APP_NAME} />

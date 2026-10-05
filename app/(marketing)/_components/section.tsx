@@ -3,7 +3,11 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 export function Container({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("mx-auto w-full max-w-6xl px-4 sm:px-6", className)}>{children}</div>
+  return (
+    <div className={cn("mx-auto w-full max-w-6xl px-safe-4 sm:px-safe-6", className)}>
+      {children}
+    </div>
+  )
 }
 
 /** A titled band of a marketing page. */
@@ -72,7 +76,8 @@ export function Hero({
           <p className="max-w-2xl text-lg text-pretty text-muted-foreground sm:text-xl">
             {description}
           </p>
-          {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+          {/* Phones: full-width stacked buttons, easy to reach with a thumb. */}
+          {actions ? <div className="grid gap-3 sm:flex sm:flex-wrap">{actions}</div> : null}
         </div>
       </Container>
     </section>

@@ -8,9 +8,31 @@ const nextConfig: NextConfig = {
   // (the tab bar's Home and More, the sidebar toggle, the theme switch), so it covered Home.
   // Compile and runtime errors are still shown (CLAUDE.md §19.19).
   devIndicators: false,
+  experimental: {
+    // `next dev` keeps every compiled route in memory until Turbopack's "auto" eviction sees memory
+    // pressure, which it reads from the whole machine: inside a container or CI runner with a
+    // lower memory limit, a session that opens ~30 routes (the e2e suite) reached 12 GB and was
+    // killed. "full" drops the in-memory copies after each snapshot to the dev cache on disk and
+    // reloads them on demand (peak 4.5 GB for the same routes; CLAUDE.md §19.22). Dev only.
+    turbopackMemoryEviction: "full",
+  },
   env: {
     // DSNs are not secret: expose the server DSN to the browser SDK (instrumentation-client.ts).
     NEXT_PUBLIC_SENTRY_DSN: process.env.SENTRY_DSN ?? "",
+  },
+  async headers() {
+    return [
+      {
+        // The service worker (public/sw.js) is never cached, so a new version reaches every phone
+        // on its next visit; its own fetches are limited to this origin (CLAUDE.md §19).
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+    ]
   },
 }
 

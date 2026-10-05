@@ -78,3 +78,36 @@ export async function completeOnboardingInDb(email: string): Promise<void> {
     )
   })
 }
+
+/** The fake YouTube fixture "Ada Codes" (tests/fixtures/social/youtube/ada-codes.json). */
+export const ADA_CODES_CHANNEL_ID = "UCaDaC0des5x7Qm1RkT9pLzw"
+
+/**
+ * Free a fake provider account (a fixture such as YouTube's "Ada Codes") that an earlier test in
+ * the same run connected: one platform user per provider account (§19.11), so a second test
+ * connecting the same fixture would get `?error=account_in_use`. Deletes that connection the way
+ * a disconnect does (snapshots cascade through the GDPR erasure hatch, §19.5). Tests run
+ * serially, so this never pulls a connection from under a running test.
+ */
+export async function releaseSocialAccount(
+  provider: "youtube" | "instagram" | "tiktok" | "github",
+  providerAccountId: string,
+): Promise<void> {
+  await withE2eDb(async (pool) => {
+    const client = await pool.connect()
+    try {
+      await client.query("BEGIN")
+      await client.query("SELECT set_config('app.gdpr_erasure', 'on', true)")
+      await client.query(
+        "DELETE FROM social_connections WHERE provider = $1 AND provider_account_id = $2",
+        [provider, providerAccountId],
+      )
+      await client.query("COMMIT")
+    } catch (error) {
+      await client.query("ROLLBACK")
+      throw error
+    } finally {
+      client.release()
+    }
+  })
+}

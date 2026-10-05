@@ -1,28 +1,31 @@
+import type { Page } from "@playwright/test"
+
 import { expect, test } from "./fixtures"
 import { uniqueEmail } from "./helpers/accounts"
 import { chooseRole, signUp } from "./helpers/auth"
-import { completeOnboardingInDb } from "./helpers/db"
+import { completeOnboardingInDb, withE2eDb } from "./helpers/db"
 import { fillCreatorProfile, uniqueHandle } from "./helpers/profiles"
 
 /**
- * The platform on a phone, like a mobile app: a bottom tab bar in the signed-in app with the full
- * menu behind "More", sticky form actions that stay above it, dark mode, no sideways scrolling,
- * and a web app manifest so it installs to the home screen.
+ * The signed-in app as a phone app ("mobile" project: an iPhone 13 screen on Chromium): the bottom
+ * tab bar (Home, three built pages standing in for Discover/Collabs/Inbox, Me), the compact top app
+ * bar with its back button, the Me page that lists everything else, sticky form actions above the
+ * tabs, and the shell kept on 404s. CLAUDE.md §19, "Mobile app (PWA) patterns".
  */
 
-test.use({
-  viewport: { width: 390, height: 844 },
-  isMobile: true,
-  hasTouch: true,
-  colorScheme: "dark",
-})
-
-async function horizontalOverflow(page: import("@playwright/test").Page): Promise<number> {
-  return page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+async function horizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const root = document.scrollingElement ?? document.documentElement
+    return root.scrollWidth - window.innerWidth
+  })
 }
 
-test("a creator moves around the app with the bottom tab bar", async ({ page }) => {
-  test.setTimeout(90_000)
+test.use({ colorScheme: "dark" })
+
+test("a creator moves around the app with the bottom tabs, the app bar and Me", async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
   const email = uniqueEmail("mobile")
   await signUp(page, email, "Mia Mobile")
   await chooseRole(page, "creator")
@@ -30,9 +33,13 @@ test("a creator moves around the app with the bottom tab bar", async ({ page }) 
 
   // Onboarding has no tab bar; its own action bar holds Continue at the bottom of the screen.
   await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0)
+  const viewport = page.viewportSize()
   const continueButton = page.getByRole("button", { name: "Continue" })
   const continueBox = await continueButton.boundingBox()
-  expect(continueBox && continueBox.y + continueBox.height).toBeGreaterThan(844 - 100)
+  expect(continueBox && continueBox.y + continueBox.height).toBeGreaterThan(
+    (viewport?.height ?? 0) - 100,
+  )
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
   await fillCreatorProfile(page, { handle: uniqueHandle("mia"), niche: "Phone photography" })
   await continueButton.click()
   await expect(page).toHaveURL(/\/onboarding\/creator\/connect$/)
@@ -42,48 +49,99 @@ test("a creator moves around the app with the bottom tab bar", async ({ page }) 
   await expect(page.locator("html")).toHaveClass(/\bdark\b/)
   const tabs = page.getByRole("navigation", { name: "Main" })
   await expect(tabs).toBeVisible()
-  await expect(tabs.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page")
+  await expect(tabs.getByRole("link")).toHaveText(["Home", "Audience", "Profile", "Payouts", "Me"])
+  await expect(tabs.getByRole("link", { exact: true, name: "Home" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  )
+  // No sidebar on phones: no menu toggle, no sidebar landmark; the app bar has the logo.
+  await expect(page.getByRole("button", { name: "Toggle Sidebar" })).toBeHidden()
+  const appBar = page.locator("[data-app-bar]")
+  await expect(appBar).toBeVisible()
+  await expect(appBar.getByRole("link", { name: /home$/ })).toBeVisible()
+  await expect(appBar.getByRole("link", { name: "Back" })).toHaveCount(0)
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
 
-  // Every tab opens a real page (no 404) and the tab bar stays on screen.
+  // Every tab opens a real page (no 404), the tab bar stays, and touch targets are big enough.
   const expected = [
     { name: "Audience", url: /\/app\/audience$/, heading: "Audience" },
     { name: "Profile", url: /\/app\/settings\/profile$/, heading: "Profile" },
     { name: "Payouts", url: /\/app\/settings\/payouts$/, heading: "Payouts" },
+    { name: "Me", url: /\/app\/me$/, heading: "Mia Mobile" },
     { name: "Home", url: /\/app$/, heading: "Creator home" },
   ]
-  await expect(tabs.getByRole("link")).toHaveText(["Home", "Audience", "Profile", "Payouts"])
   for (const tab of expected) {
-    await tabs.getByRole("link", { name: tab.name }).click()
+    const link = tabs.getByRole("link", { exact: true, name: tab.name })
+    const box = await link.boundingBox()
+    expect(box?.height).toBeGreaterThanOrEqual(44)
+    expect(box?.width).toBeGreaterThanOrEqual(44)
+    await link.click()
     await expect(page).toHaveURL(tab.url)
     await expect(page.getByRole("heading", { level: 1, name: tab.heading })).toBeVisible()
-    await expect(tabs.getByRole("link", { name: tab.name })).toHaveAttribute("aria-current", "page")
+    await expect(link).toHaveAttribute("aria-current", "page")
     await expect(page.getByText("Page not found")).toHaveCount(0)
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
   }
 
-  await tabs.getByRole("link", { name: "Audience" }).click()
-  await expect(page).toHaveURL(/\/app\/audience$/)
-  await expect(tabs.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current")
+  // Me lists everything else: later phases' pages as "Soon", every settings page, sign out.
+  await tabs.getByRole("link", { exact: true, name: "Me" }).click()
+  await expect(page).toHaveURL(/\/app\/me$/)
+  await expect(appBar).toContainText("Me")
+  const me = page.locator("main")
+  // Pages of later phases: listed, marked "Soon", not links.
+  const soonRows = me.locator("[data-coming-soon]")
+  for (const soon of ["Ideas", "Discover", "Proposals", "Collabs", "Messages", "Earnings"]) {
+    await expect(soonRows.filter({ hasText: soon })).toContainText(["Soon"])
+  }
+  await expect(soonRows.getByRole("link")).toHaveCount(0)
+  await expect(me.getByRole("link", { name: /Creator profile/ })).toHaveAttribute(
+    "href",
+    /^\/c\/mia_/,
+  )
+  await expect(me.getByRole("button", { name: "Sign out" })).toBeVisible()
 
-  // "More" opens the full menu.
-  await tabs.getByRole("button", { name: /^More/ }).click()
-  const menu = page.getByRole("dialog", { name: "Sidebar" })
-  await expect(menu).toBeVisible()
-  await menu.getByRole("link", { name: "Settings" }).click()
-  await expect(page).toHaveURL(/\/app\/settings\/profile$/)
-  await expect(menu).toBeHidden()
+  // A settings page from Me: the tab bar marks Me, and the app bar has a back button to Me.
+  await me.getByRole("link", { name: "Account", exact: true }).click()
+  await expect(page).toHaveURL(/\/app\/settings\/account$/)
+  // The settings tab strip scrolls sideways on a phone and brings the current tab into view.
+  await expect(
+    page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Account" }),
+  ).toBeInViewport({ ratio: 1 })
+  await expect(tabs.getByRole("link", { exact: true, name: "Me" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  )
+  await expect(appBar).toContainText("Account")
+  await appBar.getByRole("link", { name: "Back" }).click()
+  await expect(page).toHaveURL(/\/app\/me$/)
+
+  // Appearance lives on Me: switching to light mode applies at once.
+  await page.getByRole("button", { name: "Light", exact: true }).click()
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/)
+  await expect(page.getByRole("button", { name: "Light", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  )
 
   // The profile form's sticky Save bar sits above the tab bar, never under it.
+  await tabs.getByRole("link", { exact: true, name: "Profile" }).click()
   const save = page.getByRole("button", { name: "Save creator profile" })
   await expect(save).toBeVisible()
   const saveBox = await save.boundingBox()
   const tabsBox = await tabs.boundingBox()
   expect(saveBox && tabsBox && saveBox.y + saveBox.height).toBeLessThanOrEqual(tabsBox?.y ?? 0)
   expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
+
+  // Sign out from Me.
+  await tabs.getByRole("link", { exact: true, name: "Me" }).click()
+  await page.getByRole("button", { name: "Sign out" }).click()
+  await expect(page).toHaveURL(/\/$/)
 })
 
-test("pages that don't exist yet keep the app shell and a way back", async ({ page }) => {
-  test.setTimeout(60_000)
+test("a builder's tabs, and pages that don't exist yet keep the shell and a way back", async ({
+  page,
+}) => {
+  test.setTimeout(90_000)
   // The 404 pages must not log errors either (under `next dev` each one becomes an "Issues" badge
   // over the bottom-left corner, the tab bar's Home). The 404 responses themselves are expected.
   const consoleErrors: string[] = []
@@ -101,43 +159,55 @@ test("pages that don't exist yet keep the app shell and a way back", async ({ pa
   // The builder's tabs only lead to built pages.
   await page.goto("/app")
   const tabs = page.getByRole("navigation", { name: "Main" })
-  await expect(tabs.getByRole("link")).toHaveText(["Home", "Profile", "Connections", "Payouts"])
-  for (const name of ["Profile", "Connections", "Payouts", "Home"]) {
-    await tabs.getByRole("link", { name }).click()
-    await expect(tabs.getByRole("link", { name })).toHaveAttribute("aria-current", "page")
+  await expect(tabs.getByRole("link")).toHaveText([
+    "Home",
+    "Profile",
+    "Connections",
+    "Payouts",
+    "Me",
+  ])
+  for (const name of ["Profile", "Connections", "Payouts", "Me", "Home"]) {
+    await tabs.getByRole("link", { name, exact: true }).click()
+    await expect(tabs.getByRole("link", { name, exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    )
     await expect(page.getByText("Page not found")).toHaveCount(0)
   }
 
-  // No link on the home page leads to a missing page; later phases' cards say "Coming soon".
-  await expect(page.getByText("Coming soon").first()).toBeVisible()
-  const hrefs = await page
-    .locator('a[href^="/"]')
-    .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""))
-  for (const href of new Set(hrefs)) {
-    const response = await page.request.get(href, { maxRedirects: 0 })
-    expect(response.status(), href).toBeLessThan(400)
+  // No link on the home page or on Me leads to a missing page; later phases say "Coming soon".
+  for (const path of ["/app", "/app/me"]) {
+    await page.goto(path)
+    const hrefs = await page
+      .locator('main a[href^="/"]')
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""))
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const href of new Set(hrefs)) {
+      const response = await page.request.get(href, { maxRedirects: 0 })
+      expect(response.status(), href).toBeLessThan(400)
+    }
   }
 
-  // A §12 page a later phase builds: "Coming soon" inside the shell, with the tab bar.
+  // A §12 page a later phase builds: "Coming soon" inside the shell, with the tabs and a back
+  // button (to Me, which lists it).
   const discover = await page.goto("/app/discover")
   expect(discover?.status()).toBe(404)
   await expect(page.getByRole("heading", { level: 1, name: "Discover" })).toBeVisible()
   await expect(page.getByText("Coming soon", { exact: true })).toBeVisible()
   await expect(tabs).toBeVisible()
-  // The menu lists it without a link.
-  await tabs.getByRole("button", { name: /^More/ }).click()
-  const menu = page.getByRole("dialog", { name: "Sidebar" })
-  await expect(menu.getByRole("button", { name: "Discover (coming soon)" })).toBeDisabled()
-  await expect(menu.getByRole("link", { name: "Discover" })).toHaveCount(0)
-  await page.keyboard.press("Escape")
-  await page.getByRole("link", { name: "Go to home" }).click()
-  await expect(page).toHaveURL(/\/app$/)
+  const appBar = page.locator("[data-app-bar]")
+  await expect(appBar).toContainText("Discover")
+  await appBar.getByRole("link", { name: "Back" }).click()
+  await expect(page).toHaveURL(/\/app\/me$/)
 
   // A mistyped app URL: "Page not found", still inside the shell.
   expect((await page.goto("/app/no-such-page"))?.status()).toBe(404)
   await expect(page.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible()
   await expect(tabs).toBeVisible()
-  await tabs.getByRole("link", { name: "Home" }).click()
+  // The page names itself in the app bar (<AppBarSlot>), with a back button home.
+  await expect(appBar).toContainText("Page not found")
+  await expect(appBar.getByRole("link", { name: "Back" })).toHaveAttribute("href", "/app")
+  await tabs.getByRole("link", { exact: true, name: "Home" }).click()
   await expect(page).toHaveURL(/\/app$/)
 
   // Outside the app: the site's header and links back.
@@ -152,31 +222,34 @@ test("pages that don't exist yet keep the app shell and a way back", async ({ pa
   expect(consoleErrors).toEqual([])
 })
 
-test("the web app manifest makes it installable", async ({ page, request }) => {
-  await page.goto("/")
-  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
-    "href",
-    "/manifest.webmanifest",
+test("the admin area works at phone width, with its menu in a sheet", async ({ page }) => {
+  test.setTimeout(60_000)
+  const email = uniqueEmail("mobileadmin")
+  await signUp(page, email, "Ada Admin")
+  await chooseRole(page, "builder")
+  await expect(page).toHaveURL(/\/onboarding\/builder\/profile$/)
+  await completeOnboardingInDb(email)
+  await withE2eDb((pool) =>
+    pool.query(
+      "UPDATE users SET roles = array_append(roles, 'admin') WHERE email = $1 AND NOT 'admin' = ANY(roles)",
+      [email],
+    ),
   )
-  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
-    "content",
-    /viewport-fit=cover/,
-  )
-  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveCount(1)
 
-  const response = await request.get("/manifest.webmanifest")
-  expect(response.ok()).toBe(true)
-  const manifest = (await response.json()) as {
-    display: string
-    start_url: string
-    icons: { src: string; sizes: string; purpose: string }[]
-  }
-  expect(manifest).toMatchObject({ display: "standalone", start_url: "/app" })
-  for (const icon of manifest.icons) {
-    const image = await request.get(icon.src)
-    expect(image.ok()).toBe(true)
-    expect(image.headers()["content-type"]).toBe("image/png")
-  }
-  const appleIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href")
-  expect((await request.get(appleIcon ?? "/missing")).headers()["content-type"]).toBe("image/png")
+  // Me links to the admin area.
+  await page.goto("/app/me")
+  await page.getByRole("link", { name: "Admin area" }).click()
+  await expect(page).toHaveURL(/\/admin$/)
+  await expect(page.getByRole("heading", { level: 1, name: "Admin overview" })).toBeVisible()
+  await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0)
+  expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
+
+  await page.getByRole("button", { name: "Open the admin menu" }).click()
+  const menu = page.getByRole("dialog", { name: "Sidebar" })
+  await expect(menu).toBeVisible()
+  const overview = menu.getByRole("link", { name: "Overview" })
+  expect((await overview.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+  await expect(menu.getByRole("button", { name: "Users (coming soon)" })).toBeDisabled()
+  await page.keyboard.press("Escape")
+  await expect(menu).toBeHidden()
 })

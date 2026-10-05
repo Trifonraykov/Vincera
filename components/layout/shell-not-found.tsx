@@ -9,6 +9,8 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { plannedNavItem } from "@/lib/nav"
 
+import { AppBarSlot } from "./app-bar-slot"
+
 /**
  * The 404 page inside the app and admin shells (app/app/not-found.tsx, app/admin/not-found.tsx),
  * so the sidebar, header and phone tab bar stay on screen and there is always a way back. A page
@@ -39,6 +41,8 @@ export function ShellNotFound({ homeHref }: { homeHref: "/app" | "/admin" }) {
 
   return (
     <div className="space-y-8">
+      {/* No menu knows this path: name the page in the phone app bar, and go back home. */}
+      <AppBarSlot title="Page not found" back={homeHref} />
       <PageHeader title="Page not found" />
       <EmptyState
         icon={SearchX}

@@ -5,7 +5,12 @@ import { newId } from "@/lib/ids"
 import { expect, test } from "./fixtures"
 import { uniqueEmail } from "./helpers/accounts"
 import { chooseRole, signUp } from "./helpers/auth"
-import { completeOnboardingInDb, withE2eDb } from "./helpers/db"
+import {
+  ADA_CODES_CHANNEL_ID,
+  completeOnboardingInDb,
+  releaseSocialAccount,
+  withE2eDb,
+} from "./helpers/db"
 import { runJob } from "./helpers/jobs"
 import { fillBuilderProfile, fillCreatorProfile, uniqueHandle } from "./helpers/profiles"
 
@@ -88,6 +93,8 @@ test.describe("Phase 1 acceptance", () => {
     ).toBeVisible()
     const youtube = page.getByRole("region", { name: "YouTube" })
     await expect(youtube.getByText("Recommended")).toBeVisible()
+    // The phone spec connects the same fixture channel; whichever runs second takes it over.
+    await releaseSocialAccount("youtube", ADA_CODES_CHANNEL_ID)
     await expect(page.getByRole("region", { name: "Instagram" })).toContainText(
       "Business or Creator account",
     )

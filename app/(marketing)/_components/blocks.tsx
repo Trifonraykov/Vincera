@@ -84,7 +84,7 @@ export function CtaBand({ title, description }: { title: string; description: st
           <h2 className="text-2xl font-semibold tracking-tight text-balance">{title}</h2>
           <p className="text-pretty text-muted-foreground">{description}</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
           <Button asChild size="lg">
             <Link href={AUTH_LINKS.signUp}>Get started free</Link>
           </Button>

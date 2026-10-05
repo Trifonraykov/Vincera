@@ -74,6 +74,9 @@ test.describe("onboarding profiles and settings", () => {
     // Invalid input comes back with plain-language errors, and what was typed is kept.
     await fillCreatorProfile(page, { name: "Maya Maker", handle: "no", niche: "Budget cooking" })
     await page.getByRole("button", { name: "Continue" }).click()
+    // Wait for the server's answer, not the live hint (same words, already on screen): the
+    // refused form puts back what was submitted, which would overwrite the handle typed next.
+    await expect(handleInput).toHaveAttribute("aria-describedby", /-error\b/)
     await expect(page.getByText(/Use 3–30 lowercase letters, numbers or underscores/)).toBeVisible()
     await expect(handleInput).toHaveAttribute("aria-invalid", "true")
     await expect(page.getByLabel(/Your niche/)).toHaveValue("Budget cooking")

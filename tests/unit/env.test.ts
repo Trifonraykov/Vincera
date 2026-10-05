@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, onTestFinished } from "vitest"
 
 import {
   devMailboxEnabled,
@@ -390,55 +391,146 @@ describe("testRoutesEnabled", () => {
   })
 })
 
-describe("DATABASE_URL on Supabase", () => {
+describe("database connection settings", () => {
   const supabase =
-    "postgresql://postgres.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+    "postgresql://postgres.abcdefghijklmnop:pw@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
   const pem =
     "-----BEGIN CERTIFICATE-----\\nMIIDxTCCAq2gAwIBAgIBADANBgkqhkiG9w0BAQsFADA=\\n-----END CERTIFICATE-----"
+  const fix =
+    "set DATABASE_CA_CERT to the CA certificate from the Supabase dashboard (Database settings → SSL configuration → Download certificate)"
 
-  it("requires TLS verified against Supabase's CA in production", () => {
-    const fix =
-      "set DATABASE_CA_CERT to the CA certificate from the Supabase dashboard (Database settings → SSL configuration → Download certificate)"
+  it("defaults DATABASE_SSL to unset and the pool to 10 connections", () => {
+    const env = parseEnv(base)
+    expect(env.DATABASE_SSL).toBeUndefined()
+    expect(env.DATABASE_CA_CERT).toBeUndefined()
+    expect(env.DATABASE_POOL_MAX).toBe(10)
+    expect(parseEnv({ ...base, DATABASE_POOL_MAX: "4", DATABASE_SSL: "Require" })).toMatchObject({
+      DATABASE_POOL_MAX: 4,
+      DATABASE_SSL: "require",
+    })
+  })
+
+  it.each([
+    ["DATABASE_SSL", "prefer"],
+    ["DATABASE_POOL_MAX", "0"],
+    ["DATABASE_POOL_MAX", "101"],
+    ["DATABASE_POOL_MAX", "many"],
+  ])("rejects %s=%s", (key, value) => {
+    const problems = problemsOf({ ...base, [key]: value })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatch(new RegExp(`^${key}: `))
+  })
+
+  it("requires a Supabase server verified against Supabase's CA in production", () => {
+    // Supabase hosts default to require: encrypted, but the server is not verified.
     expect(problemsOf({ ...production, DATABASE_URL: supabase })).toEqual([
+      `DATABASE_URL: in production the Supabase server must be verified, not just encrypted: ${fix}`,
+    ])
+    for (const query of ["sslmode=require", "sslmode=no-verify", "sslmode=prefer"]) {
+      expect(problemsOf({ ...production, DATABASE_URL: `${supabase}?${query}` })).toEqual([
+        `DATABASE_URL: in production the Supabase server must be verified, not just encrypted: ${fix}`,
+      ])
+    }
+    expect(problemsOf({ ...production, DATABASE_URL: supabase, DATABASE_SSL: "disable" })).toEqual([
       `DATABASE_URL: Supabase connections must use TLS: ${fix}`,
     ])
+    // With the CA the server is always verified, whatever the URL asked for.
     expect(problemsOf({ ...production, DATABASE_URL: supabase, DATABASE_CA_CERT: pem })).toEqual([])
     expect(
       problemsOf({
         ...production,
         DATABASE_URL: `${supabase}?sslmode=require`,
+        DATABASE_SSL: "require",
         DATABASE_CA_CERT: pem,
       }),
     ).toEqual([])
-    // node-postgres verifies these against Node's public CAs: they validate but every query
-    // would fail with "self-signed certificate in certificate chain".
-    for (const mode of ["require", "prefer", "verify-ca", "verify-full"]) {
-      expect(problemsOf({ ...production, DATABASE_URL: `${supabase}?sslmode=${mode}` })).toEqual([
-        `DATABASE_URL: Supabase signs its certificates with its own CA, which Node does not trust, so this connection would fail: ${fix}`,
-      ])
-    }
-    // Encrypted but unverified.
-    for (const query of ["sslmode=no-verify", "sslmode=require&uselibpqcompat=true"]) {
-      expect(problemsOf({ ...production, DATABASE_URL: `${supabase}?${query}` })).toEqual([
-        `DATABASE_URL: this sslmode does not verify the Supabase server: ${fix}`,
-      ])
-    }
     // A root certificate file in the URL is a CA of our own too.
+    const dir = mkdtempSync(path.join(tmpdir(), "env-ca-"))
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }))
+    const rootCert = path.join(dir, "supabase.crt")
+    writeFileSync(rootCert, pem.replaceAll("\\n", "\n"))
     expect(
       problemsOf({
         ...production,
-        DATABASE_URL: `${supabase}?sslmode=verify-full&sslrootcert=/etc/ssl/supabase.crt`,
+        DATABASE_URL: `${supabase}?sslmode=verify-full&sslrootcert=${rootCert}`,
       }),
     ).toEqual([])
-    // Outside production a plain connection is allowed (e.g. a quick local test).
+    // DATABASE_CA_CERT may also name the file.
+    expect(
+      problemsOf({ ...production, DATABASE_URL: supabase, DATABASE_CA_CERT: rootCert }),
+    ).toEqual([])
+    // Outside production an unverified (or plain) connection is allowed (e.g. a quick local test).
     expect(problemsOf({ ...base, DATABASE_URL: supabase })).toEqual([])
-    expect(problemsOf({ ...base, DATABASE_URL: `${supabase}?sslmode=require` })).toEqual([])
+    expect(problemsOf({ ...base, DATABASE_URL: `${supabase}?sslmode=disable` })).toEqual([])
   })
 
-  it("checks that DATABASE_CA_CERT is a PEM certificate", () => {
-    expect(problemsOf({ ...base, DATABASE_CA_CERT: "abc" })).toEqual([
-      "DATABASE_CA_CERT: must be a PEM certificate",
+  it("requires any other database off this machine to be encrypted and verified in production", () => {
+    const neon = "postgresql://u:pw@ep-cool-123.us-east-2.aws.neon.tech/neondb"
+    // Neon's default string: node-postgres (and we) verify the server on sslmode=require.
+    expect(
+      problemsOf({
+        ...production,
+        DATABASE_URL: `${neon}?sslmode=require&channel_binding=require`,
+      }),
+    ).toEqual([])
+    expect(problemsOf({ ...production, DATABASE_URL: neon })).toEqual([
+      expect.stringMatching(
+        /^DATABASE_URL: in production a database that is not on this machine must use TLS: add sslmode=verify-full/,
+      ),
     ])
+    expect(problemsOf({ ...production, DATABASE_URL: neon, DATABASE_SSL: "disable" })).toEqual([
+      expect.stringMatching(/^DATABASE_URL: .*must use TLS/),
+    ])
+    expect(problemsOf({ ...production, DATABASE_URL: `${neon}?sslmode=no-verify` })).toEqual([
+      expect.stringMatching(
+        /^DATABASE_URL: in production the database server must be verified, not just encrypted: .*DATABASE_SSL=require/,
+      ),
+    ])
+    // An unverified server accepted on purpose.
+    expect(
+      problemsOf({
+        ...production,
+        DATABASE_URL: `${neon}?sslmode=no-verify`,
+        DATABASE_SSL: "require",
+      }),
+    ).toEqual([])
+    // On this machine, and outside production, plain text is fine.
+    expect(
+      problemsOf({ ...production, DATABASE_URL: "postgres://u:pw@127.0.0.1:5432/app" }),
+    ).toEqual([])
+    expect(problemsOf({ ...base, DATABASE_URL: neon })).toEqual([])
+    expect(problemsOf({ ...production, DATABASE_URL: neon }).join("\n")).not.toContain(":pw@")
+  })
+
+  it("refuses unknown TLS values in DATABASE_URL in every environment", () => {
+    for (const query of ["ssl=require", "sslmode=strict", "sslnegotiation=fast"]) {
+      expect(
+        problemsOf({ ...base, DATABASE_URL: `postgres://u:pw@db.example.com/app?${query}` }),
+      ).toEqual([expect.stringMatching(/^DATABASE_URL: has an unknown /)])
+    }
+  })
+
+  it("checks DATABASE_SSL and DATABASE_CA_CERT together in every environment", () => {
+    expect(problemsOf({ ...base, DATABASE_SSL: "disable", DATABASE_CA_CERT: pem })).toEqual([
+      "DATABASE_SSL: DATABASE_SSL=disable turns TLS off, but DATABASE_CA_CERT is set: remove one of them",
+    ])
+    expect(problemsOf({ ...base, DATABASE_URL: supabase, DATABASE_SSL: "verify-full" })).toEqual([
+      expect.stringMatching(/^DATABASE_CA_CERT: verifying a Supabase server needs its CA/),
+    ])
+  })
+
+  it("checks that DATABASE_CA_CERT is a PEM certificate or a readable PEM file", () => {
+    expect(problemsOf({ ...base, DATABASE_CA_CERT: "abc" })).toEqual([
+      'DATABASE_CA_CERT: must be a PEM certificate or the path of a file holding one; cannot read the file "abc"',
+    ])
+    expect(problemsOf({ ...base, DATABASE_CA_CERT: "-----BEGIN CERTIFICATE----- x" })).toEqual([
+      "DATABASE_CA_CERT: does not contain a PEM certificate",
+    ])
+  })
+
+  it("never echoes the database password", () => {
+    const problems = problemsOf({ ...production, DATABASE_URL: supabase }).join("\n")
+    expect(problems).not.toContain(":pw@")
   })
 })
 

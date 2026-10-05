@@ -43,6 +43,22 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   return { ...createDb(url, { max: 4 }), name, url }
 }
 
+/**
+ * A new, empty database (copied from `template0`: no migrations, no extensions), named like this
+ * run's clones so the teardown and the sweeps drop it if a file crashes. Drop it with
+ * `dropEmptyTestDatabase`.
+ */
+export async function createEmptyTestDatabase(): Promise<{ name: string; url: string }> {
+  const { adminUrl, runPrefix } = testDatabaseConfig()
+  const name = `${runPrefix}_${randomBytes(4).toString("hex")}`
+  await cloneDatabase(adminUrl, "template0", name)
+  return { name, url: databaseUrl(adminUrl, name) }
+}
+
+export async function dropEmptyTestDatabase(database: { name: string }): Promise<void> {
+  await dropDatabases(testDatabaseConfig().adminUrl, [database.name])
+}
+
 /** Close the database's pool and drop it. */
 export async function dropTestDatabase(database: TestDatabase): Promise<void> {
   await database.close()

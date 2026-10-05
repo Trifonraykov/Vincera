@@ -11,9 +11,11 @@ import { insertUser } from "../../helpers/db-fixtures"
 
 /**
  * Supabase's Data API (PostgREST) serves the `public` schema to the `anon` and `authenticated`
- * roles. The platform never uses it, so every table has row-level security on with no policies
- * (`withRLS`, migration 0007) and those roles lose their grants (0008). The app connects as the
- * tables' owner, which RLS does not restrict.
+ * roles. The platform never uses it, so the Phase 0–1 tables have row-level security on with no
+ * policies (`withRLS`, migration 0007) and those roles lose their grants (0008). Since §19.21 the
+ * post-migrate hardening (`lib/db/supabase-hardening.ts`, tested in supabase-hardening.test.ts)
+ * does both for every table, new ones included, wherever those roles exist. The app connects as
+ * the tables' owner, which RLS does not restrict.
  */
 
 const testDb = setupTestDatabase()
@@ -60,10 +62,15 @@ async function publicTables(tx: Tx | typeof testDb.db) {
 }
 
 describe("row-level security (Supabase Data API lockdown)", () => {
-  it("is on for every table in public, and not forced (the owning app role is unaffected)", async () => {
+  it("is on for the tables of migration 0007, and never forced (the owning app role is unaffected)", async () => {
     const tables = await publicTables(testDb.db)
     expect(tables.length).toBeGreaterThanOrEqual(42)
-    expect(tables.filter((table) => !table.rls).map((table) => table.name)).toEqual([])
+    // Tables added later need no `withRLS`: the post-migrate hardening switches RLS on wherever
+    // Supabase's API roles exist (supabase-hardening.test.ts).
+    const rls = new Set(tables.filter((table) => table.rls).map((table) => table.name))
+    for (const table of ["users", "sessions", "accounts", "social_connections", "ledger_entries"]) {
+      expect([table, rls.has(table)]).toEqual([table, true])
+    }
     expect(tables.filter((table) => table.forced).map((table) => table.name)).toEqual([])
   })
 

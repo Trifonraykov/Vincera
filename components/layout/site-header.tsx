@@ -7,13 +7,19 @@ import { AUTH_LINKS, marketingNav } from "@/lib/nav"
 
 import { MobileNav } from "./mobile-nav"
 
-/** Public header for marketing and public-profile pages. */
+/**
+ * Public header for marketing and public-profile pages. Sticky; on phones it clears the notch and
+ * status bar (`pt-safe`) and the menu moves into a sheet (MobileNav).
+ */
 export function SiteHeader({ appName }: { appName: string }) {
   const links = marketingNav()
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4 sm:px-6">
+    <header
+      data-site-header=""
+      className="sticky top-0 z-40 border-b bg-background/80 pt-safe backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    >
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-safe-4 sm:px-safe-6">
         <Logo appName={appName} />
         <nav aria-label="Main" className="ml-4 hidden items-center gap-1 md:flex">
           {links.map((link) => (

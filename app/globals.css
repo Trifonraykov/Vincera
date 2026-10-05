@@ -131,16 +131,191 @@
 }
 
 /*
- * Phone layout of the signed-in app (components/layout/mobile-tab-bar.tsx). While the bottom tab
- * bar is on screen, --sticky-bottom is the space it takes (with the home indicator), so page
- * content, sticky form actions (FormActions) and toasts sit above it.
+ * Mobile app (PWA) layer. CLAUDE.md §19, "Mobile app (PWA) patterns".
+ */
+
+/* Safe areas (viewport-fit=cover, app/layout.tsx): padding that clears the notch, the rounded
+ * corners and the home indicator. `px-safe-4` = at least 1rem, more where a notch needs it. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right);
+}
+@utility px-safe-* {
+  padding-left: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-left));
+  padding-right: max(calc(var(--spacing) * --value(integer)), env(safe-area-inset-right));
+}
+@utility pb-safe-* {
+  padding-bottom: calc(var(--spacing) * --value(integer) + env(safe-area-inset-bottom));
+}
+@utility pt-safe-* {
+  padding-top: calc(var(--spacing) * --value(integer) + env(safe-area-inset-top));
+}
+
+/*
+ * Sticky bars. While the phone tab bar (components/layout/mobile-tab-bar.tsx) is on screen,
+ * --sticky-bottom is the space it takes with the home indicator, so page content, sticky form
+ * actions (FormActions) and toasts sit above it. --sticky-top is the height of the sticky header
+ * on top (app bar, desktop app header, site header). Both feed scroll-padding, so focusing a field
+ * or jumping to an anchor never leaves it under a bar.
  */
 :root {
   --app-tab-bar: 3.5rem;
+  --app-bar: 3.5rem;
+  scroll-padding-top: calc(var(--sticky-top, 0px) + 0.5rem);
+  scroll-padding-bottom: calc(var(--sticky-bottom, 0px) + 0.5rem);
+}
+:root:has([data-site-header]),
+:root:has([data-slot="sidebar-inset"]) {
+  --sticky-top: var(--app-bar);
 }
 @media (width < 48rem) {
-  body:has([data-mobile-tab-bar]) {
+  :root:has([data-app-bar]) {
+    --sticky-top: calc(var(--app-bar) + env(safe-area-inset-top));
+  }
+  :root:has([data-mobile-tab-bar]) {
     --sticky-bottom: calc(var(--app-tab-bar) + env(safe-area-inset-bottom));
     --sticky-safe-area: 0px;
+  }
+}
+/*
+ * Below `sm` a form's action bar (FormActions, components/profiles/form-kit.tsx) sticks above the
+ * tab bar (or the screen's bottom edge in onboarding): focused fields must clear it too. Its height
+ * is measured into --form-actions-height (5rem until the first measurement).
+ */
+@media (width < 40rem) {
+  :root:has([data-form-actions]) {
+    scroll-padding-bottom: calc(
+      var(--sticky-bottom, 0px) + var(--form-actions-height, 5rem) + 0.5rem
+    );
+  }
+}
+
+/* Touch screens: no grey flash on tap, and no iOS zoom into fields (it zooms below 16px). */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+@media (pointer: coarse), (width < 48rem) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Scrolling inside sheets, dialogs and menus never drags the page behind them. */
+[data-slot="sheet-content"],
+[data-slot="dialog-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="popover-content"],
+[data-slot="select-content"] {
+  overscroll-behavior: contain;
+}
+
+@layer base {
+  /*
+   * Touch targets of at least 44 x 44 px (WCAG 2.5.5, Apple HIG) without changing how controls
+   * look: on touch screens a button's hit area extends invisibly around it when it is smaller.
+   * In the base layer, so a button's own `absolute` / `fixed` utilities still win.
+   */
+  @media (pointer: coarse) {
+    /* Radix triggers rendered `asChild` around a Button carry the trigger's data-slot. */
+    :is(
+      [data-slot="button"],
+      [data-slot="sidebar-trigger"],
+      [data-slot="dropdown-menu-trigger"],
+      [data-slot="sheet-trigger"],
+      [data-slot="dialog-trigger"],
+      [data-slot="popover-trigger"],
+      [data-slot="select-trigger"],
+      [data-slot="tabs-trigger"],
+      [data-slot="switch"],
+      [data-slot="checkbox"]
+    ) {
+      position: relative;
+    }
+    :is(
+      [data-slot="button"],
+      [data-slot="sidebar-trigger"],
+      [data-slot="dropdown-menu-trigger"],
+      [data-slot="sheet-trigger"],
+      [data-slot="dialog-trigger"],
+      [data-slot="popover-trigger"],
+      [data-slot="select-trigger"],
+      [data-slot="tabs-trigger"],
+      [data-slot="switch"],
+      [data-slot="checkbox"]
+    )::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc((100% - 44px) / 2));
+    }
+    [data-slot="dropdown-menu-item"],
+    /* Native checkboxes and radios are tapped through their label (languages, notification
+     * switches): the whole row is the target. */
+    label:has(> input:is([type="checkbox"], [type="radio"])) {
+      min-height: 44px;
+    }
+  }
+  /* Rows of the sidebar when it is a sheet on phones (the admin menu): full-height rows. */
+  [data-mobile="true"] [data-slot="sidebar-menu-button"],
+  [data-mobile="true"] [data-slot="sidebar-menu-sub-button"] {
+    min-height: 44px;
+  }
+}
+
+/* Installed app (standalone, no browser bar): feel like an app, not a web page. */
+@media (display-mode: standalone) {
+  html {
+    /* No rubber band past the top or bottom showing the bare canvas. */
+    overscroll-behavior-y: none;
+  }
+  /* Long-pressing a tab or the app bar should not open a link preview. */
+  [data-mobile-tab-bar] a,
+  [data-app-bar] a {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* The phone app bar's title fades in as a tab page's own large heading scrolls away (iOS large
+ * titles). Only where scroll-driven animations exist and motion is welcome; else it just shows. */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-app-bar-title][data-collapse-on-scroll] {
+      animation: app-bar-title-in linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 4.5rem;
+    }
+  }
+}
+@keyframes app-bar-title-in {
+  from {
+    opacity: 0;
+    translate: 0 0.25rem;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* Reduced motion: no sliding sheets, spinning theme icons or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

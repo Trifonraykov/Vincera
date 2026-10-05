@@ -7,7 +7,13 @@ import { Pool, type PoolConfig } from "pg"
 
 import { env } from "@/lib/env"
 
-import { databasePoolConfig, type DatabaseConnectionOptions } from "./connection"
+import {
+  describeDatabaseConnection,
+  pgConnectionConfig,
+  resolveDatabaseConnection,
+  transactionPoolerWarning,
+  type DatabaseConnectionOptions,
+} from "./connection"
 import * as schema from "./schema"
 
 /**
@@ -35,16 +41,23 @@ export type DbHandle = {
 }
 
 /**
- * A new drizzle instance with its own pool. Callers own it and must `close()` it. `caCert`
- * (DATABASE_CA_CERT) turns on verified TLS for hosted databases such as Supabase
- * (lib/db/connection.ts).
+ * A new drizzle instance with its own pool. Callers own it and must `close()` it. `sslMode`
+ * (DATABASE_SSL) and `caCert` (DATABASE_CA_CERT) decide TLS for hosted databases such as
+ * Supabase; the URL's own TLS parameters are replaced by an explicit `ssl` (lib/db/connection.ts).
  */
 export function createDb(
   connectionString: string,
-  options: Omit<PoolConfig, "connectionString" | "ssl"> & DatabaseConnectionOptions = {},
+  options: Omit<PoolConfig, "connectionString" | "ssl" | "sslnegotiation"> &
+    DatabaseConnectionOptions = {},
 ): DbHandle {
-  const { caCert, ...poolConfig } = options
-  const pool = new Pool({ ...poolConfig, ...databasePoolConfig(connectionString, { caCert }) })
+  const { sslMode, caCert, readFile, production, ...poolConfig } = options
+  const connection = resolveDatabaseConnection(connectionString, {
+    sslMode,
+    caCert,
+    readFile,
+    production,
+  })
+  const pool = new Pool({ ...poolConfig, ...pgConnectionConfig(connection) })
   // An idle client losing its connection (DB restart, terminated backend) must not crash the
   // process; the pool replaces the client on the next query.
   pool.on("error", (error) => {
@@ -54,12 +67,33 @@ export function createDb(
   return { db, pool, close: () => pool.end() }
 }
 
-const globalForDb = globalThis as typeof globalThis & { __appDb?: DbHandle }
+const globalForDb = globalThis as typeof globalThis & {
+  __appDb?: DbHandle
+  /** Set once the connection line (and any pooler warning) was logged in this process. */
+  __appDbLogged?: boolean
+}
 let appDb: DbHandle | undefined
+
+/**
+ * The app's pool: DATABASE_URL with DATABASE_SSL / DATABASE_CA_CERT, at most DATABASE_POOL_MAX
+ * connections. Logs where the database is (never the user or password) once per process, plus a
+ * warning when it is a transaction pooler.
+ */
+function createAppDb(): DbHandle {
+  const options = { sslMode: env.DATABASE_SSL, caCert: env.DATABASE_CA_CERT }
+  if (!globalForDb.__appDbLogged) {
+    globalForDb.__appDbLogged = true
+    const connection = resolveDatabaseConnection(env.DATABASE_URL, options)
+    console.info(`[db] ${describeDatabaseConnection(connection)}`)
+    const warning = transactionPoolerWarning(connection, "app")
+    if (warning) console.warn(`[db] ${warning}`)
+  }
+  return createDb(env.DATABASE_URL, { ...options, max: env.DATABASE_POOL_MAX })
+}
 
 /** The app's database, created on first use from DATABASE_URL. */
 export function getDb(): Db {
-  appDb ??= globalForDb.__appDb ?? createDb(env.DATABASE_URL, { caCert: env.DATABASE_CA_CERT })
+  appDb ??= globalForDb.__appDb ?? createAppDb()
   if (process.env.NODE_ENV !== "production") globalForDb.__appDb = appDb
   return appDb.db
 }

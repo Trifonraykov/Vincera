@@ -2,6 +2,8 @@
  * pnpm db:reset — drop and re-create the DATABASE_URL database, then apply migrations.
  * Refuses to run in production, and on non-local hosts unless `--force` is passed.
  */
+import { databaseOptionsFromEnv } from "../lib/db/connection"
+import { describeHardening } from "../lib/db/supabase-hardening"
 import {
   assertNotProduction,
   isLocalDatabase,
@@ -23,8 +25,15 @@ runScript(async () => {
       `Refusing to reset "${name}" on non-local host ${host}. Pass --force to confirm.`,
     )
   }
-  await recreateDatabase(databaseUrl)
+  const { sslMode, caCert, production } = databaseOptionsFromEnv(process.env)
+  await recreateDatabase(databaseUrl, { sslMode, caCert, production })
   console.log(`Re-created database "${name}".`)
-  await runMigrations(databaseUrl)
+  const report = await runMigrations(databaseUrl, undefined, {
+    sslMode,
+    caCert,
+    production,
+    log: (line) => console.log(line),
+  })
   console.log("Migrations applied.")
+  for (const line of describeHardening(report.hardening)) console.log(line)
 })

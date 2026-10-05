@@ -23,10 +23,14 @@
     "db:seed": "tsx --tsconfig tsconfig.scripts.json scripts/seed.ts",
     "db:reset": "tsx --tsconfig tsconfig.scripts.json scripts/db-reset.ts",
     "admin:grant": "tsx --tsconfig tsconfig.scripts.json scripts/admin-grant.ts",
+    "supabase:start": "pnpm dlx supabase@2.119.0 start --workdir supabase-local",
+    "supabase:stop": "pnpm dlx supabase@2.119.0 stop --workdir supabase-local",
+    "supabase:status": "pnpm dlx supabase@2.119.0 status --workdir supabase-local",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe --forward-connect-to localhost:3000/api/webhooks/stripe",
     "ledger:check": "tsx --tsconfig tsconfig.scripts.json scripts/ledger-check.ts",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
-    "email:dev": "email dev --dir lib/email/templates --port 3001"
+    "email:dev": "email dev --dir lib/email/templates --port 3001",
+    "pwa:icons": "tsx --tsconfig tsconfig.scripts.json scripts/pwa-icons.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

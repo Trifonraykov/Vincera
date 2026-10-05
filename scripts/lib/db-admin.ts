@@ -1,11 +1,24 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
+import { readMigrationFiles } from "drizzle-orm/migrator"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { migrate } from "drizzle-orm/node-postgres/migrator"
-import { Pool } from "pg"
+import { Client, Pool } from "pg"
 
-import { databasePoolConfig } from "../../lib/db/connection"
+import {
+  pgConnectionConfig,
+  resolveDatabaseConnection,
+  transactionPoolerWarning,
+  type DatabaseConnectionOptions,
+} from "../../lib/db/connection"
 import { redactQueryParams } from "../../lib/db/errors"
+import {
+  ensureVectorOnSearchPath,
+  foreignObjects,
+  runSupabaseHardening,
+  type HardeningSummary,
+  type VectorSearchPath,
+} from "../../lib/db/supabase-hardening"
 
 /**
  * Database administration helpers shared by the db:* scripts and the test global setups.
@@ -81,13 +94,17 @@ function quoteIdent(identifier: string): string {
 }
 
 /** Drop (terminating open connections) and re-create the database named in `databaseUrl`. */
-export async function recreateDatabase(databaseUrl: string): Promise<void> {
+export async function recreateDatabase(
+  databaseUrl: string,
+  options: DatabaseConnectionOptions = {},
+): Promise<void> {
   assertNotProduction("drop a database")
   const { name, maintenanceUrl } = parseDatabaseUrl(databaseUrl)
   if (PROTECTED_DATABASES.has(name)) {
     throw new Error(`Refusing to drop the "${name}" database.`)
   }
-  const pool = new Pool({ connectionString: maintenanceUrl, max: 1 })
+  const maintenance = resolveDatabaseConnection(maintenanceUrl, options)
+  const pool = new Pool({ ...pgConnectionConfig(maintenance), max: 1 })
   try {
     await pool.query(`DROP DATABASE IF EXISTS ${quoteIdent(name)} WITH (FORCE)`)
     await pool.query(`CREATE DATABASE ${quoteIdent(name)}`)
@@ -96,21 +113,114 @@ export async function recreateDatabase(databaseUrl: string): Promise<void> {
   }
 }
 
+export type MigrationReport = {
+  /** Where pgvector lives and whether its schema had to be added to the role's search_path. */
+  vector: VectorSearchPath
+  /** The Supabase hardening that ran after the migrations (a no-op without the API roles). */
+  hardening: HardeningSummary
+}
+
+export type MigrationOptions = DatabaseConnectionOptions & {
+  /** Progress and warnings (`pnpm db:migrate` prints them; the test tooling stays quiet). */
+  log?: (line: string) => void
+  /**
+   * Migrate (and harden) a database that holds objects the platform did not create
+   * (DATABASE_ALLOW_FOREIGN_OBJECTS=1). Off: such a database is refused untouched.
+   */
+  allowForeignObjects?: boolean
+}
+
+/** The opt-in for `pnpm db:migrate` on a database that holds someone else's objects. */
+export const ALLOW_FOREIGN_OBJECTS = "DATABASE_ALLOW_FOREIGN_OBJECTS"
+
+/** How many foreign objects a refusal names. */
+const FOREIGN_OBJECTS_SHOWN = 10
+
 /**
- * Apply pending Drizzle migrations from `migrationsFolder` (default ./drizzle). `caCert`
- * (DATABASE_CA_CERT) turns on verified TLS, e.g. for Supabase (lib/db/connection.ts).
+ * DATABASE_URL names a database that already holds objects the platform did not create
+ * (another app's tables, or its Supabase project). Nothing was changed.
+ */
+export class ForeignDatabaseError extends Error {
+  readonly objects: readonly string[]
+
+  constructor(database: string, objects: readonly string[]) {
+    const shown = objects.slice(0, FOREIGN_OBJECTS_SHOWN).join(", ")
+    const more =
+      objects.length > FOREIGN_OBJECTS_SHOWN
+        ? ` and ${objects.length - FOREIGN_OBJECTS_SHOWN} more`
+        : ""
+    super(
+      `Refusing to migrate database "${database}": it already holds objects this platform did not ` +
+        `create (${shown}${more}). The migrations and the Supabase hardening would change them ` +
+        "(row-level security on with no policies, Data API grants revoked), which breaks the app " +
+        "that uses them. Give the platform a database (a Supabase project) of its own " +
+        `(docs/supabase.md), or set ${ALLOW_FOREIGN_OBJECTS}=1 to migrate this one anyway. ` +
+        "Nothing was changed.",
+    )
+    this.name = "ForeignDatabaseError"
+    this.objects = objects
+  }
+}
+
+/**
+ * Apply pending Drizzle migrations from `migrationsFolder` (default ./drizzle), then harden the
+ * database for Supabase (CLAUDE.md §19.21, §19.23):
+ * 0. First: refuse, untouched, a database that is not the platform's and holds objects of
+ *    another app (`foreignObjects`; `ForeignDatabaseError`), unless `allowForeignObjects`.
+ * 1. Before: make sure pgvector's `vector` type resolves for this role, whatever schema the
+ *    extension is installed in (`ensureVectorOnSearchPath`).
+ * 2. The migrations, in one transaction (drizzle's migrator).
+ * 3. After: `hardenSupabase`, only where Supabase's `anon` / `authenticated` roles exist.
+ * TLS comes from `sslMode` (DATABASE_SSL) and `caCert` (DATABASE_CA_CERT) as for the app, and
+ * `production: true` (from `databaseOptionsFromEnv`) applies production's TLS rule
+ * (lib/db/connection.ts). Every step is idempotent, so it runs on every start.
  */
 export async function runMigrations(
   databaseUrl: string,
   migrationsFolder: string = DEFAULT_MIGRATIONS_FOLDER,
-  options: { caCert?: string | undefined } = {},
-): Promise<void> {
+  options: MigrationOptions = {},
+): Promise<MigrationReport> {
   if (!existsSync(path.join(migrationsFolder, "meta", "_journal.json"))) {
     throw new Error(`No migrations found in ${migrationsFolder}. Run \`pnpm db:generate\` first.`)
   }
-  const pool = new Pool({ max: 1, ...databasePoolConfig(databaseUrl, options) })
+  const { log = () => undefined, allowForeignObjects = false, ...connectionOptions } = options
+  const connection = resolveDatabaseConnection(databaseUrl, connectionOptions)
+  const poolerWarning = transactionPoolerWarning(connection, "migrations")
+  if (poolerWarning) log(`Warning: ${poolerWarning}`)
+  const config = pgConnectionConfig(connection)
+
+  // Its own session: a search_path fix applies to sessions opened afterwards.
+  const preflight = new Client(config)
+  let vector: VectorSearchPath
+  try {
+    await preflight.connect()
+    const hashes = readMigrationFiles({ migrationsFolder }).map((migration) => migration.hash)
+    const ownership = await foreignObjects(preflight, hashes)
+    if (!ownership.platform && ownership.objects.length > 0) {
+      if (!allowForeignObjects)
+        throw new ForeignDatabaseError(connection.database, ownership.objects)
+      log(
+        `${ALLOW_FOREIGN_OBJECTS}=1: migrating and hardening a database that holds objects of ` +
+          `another app (${ownership.objects.length}).`,
+      )
+    }
+    vector = await ensureVectorOnSearchPath(preflight)
+  } finally {
+    await preflight.end().catch(() => undefined)
+  }
+  if (vector.status === "fixed") {
+    log(
+      `pgvector is installed in schema "${vector.schema}", which was not on the search_path of ` +
+        `role "${vector.role}": set it to ${vector.searchPath} in database "${vector.database}".`,
+    )
+  }
+
+  const pool = new Pool({ max: 1, ...config })
+  pool.on("error", () => undefined)
   try {
     await migrate(drizzle(pool), { migrationsFolder })
+    const hardening = await runSupabaseHardening(pool)
+    return { vector, hardening }
   } finally {
     await pool.end()
   }
@@ -131,13 +241,53 @@ export function describeError(error: unknown): string {
   return messages.length > 0 ? messages.join("\n  caused by: ") : String(error)
 }
 
+/** Exit code of `pnpm db:migrate` when the database is not reachable yet (EX_TEMPFAIL). */
+export const EXIT_TRY_AGAIN = 75
+
+/** Node socket errors and Postgres states that go away once the server is up. */
+const TRANSIENT_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "EPIPE",
+  // cannot_connect_now (starting up / shutting down), too_many_connections, connection_failure,
+  // sqlclient_unable_to_establish_sqlconnection
+  "57P03",
+  "53300",
+  "08006",
+  "08001",
+])
+
+/**
+ * Whether `error` (or one of its causes) means "the database is not reachable yet", worth retrying
+ * while a container starts. Wrong passwords, unknown hosts or databases, TLS and configuration
+ * errors and failing migrations are not: retrying cannot fix them.
+ */
+export function isTransientConnectionError(error: unknown): boolean {
+  let current = error
+  for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
+    const code = (current as Error & { code?: unknown }).code
+    if (typeof code === "string" && TRANSIENT_CODES.has(code)) return true
+    if (/Connection terminated unexpectedly|timeout expired/i.test(current.message)) return true
+    if (current instanceof AggregateError && current.errors.some(isTransientConnectionError)) {
+      return true
+    }
+    current = current.cause
+  }
+  return false
+}
+
 /** Run a script's main function, printing errors without a stack for expected failures. */
-export function runScript(main: () => Promise<void>): void {
+export function runScript(
+  main: () => Promise<void>,
+  exitCodeFor: (error: unknown) => number = () => 1,
+): void {
   main().then(
     () => process.exit(0),
     (error: unknown) => {
       console.error(describeError(error))
-      process.exit(1)
+      process.exit(exitCodeFor(error))
     },
   )
 }

@@ -19,11 +19,21 @@ while IFS='=' read -r key value; do
   if [ -z "$current" ]; then export "$key=$value"; fi
 done < "$SECRETS_FILE"
 
+# db:migrate prints which database it uses (host only, never the password), applies the
+# migrations, then the Supabase hardening. It exits 75 while the database is not reachable yet
+# (retried here) and 1 for anything retrying cannot fix (wrong password, TLS, a bad migration).
 echo "Waiting for the database and applying migrations..."
 attempt=0
-until pnpm -s db:migrate; do
+while :; do
+  status=0
+  pnpm -s db:migrate || status=$?
+  if [ "$status" -eq 0 ]; then break; fi
+  if [ "$status" -ne 75 ]; then
+    echo "Migrations failed (see above); check DATABASE_URL and the README's \"Database on Supabase\"." >&2
+    exit 1
+  fi
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 30 ]; then echo "Database not reachable, giving up." >&2; exit 1; fi
+  if [ "$attempt" -ge 60 ]; then echo "Database not reachable after 2 minutes, giving up." >&2; exit 1; fi
   sleep 2
 done
 

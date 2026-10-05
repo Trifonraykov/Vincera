@@ -2,7 +2,14 @@ import "server-only"
 
 import { z } from "zod"
 
-import { normalizePem, supabaseTlsProblem } from "@/lib/db/connection"
+import { APP_ENVS, BUILD_PHASE, resolveAppEnv, type AppEnv } from "@/lib/app-env"
+import {
+  DATABASE_SSL_MODES,
+  DatabaseConfigError,
+  DEFAULT_DATABASE_POOL_MAX,
+  MAX_DATABASE_POOL_MAX,
+  resolveDatabaseConnection,
+} from "@/lib/db/connection"
 
 export { publicEnv, type PublicEnv } from "@/lib/public-env"
 
@@ -23,8 +30,7 @@ export { publicEnv, type PublicEnv } from "@/lib/public-env"
  * they run when the server starts.
  */
 
-export const APP_ENVS = ["development", "test", "production"] as const
-export type AppEnv = (typeof APP_ENVS)[number]
+export { APP_ENVS, type AppEnv }
 
 export const FAKEABLE_SERVICES = [
   "email",
@@ -43,8 +49,6 @@ export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number]
 
 /** Used when ANTHROPIC_MODEL is unset outside production. */
 export const DEFAULT_ANTHROPIC_MODEL = "claude-opus-5-5"
-
-const BUILD_PHASE = "phase-production-build"
 
 function isFakeableService(value: string): value is FakeableService {
   return (FAKEABLE_SERVICES as readonly string[]).includes(value)
@@ -129,12 +133,24 @@ const envSchema = z.object({
 
   // Core: required in every environment.
   DATABASE_URL: postgresUrl,
-  // PEM of the CA that signs the database server's certificate (Supabase: Database settings →
-  // SSL configuration). Set, the connection uses TLS and verifies the server (lib/db/connection.ts).
-  DATABASE_CA_CERT: z
-    .string()
-    .refine((value) => normalizePem(value) !== null, "must be a PEM certificate")
+  // Database TLS and pooling (lib/db/connection.ts, CLAUDE.md §19.21). DATABASE_SSL defaults to
+  // `require` for Supabase hosts (or the URL's sslmode), else `disable`. DATABASE_CA_CERT is the
+  // PEM (or the path of a PEM file) of the CA that signs the server's certificate (Supabase:
+  // Database settings → SSL configuration); set, the server is always verified (verify-full).
+  // The combination is checked in parseEnv.
+  DATABASE_SSL: z
+    .preprocess(
+      (value) => (typeof value === "string" ? value.toLowerCase() : value),
+      z.enum(DATABASE_SSL_MODES),
+    )
     .optional(),
+  DATABASE_CA_CERT: z.string().optional(),
+  DATABASE_POOL_MAX: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_DATABASE_POOL_MAX)
+    .default(DEFAULT_DATABASE_POOL_MAX),
   AUTH_SECRET: z.string().min(32, "must be at least 32 characters (generate: npx auth secret)"),
   ENCRYPTION_KEY: z
     .string()
@@ -347,14 +363,6 @@ function normalize(source: EnvSource): Partial<Record<EnvKey, string>> {
   return input
 }
 
-function resolveAppEnv(input: Partial<Record<EnvKey, string>>): AppEnv {
-  const explicit = APP_ENVS.find((value) => value === input.APP_ENV)
-  if (explicit) return explicit
-  if (input.NODE_ENV === "production") return "production"
-  if (input.NODE_ENV === "test") return "test"
-  return "development"
-}
-
 /**
  * Parse and validate an environment. Pure: pass any record (tests do); defaults to `process.env`.
  * Throws `EnvValidationError` listing every problem at once.
@@ -410,10 +418,19 @@ export function parseEnv(source: EnvSource = process.env): Env {
     if (strict && data.DEV_MAILBOX) {
       report("DEV_MAILBOX", "the dev mailbox is not allowed in production")
     }
-    const tlsProblem = strict
-      ? supabaseTlsProblem(data.DATABASE_URL, { caCert: data.DATABASE_CA_CERT })
-      : null
-    if (tlsProblem) report("DATABASE_URL", tlsProblem)
+    // DATABASE_URL + DATABASE_SSL + DATABASE_CA_CERT together (e.g. a CA next to sslmode=disable,
+    // an unreadable CA file). Production also refuses a database off this machine that is not
+    // encrypted and verified (productionTlsProblem, lib/db/connection.ts; CLAUDE.md §19.23).
+    try {
+      resolveDatabaseConnection(data.DATABASE_URL, {
+        sslMode: data.DATABASE_SSL,
+        caCert: data.DATABASE_CA_CERT,
+        production: strict,
+      })
+    } catch (error) {
+      if (!(error instanceof DatabaseConfigError)) throw error
+      report(error.variable, error.message.replace(new RegExp(`^${error.variable}:? `), ""))
+    }
     if (
       appEnv !== "production" &&
       data.STRIPE_SECRET_KEY &&

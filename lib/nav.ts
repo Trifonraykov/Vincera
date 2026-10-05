@@ -1,10 +1,14 @@
 import {
+  Activity,
   Banknote,
   Bell,
+  BellRing,
   CircleUser,
   Compass,
   Handshake,
   House,
+  Inbox,
+  KeyRound,
   LayoutDashboard,
   Lightbulb,
   Link2,
@@ -15,8 +19,8 @@ import {
   Scale,
   Send,
   Settings,
-  Activity,
   Sparkles,
+  UserRound,
   Users,
   Wallet,
   type LucideIcon,
@@ -157,37 +161,174 @@ export function appNav(role: AppRole, options: NavOptions = {}): NavSection[] {
   )
 }
 
+// --- Mobile app shell ----------------------------------------------------------------------
+
 /**
- * The bottom tab bar on phones (the app shell's mobile navigation, like a native app's tabs): the
- * role's main page plus the places people return to most. A "More" tab after them opens the full
- * sidebar menu, so every `appNav` item stays one tap away.
+ * The bottom tab bar on phones (components/layout/mobile-tab-bar.tsx), like a native app's tabs:
+ * Home, Discover, Collabs, Inbox and Me. "Me" (`/app/me`) lists everything else for the role
+ * (`mePageSections`), so every `appNav` item stays reachable on a phone without the sidebar.
  *
- * Candidates are listed in order of preference and only built pages become tabs
- * (`isBuiltRoute`), so a tab never leads to a 404. In Phase 1 that is Home, Audience, Profile and
- * Payouts for creators and Home, Profile, Connections and Payouts for builders; Products, Discover
- * and Collabs take their places as their pages land.
+ * Only built pages become tabs (`isBuiltRoute`), so a tab never leads to a "coming soon" page.
+ * While Discover, Collabs or Inbox are not built yet, the role's next pages fill their slots, in
+ * order of preference (`MOBILE_TAB_FALLBACKS`); in Phase 1 that is Audience, Profile and Payouts
+ * for creators and Profile, Connections and Payouts for builders. As later phases add their pages
+ * to BUILT_ROUTES, the bar becomes Home, Discover, Collabs, Inbox, Me by itself.
  */
-export const MOBILE_TAB_COUNT = 4
+export type MobileTabId = "home" | "discover" | "collabs" | "inbox" | "me" | "page"
 
-const DISCOVER_TAB: NavItem = { title: "Discover", href: "/app/discover", icon: Compass }
-const COLLABS_TAB: NavItem = { title: "Collabs", href: "/app/collabs", icon: Handshake }
-const PROFILE_TAB: NavItem = { title: "Profile", href: "/app/settings/profile", icon: CircleUser }
-const CONNECTIONS_TAB: NavItem = {
-  title: "Connections",
-  href: "/app/settings/connections",
-  icon: Link2,
-}
-const PAYOUTS_TAB: NavItem = { title: "Payouts", href: "/app/settings/payouts", icon: Banknote }
-
-const MOBILE_TAB_CANDIDATES: Record<AppRole, NavItem[]> = {
-  creator: [HOME, AUDIENCE, DISCOVER_TAB, COLLABS_TAB, PROFILE_TAB, PAYOUTS_TAB, CONNECTIONS_TAB],
-  builder: [HOME, PRODUCTS, DISCOVER_TAB, COLLABS_TAB, PROFILE_TAB, CONNECTIONS_TAB, PAYOUTS_TAB],
+export type MobileTab = NavItem & {
+  id: MobileTabId
+  /** Other paths that light the tab up (Inbox: notifications next to messages). */
+  alsoMatches?: string[]
+  /** The tab shows the shell's unread count (Inbox). */
+  showsUnread?: boolean
 }
 
-export function appTabs(role: AppRole): NavItem[] {
-  return MOBILE_TAB_CANDIDATES[role]
+export const ME_PATH = "/app/me"
+export const MOBILE_TAB_COUNT = 5
+
+const ME_TAB: MobileTab = { id: "me", title: "Me", href: ME_PATH, icon: CircleUser }
+
+/** The three middle slots, in order: the finished app's tabs. */
+const MOBILE_TAB_SLOTS: MobileTab[] = [
+  { id: "discover", title: "Discover", href: "/app/discover", icon: Compass },
+  { id: "collabs", title: "Collabs", href: "/app/collabs", icon: Handshake },
+  {
+    id: "inbox",
+    title: "Inbox",
+    href: "/app/messages",
+    icon: Inbox,
+    alsoMatches: ["/app/notifications"],
+    showsUnread: true,
+  },
+]
+
+/** Pages that stand in for unbuilt slots, per role, in order of preference. */
+const MOBILE_TAB_FALLBACKS: Record<AppRole, MobileTab[]> = {
+  creator: [
+    { id: "page", ...AUDIENCE },
+    { id: "page", title: "Ideas", href: "/app/ideas", icon: Lightbulb },
+    { id: "page", title: "Proposals", href: "/app/proposals", icon: Send },
+    { id: "page", title: "Profile", href: "/app/settings/profile", icon: UserRound },
+    { id: "page", title: "Payouts", href: "/app/settings/payouts", icon: Banknote },
+    { id: "page", title: "Connections", href: "/app/settings/connections", icon: Link2 },
+  ],
+  builder: [
+    { id: "page", ...PRODUCTS },
+    { id: "page", title: "Proposals", href: "/app/proposals", icon: Send },
+    { id: "page", title: "Profile", href: "/app/settings/profile", icon: UserRound },
+    { id: "page", title: "Connections", href: "/app/settings/connections", icon: Link2 },
+    { id: "page", title: "Payouts", href: "/app/settings/payouts", icon: Banknote },
+  ],
+}
+
+/** The phone tab bar for the active role: Home, three built pages, Me. */
+export function appTabs(role: AppRole): MobileTab[] {
+  const middle = [...MOBILE_TAB_SLOTS, ...MOBILE_TAB_FALLBACKS[role]]
     .filter((tab) => isBuiltRoute(tab.href))
-    .slice(0, MOBILE_TAB_COUNT)
+    .slice(0, MOBILE_TAB_COUNT - 2)
+  return [{ id: "home", ...HOME }, ...middle, ME_TAB]
+}
+
+/**
+ * The tab a path belongs to: the tab whose page (or `alsoMatches`) contains it, else Me, which
+ * holds every other page of the app (`/app` itself is Home). Null outside the app.
+ */
+export function activeTab(pathname: string, tabs: readonly MobileTab[]): MobileTab | null {
+  if (pathname !== "/app" && !pathname.startsWith("/app/")) return null
+  const owner = tabs.find(
+    (tab) =>
+      tab.id !== "me" &&
+      [tab.href, ...(tab.alsoMatches ?? [])].some((href) => isActivePath(pathname, href)),
+  )
+  return owner ?? tabs.find((tab) => tab.id === "me") ?? null
+}
+
+export type MeSection = {
+  label: string
+  items: NavItem[]
+}
+
+/**
+ * What the Me page lists for the role: every sidebar item that is not a tab right now (built or
+ * "Soon"), and all the settings pages. With the tab bar this covers every `appNav` link, so a phone
+ * reaches each §12 page of the app (tests/unit/nav.test.ts checks it).
+ */
+export function mePageSections(role: AppRole, options: NavOptions = {}): MeSection[] {
+  const tabHrefs = new Set(appTabs(role).map((tab) => tab.href))
+  const sections: MeSection[] = appNav(role, options)
+    .map((section) => ({
+      label: section.label,
+      items: section.items.filter(
+        (item) => item.href !== "/app/settings/profile" && !tabHrefs.has(item.href),
+      ),
+    }))
+    .filter((section) => section.items.length > 0)
+  const settings: MeSection = {
+    label: "Settings",
+    items: SETTINGS_NAV.map((link) => ({
+      ...link,
+      icon: SETTINGS_ICONS[link.href] ?? Settings,
+    })),
+  }
+  return [...sections, settings]
+}
+
+const SETTINGS_ICONS: Record<string, LucideIcon> = {
+  "/app/settings/profile": UserRound,
+  "/app/settings/connections": Link2,
+  "/app/settings/payouts": Banknote,
+  "/app/settings/notifications": BellRing,
+  "/app/settings/account": KeyRound,
+}
+
+/**
+ * The phone app bar's default title for a path: the deepest menu entry that contains it (Settings →
+ * Payouts is "Payouts", `/app/collabs/<id>` is "Collabs"). Pages with a more specific title set it
+ * with `<AppBarSlot title>` (components/layout/app-bar-slot.tsx). Null when no menu knows the path.
+ */
+export function shellTitle(pathname: string): string | null {
+  if (pathname === ME_PATH) return ME_TAB.title
+  const sections = [
+    ...APP_ROLES.flatMap((role) => appNav(role, { includeV1: true })),
+    ...adminNav({ includeV1: true }),
+  ]
+  const candidates = sections
+    .flatMap((section) => section.items)
+    .flatMap((item) => [
+      { title: item.title, href: item.href },
+      // A child that is its parent's own page (Earnings → Overview) keeps the parent's title.
+      ...(item.children ?? []).map((child) => ({
+        title: child.href === item.href ? item.title : child.title,
+        href: child.href,
+      })),
+    ])
+    .filter((candidate) => isActivePath(pathname, candidate.href))
+  let best: { title: string; href: string } | null = null
+  for (const candidate of candidates) {
+    if (!best || candidate.href.length > best.href.length) best = candidate
+  }
+  return best?.title ?? null
+}
+
+/**
+ * Where the phone app bar's back button goes, or null for pages without one: tabs, `/admin` and
+ * admin sections (the menu button opens the admin menu instead). Otherwise the nearest parent page
+ * that exists, and Me for the app's own sections and settings (Me lists them). Pages can set
+ * another target with `<AppBarSlot back>`.
+ */
+export function shellBackHref(pathname: string, tabs: readonly MobileTab[]): string | null {
+  if (tabs.some((tab) => tab.href === pathname)) return null
+  const root = pathname.startsWith("/admin") ? "/admin" : "/app"
+  if (pathname === root || !pathname.startsWith(`${root}/`)) return null
+  let parent = pathname.slice(0, pathname.lastIndexOf("/"))
+  while (parent !== root && parent.startsWith(`${root}/`)) {
+    if (parent === "/app/settings") return ME_PATH
+    // Skip menu pages a later phase builds; dynamic pages (ids) are assumed to exist.
+    if (isBuiltRoute(parent) || !menuHrefs().has(parent)) return parent
+    parent = parent.slice(0, parent.lastIndexOf("/"))
+  }
+  return root === "/app" ? ME_PATH : null
 }
 
 // --- Built routes ---------------------------------------------------------------------------
@@ -209,6 +350,7 @@ const BUILT_ROUTES: ReadonlySet<string> = new Set([
   "/legal/agreement",
   "/app",
   "/app/audience",
+  "/app/me",
   "/app/settings/profile",
   "/app/settings/connections",
   "/app/settings/payouts",
@@ -301,6 +443,17 @@ export function plannedNavItem(pathname: string): NavItem | null {
     }
   }
   return best?.item ?? null
+}
+
+let menuHrefCache: ReadonlySet<string> | null = null
+
+/** Every path any app or admin menu links to, v1 included. */
+function menuHrefs(): ReadonlySet<string> {
+  menuHrefCache ??= new Set([
+    ...APP_ROLES.flatMap((role) => navHrefs(appNav(role, { includeV1: true }))),
+    ...navHrefs(adminNav({ includeV1: true })),
+  ])
+  return menuHrefCache
 }
 
 /** All hrefs in a set of sections, children included (tests and sitemaps). */

@@ -43,17 +43,17 @@ export function MobileNav({ appName, links }: { appName: string; links: NavLink[
               key={link.href}
               href={link.href}
               onClick={close}
-              className="rounded-md px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+              className="flex min-h-11 items-center rounded-md px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
             >
               {link.title}
             </Link>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-2 p-4">
-          <Button asChild variant="outline" onClick={close}>
+        <div className="mt-auto flex flex-col gap-2 px-4 pt-4 pb-safe-4">
+          <Button asChild variant="outline" size="lg" onClick={close}>
             <Link href={AUTH_LINKS.signIn}>Sign in</Link>
           </Button>
-          <Button asChild onClick={close}>
+          <Button asChild size="lg" onClick={close}>
             <Link href={AUTH_LINKS.signUp}>Get started</Link>
           </Button>
         </div>

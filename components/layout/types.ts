@@ -25,7 +25,10 @@ export type ShellProps = ShellActions & {
   roles: readonly AppRole[]
   activeRole: AppRole
   isAdmin: boolean
+  /** Unread in-app notifications: the header bell, and the phone's Inbox tab badge. */
   unreadNotifications?: number
+  /** Unread message threads (Phase 3): added to the Inbox tab badge on phones. */
+  unreadMessages?: number
   /** Desktop sidebar open state, from the `sidebar_state` cookie. */
   defaultSidebarOpen?: boolean
   /** Show Phase 7 (v1) routes. */
