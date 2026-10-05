@@ -465,7 +465,7 @@ DATABASE_URL
 AUTH_SECRET, AUTH_URL
 AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_GITHUB_ID, AUTH_GITHUB_SECRET
 RESEND_API_KEY, EMAIL_FROM
-STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 GOOGLE_YT_CLIENT_ID, GOOGLE_YT_CLIENT_SECRET
 META_APP_ID, META_APP_SECRET
 TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
@@ -480,6 +480,7 @@ PLATFORM_TAKE_RATE=0.10
 HOLD_DAYS=14
 MIN_PAYOUT_CENTS=1000
 AUTO_APPROVE_LAUNCHES=false
+YOUTUBE_LONG_RETENTION=false
 APP_NAME, NEXT_PUBLIC_APP_URL
 ```
 
@@ -624,3 +625,41 @@ Every external integration sits behind a small interface with a **live** and a *
 - **Auth rate limit (§14):** magic links are limited in the `signIn` callback when `email.verificationRequest` is set (`isAuthRateLimited`, `lib/auth/rate-limit.ts`: per IP and per email). Every magic-link request passes there, from any entry point; a refusal redirects to `/sign-in?error=RateLimited`, which the server action turns into the form message. The client IP comes from the route handler's request, or from `headers()` when a server action runs Auth.js in-process (`config(undefined)`). OAuth has no hook before the redirect to the provider, so `signInWithProvider` limits per IP itself. The `/api/auth` route answers 405 to `POST /api/auth/signin/*`: sign-in starts only from our server actions (in-process, never over HTTP), and Auth.js's HTTP endpoint would skip their validation and the OAuth limit. Callbacks, session, CSRF and sign-out stay open. The optional /sign-up name waits in an httpOnly cookie `pending_signup_name` scoped to `/api/auth` (24 h) until the callback creates the user; the auth route clears it after a successful callback. Sign-out is the `signOutAction` server action (deletes the database session) and lands on `/`. The marketing header always shows "Sign in / Get started" so marketing pages stay static; signed-in visitors who click them are sent on to `/app` by the proxy.
 - **Server actions:** `defineAction({ name, input, authorize, run })` (`lib/actions/define-action.ts`) parses input (objects or FormData), calls `requireUser()`, applies `authorize`, and returns `ActionResult` (`lib/actions/result.ts`, client-safe): `{ ok: true, data }` or `{ ok: false, error, fieldErrors? }`. Throw `ActionError` for messages users should read; other errors go to Sentry with the action name and the user sees a generic message. `redirect()` / `notFound()` pass through (`unstable_rethrow`). Transactions and events stay explicit in `run`. `authorize` is required (the type requires it and `defineAction` throws without it), so no action can skip §4 step 3; actions that only touch the signed-in user's own account use `canManageOwnAccount(user)` (active user) from authz.ts.
 - **Auth logging:** Auth.js's expected user-caused errors (`Verification`, `AccessDenied`, `OAuthAccountNotLinked`, `AccountNotLinked`, `MissingCSRF`) are not sent to Sentry; every other Auth.js error is.
+
+### 19.10 Integration decisions from provider research (briefs in `docs/integrations/`)
+Open items for Trifon are marked **(pending confirmation)**; the default below is what we build until he decides otherwise.
+
+**Social (§7.1)** (see `docs/integrations/social-providers.md`)
+- **YouTube:** scopes `youtube.readonly` + `yt-analytics.readonly`; `access_type=offline`, `prompt=consent`, PKCE S256.
+  - `subscriberCount` is rounded and can be hidden.
+  - Demographics are *viewer* demographics (`viewerPercentage`); countries are ranked by views. Snapshot basis = `viewers`.
+  - Store both `views` and `engagedViews` (in `raw`); `avg_views` uses `views`.
+  - Never call `search.list`.
+- **YouTube retention (pending confirmation):** Google's policy limits storing YouTube statistics to 30 days unless the platform accepts the derived-metrics policy. Env flag `YOUTUBE_LONG_RETENTION` (default `false`). While it is false, a daily job deletes YouTube-sourced `audience_snapshots` older than 30 days, using the GDPR erasure hatch. The newest snapshot and the derived profile fields (`size_tier`, `audience_summary`, `embedding`) are kept.
+- **Instagram:** "Instagram API with Instagram Login", Graph API pinned to `v26.0`.
+  - Scopes: `instagram_business_basic` and `instagram_business_manage_insights`.
+  - No refresh token. Exchange the short-lived token for a long-lived 60-day one; `refresh()` calls `ig_refresh_token` once the token is ≥24h old.
+  - Use `views`, not the deprecated metrics.
+  - Demographics: `follower_demographics` (≥100 followers), basis `followers`.
+- **TikTok:** scopes `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`.
+  - Refresh tokens rotate; always store the new one.
+  - No demographics: `ageGender = null`, `topCountries = []`.
+- **GitHub (builders):** OAuth App requesting **no scope** (read-only public data), PKCE S256. One GraphQL call fetches repos, stars, languages and `contributionsCollection`. The `github` provider uses `GITHUB_DATA_CLIENT_ID`/`_SECRET` (separate from login).
+
+**Stripe (§7.2, §9)** (see `docs/integrations/stripe.md`; SDK 23.x pins API `2026-09-30.endive`)
+- **Connected accounts:** `type: 'express'` is deprecated. We create v1 accounts with controller properties: `stripe_dashboard.type = 'express'`, `fees.payer = 'application'`, `losses.payments = 'application'`, `requirement_collection = 'stripe'`, `capabilities.transfers.requested = true`, full service agreement. Onboarding uses Account Links; the Express dashboard uses `accounts.createLoginLink`.
+- **`account.updated` and `capability.updated` arrive on the Connect endpoint** with their own secret, `STRIPE_CONNECT_WEBHOOK_SECRET` (added to §17's list). `/api/webhooks/stripe` verifies against both secrets. `pnpm stripe:listen` uses `--forward-to` plus `--forward-connect-to`.
+- **"Payouts ready"** = `payouts_enabled` AND `capabilities.transfers === 'active'`. `stripe_accounts` stores `transfers_capability` next to the §5 booleans. "Both have payouts_enabled" in §12 means payouts-ready.
+- **Checkout:** `mode: 'payment'`, `price_data` with a `tax_code` chosen per `delivery_type`, `automatic_tax`, and metadata on both the session and `payment_intent_data`.
+  - Never send `payment_method_types`; it was removed in endive.
+  - Fulfil only when `payment_status === 'paid'`. Delayed payment methods are fulfilled on `checkout.session.async_payment_succeeded`.
+- **Ledger timing:** the Stripe fee may be unknown at `checkout.session.completed`.
+  - The order, access grant and buyer email are created immediately.
+  - The ledger split is posted by an idempotent `postOrderLedger(orderId)` once the balance transaction exists. It is called from `checkout.session.completed` and `charge.updated`; `orders.ledger_posted_at` marks completion.
+- **Payout transfers:** one aggregated transfer per user per batch, **without** `source_transaction` (it binds a transfer to a single charge and adds nothing after the hold).
+  - Idempotency key: `payout:<batchId>:<userId>`.
+  - Ops requirement: set the platform's own Stripe payout schedule to manual.
+- **Refunds:** handled from the `refund.created` / `refund.updated` / `refund.failed` events; `charge.refunded` is accepted too, and everything is idempotent on the refund id.
+  - Stripe keeps its fee on refunds. **Default (pending confirmation): the platform absorbs the unreturned fee.** Member shares are reversed proportionally; the platform's loss is an `adjustment` entry.
+  - If a transfer reversal fails (the connected balance is too low), the negative entries stay and are netted against future payouts.
+- **§18.1 merchant of record (pending confirmation):** we build the spec default, with the platform as seller and Stripe Tax for VAT. Stripe Managed Payments (merchant of record) does not support Connect.
