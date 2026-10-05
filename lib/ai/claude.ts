@@ -46,6 +46,8 @@ type GenerateOptions = {
   maxTokens?: number
   effort?: AiEffort
   timeoutMs?: number
+  /** Realistic output for the fake transport, usually `() => prompt.fake(input)`. */
+  fakeOutput?: () => unknown
 }
 
 export type GenerateStructuredOptions<S extends z.ZodType> = GenerateOptions & {
@@ -101,6 +103,7 @@ async function run<T>(
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     effort: options.effort,
     schema,
+    fakeOutput: options.fakeOutput,
   }
 
   const started = performance.now()

@@ -12,6 +12,10 @@
  *   be compared per version.
  * - Prompts take typed input and must never include secrets or tokens. Send only the fields the
  *   task needs; user emails and message bodies stay out unless the use requires them.
+ * - Every definition provides `fake(input)`: a realistic, deterministic output built from the
+ *   input (it must pass the output schema). Callers pass `fakeOutput: () => prompt.fake?.(input)`
+ *   to `generateStructured` / `generateText`, so the fake AI service (§19.3) shows sensible text
+ *   in local runs and demos instead of schema-shaped placeholders.
  *
  * The actual prompts arrive with their features (Phases 1, 2 and 4).
  */
@@ -31,6 +35,8 @@ export type PromptDefinition<Input> = {
   version: string
   system: string
   render: (input: Input) => string
+  /** Realistic deterministic output for the fake AI service (see the rules above). */
+  fake?: (input: Input) => unknown
 }
 
 const VERSION_PATTERN = /^([a-z_]+)@v([1-9][0-9]*)$/

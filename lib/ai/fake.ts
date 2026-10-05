@@ -8,8 +8,10 @@ import type { ClaudeRequest, ClaudeResponse, ClaudeTransport } from "./types"
  * Deterministic stand-ins for Claude and Voyage (§19.3), used when the `ai` / `embeddings`
  * services are fake. Same input, same output, no network.
  *
- * Structured requests get a JSON value generated from the request's Zod schema, so the real
- * parsing and validation code runs. Markers in the prompt force the failure paths:
+ * A request that carries `fakeOutput` (built by the prompt's `fake(input)`, see
+ * `lib/ai/prompts/index.ts`) gets that realistic reply, so demos read naturally. Otherwise,
+ * structured requests get a JSON value generated from the request's Zod schema. Either way the
+ * real parsing and validation code runs. Markers in the prompt force the failure paths:
  * - `FAKE_AI_INVALID`: the reply is not valid JSON (validation fails, retry, then fallback);
  * - `FAKE_AI_REFUSAL`: the reply is a refusal (fallback without retry);
  * - `FAKE_AI_ERROR`: the transport throws, like a network or API error (fallback).
@@ -36,6 +38,14 @@ export function createFakeTransport(): ClaudeTransport {
         text: "Sorry, here is some prose instead of JSON.",
         stopReason: "end_turn",
         model: FAKE_MODEL,
+      }
+    }
+
+    if (request.fakeOutput) {
+      const value = request.fakeOutput()
+      if (value !== undefined) {
+        const text = typeof value === "string" ? value : JSON.stringify(value)
+        return { text, stopReason: "end_turn", model: FAKE_MODEL }
       }
     }
 

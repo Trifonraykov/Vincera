@@ -1086,3 +1086,10 @@ Shared contracts the Phase 1 features build on. Schema changes are in migration 
   - both finish fake Stripe Connect: the webhook is delivered and processed, `stripe_accounts` shows payouts enabled with transfers active, and Settings → Payouts says "Payouts are ready";
   - `/c/<handle>` and `/b/<handle>` render.
 - The same walk checked at 390 px wide in dark mode (no horizontal scroll), that tokens are stored encrypted, and that the §11 events exist without emails or tokens in their properties.
+
+### 19.16 Fake AI output must read like the real thing
+- **Rule:** every prompt definition in `lib/ai/prompts/` provides `fake(input)`. It returns a realistic, deterministic output built only from the typed input, and that output must pass the prompt's output schema. Examples: an idea brief drafted from the pasted comments; a match explanation naming the two top features with their values; launch posts that use the launch title, price and tracked link.
+- **Wiring:** callers pass `fakeOutput: () => prompt.fake?.(input)` to `generateStructured` / `generateText`. The fake transport (`lib/ai/fake.ts`) returns it when the AI service is fake.
+- **Without a `fake`:** the transport falls back to schema-shaped placeholders ("Stub …"). Never ship a prompt without `fake`: local runs, the Docker demo and screenshots should read naturally.
+- **Failure paths:** the markers `FAKE_AI_INVALID`, `FAKE_AI_REFUSAL` and `FAKE_AI_ERROR` still force them.
+- **Reference implementation:** `fakeAudienceSummary` in `lib/ai/prompts/audience-summary.ts`.

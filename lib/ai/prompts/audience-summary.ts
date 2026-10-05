@@ -172,6 +172,7 @@ export const audienceSummaryPromptV1 = definePrompt<AudienceSummaryInput>({
         : "No connected accounts yet."
     return `${profile}\n\n# Connected accounts\n${connections}`
   },
+  fake: (input) => fakeAudienceSummary(input),
 })
 
 /** The version new summaries are generated with. */
@@ -225,6 +226,7 @@ export async function generateAudienceSummary(
       prompt: prompt.render(input),
       schema: audienceSummaryOutputSchema,
       fallback: AUDIENCE_SUMMARY_FALLBACK,
+      fakeOutput: () => prompt.fake?.(input),
       // A short, data-bound summary: low effort is enough and keeps it cheap. max_tokens stays
       // at the wrapper's default because thinking tokens count toward it.
       effort: "low",
@@ -238,4 +240,137 @@ export async function generateAudienceSummary(
     return { ...meta, ok: false, fallback: AUDIENCE_SUMMARY_FALLBACK, reason: "invalid_output" }
   }
   return { ...result, data }
+}
+
+// --- Fake output (§19.3) ----------------------------------------------------------------------
+
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" })
+
+function countryName(code: string): string {
+  try {
+    return regionNames.of(code.toUpperCase()) ?? code
+  } catch {
+    return code
+  }
+}
+
+function roundedCount(value: number): string {
+  if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10} million`
+  if (value >= 10_000) return `${Math.round(value / 1_000)}K`
+  if (value >= 1_000) return `${Math.round(value / 100) / 10}K`
+  return value.toLocaleString("en-US")
+}
+
+function wholePercent(share: number): string {
+  return `${Math.round(share * 100)}%`
+}
+
+function listWords(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? ""
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
+}
+
+/**
+ * A realistic summary built only from the input's numbers, so local runs and demos read naturally
+ * without an API key. Deterministic, and always valid against `audienceSummaryOutputSchema`.
+ */
+export function fakeAudienceSummary(input: AudienceSummaryInput): AudienceSummaryOutput {
+  const ranked = [...input.connections]
+    .filter((connection) => connection.provider !== "github")
+    .sort(
+      (a, b) => Number(b.verified) - Number(a.verified) || (b.followers ?? 0) - (a.followers ?? 0),
+    )
+  const primary = ranked[0]
+  const sentences: string[] = []
+
+  if (primary) {
+    const label = PROVIDER_LABELS[primary.provider]
+    const noun = primary.provider === "youtube" ? "subscribers" : "followers"
+    const size =
+      primary.followers !== null
+        ? `about ${roundedCount(primary.followers)} ${noun}`
+        : "an audience"
+    const others = ranked.slice(1).map((connection) => PROVIDER_LABELS[connection.provider])
+    const where = others.length > 0 ? `${label}, plus ${listWords(others)}` : label
+    let first = `A ${primary.verified ? "" : "self-reported "}${where} audience of ${size}`
+    if (primary.avgViews !== null) {
+      first += `, with recent posts averaging ${roundedCount(primary.avgViews)} views`
+    }
+    if (primary.engagementRate !== null) {
+      first += ` and ${(Math.round(primary.engagementRate * 1000) / 10).toFixed(1)}% engagement`
+    }
+    sentences.push(`${first}.`)
+
+    if (primary.topCountries.length > 0) {
+      const people = primary.countriesBasis === "followers" ? "followers" : "viewers"
+      const top = primary.topCountries
+        .slice(0, 3)
+        .map((entry) => `${countryName(entry.country)} (${wholePercent(entry.share)})`)
+      sentences.push(`Most ${people} are in ${listWords(top)}.`)
+    }
+
+    if (primary.ageGender) {
+      const byAge = new Map<string, number>()
+      const byGender = new Map<string, number>()
+      for (const bucket of primary.ageGender.buckets) {
+        byAge.set(bucket.ageGroup, (byAge.get(bucket.ageGroup) ?? 0) + bucket.share)
+        byGender.set(bucket.gender, (byGender.get(bucket.gender) ?? 0) + bucket.share)
+      }
+      const ages = [...byAge.entries()].sort(([, a], [, b]) => b - a).slice(0, 2)
+      const [gender, genderShare] = [...byGender.entries()].sort(([, a], [, b]) => b - a)[0] ?? []
+      const people = primary.ageGender.basis === "followers" ? "followers" : "viewers"
+      if (ages.length > 0) {
+        let line = `${people[0]?.toUpperCase()}${people.slice(1)} are mostly aged ${listWords(
+          ages.map(([age, share]) => `${age} (${wholePercent(share)})`),
+        )}`
+        if ((gender === "female" || gender === "male") && genderShare !== undefined) {
+          line += `, and ${wholePercent(genderShare)} are ${gender}`
+        }
+        sentences.push(`${line}.`)
+      }
+    }
+  }
+
+  const topics = fakeTopics(input)
+  const focus = input.niche?.trim() || listWords(topics.slice(0, 3))
+  if (focus) {
+    sentences.push(`They come for content about ${focus.toLowerCase().replace(/\.$/, "")}.`)
+    sentences.push(
+      `Practical tools, templates or small apps that save them time on ${
+        topics[0] ?? "these topics"
+      } would suit this audience.`,
+    )
+  } else {
+    sentences.push(
+      "Practical tools and templates related to the creator's content would suit them.",
+    )
+  }
+  if (sentences.length < 3) sentences.push("More detail will appear as more data is synced.")
+
+  return { summary: sentences.slice(0, 5).join(" ").slice(0, 1200), topics }
+}
+
+function fakeTopics(input: AudienceSummaryInput): string[] {
+  const candidates = [
+    ...input.profileTopics,
+    ...input.connections.flatMap((connection) => connection.topTopics),
+    // A short niche ("budget recipes") is a topic; a longer one is a description, not a label.
+    ...(input.niche && input.niche.trim().split(/\s+/).length <= 3 ? [input.niche] : []),
+  ]
+  const topics: string[] = []
+  for (const candidate of candidates) {
+    const cleaned = candidate
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (
+      cleaned &&
+      cleaned.split(" ").length <= 3 &&
+      cleaned.length <= 40 &&
+      !topics.includes(cleaned)
+    )
+      topics.push(cleaned)
+  }
+  return topics.slice(0, AUDIENCE_SUMMARY_MAX_TOPICS)
 }

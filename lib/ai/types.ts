@@ -15,6 +15,11 @@ export type ClaudeRequest = {
   effort?: AiEffort
   /** Present for structured output: the reply must be JSON matching this schema. */
   schema?: z.ZodType
+  /**
+   * Only used by the fake transport (§19.3): builds a realistic reply from the prompt's typed
+   * input (a string for text, a JSON value for structured output). Never sent to the API.
+   */
+  fakeOutput?: () => unknown
 }
 
 export type ClaudeResponse = {
