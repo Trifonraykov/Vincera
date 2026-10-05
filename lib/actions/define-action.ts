@@ -8,8 +8,10 @@ import type { AuthUser } from "@/lib/auth/user"
 import { getDb, type Db } from "@/lib/db/client"
 import { reportError } from "@/lib/observability"
 
+import { ActionError } from "./errors"
 import { ACTION_MESSAGES, type ActionResult } from "./result"
 
+export { ActionError } from "./errors"
 export { ACTION_MESSAGES, type ActionResult, type FieldErrors } from "./result"
 
 /**
@@ -41,14 +43,6 @@ export { ACTION_MESSAGES, type ActionResult, type FieldErrors } from "./result"
  * to Sentry and the user sees a generic message. Next.js control flow (`redirect()`,
  * `notFound()`) passes through.
  */
-
-/** A failure whose message is safe and useful to show to the user. */
-export class ActionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "ActionError"
-  }
-}
 
 export type ActionContext<Input> = { input: Input; user: AuthUser; db: Db }
 
@@ -103,7 +97,11 @@ export function defineAction<Schema extends z.ZodType, T>(
       return { ok: true, data: await definition.run({ input, user, db: getDb() }) }
     } catch (error) {
       unstable_rethrow(error)
-      if (error instanceof ActionError) return { ok: false, error: error.message }
+      if (error instanceof ActionError) {
+        return error.fieldErrors
+          ? { ok: false, error: error.message, fieldErrors: error.fieldErrors }
+          : { ok: false, error: error.message }
+      }
       reportError(error, { tags: { action: definition.name } })
       return { ok: false, error: ACTION_MESSAGES.unexpected }
     }

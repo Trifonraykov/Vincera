@@ -11,6 +11,7 @@ import {
   isSocialProviderFake,
   parseEnv,
   PUBLISHED_SECRET_VALUES,
+  stripeWebhookSecrets,
   testRoutesEnabled,
 } from "@/lib/env"
 
@@ -37,6 +38,7 @@ const production = {
   RESEND_API_KEY: "re_123",
   EMAIL_FROM: "Vincera <hello@example.com>",
   STRIPE_SECRET_KEY: "sk_live_123",
+  STRIPE_CONNECT_WEBHOOK_SECRET: "whsec_connect_123",
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_123",
   GOOGLE_YT_CLIENT_ID: "yt-id",
   GOOGLE_YT_CLIENT_SECRET: "yt-secret",
@@ -84,6 +86,8 @@ describe("parseEnv: development", () => {
     expect(env.HOLD_DAYS).toBe(14)
     expect(env.MIN_PAYOUT_CENTS).toBe(1000)
     expect(env.AUTO_APPROVE_LAUNCHES).toBe(false)
+    expect(env.YOUTUBE_LONG_RETENTION).toBe(false)
+    expect(env.STRIPE_CONNECT_WEBHOOK_SECRET).toBeUndefined()
     expect(env.E2E_TEST_ROUTES).toBe(false)
     expect(env.EMAIL_FROM).toBe("Vincera <onboarding@resend.dev>")
     expect(env.ADMIN_EMAILS).toEqual([])
@@ -120,8 +124,10 @@ describe("parseEnv: development", () => {
       HOLD_DAYS: "7",
       MIN_PAYOUT_CENTS: "2500",
       AUTO_APPROVE_LAUNCHES: "true",
+      YOUTUBE_LONG_RETENTION: "true",
     })
     expect(env.PLATFORM_TAKE_RATE).toBe(0.15)
+    expect(env.YOUTUBE_LONG_RETENTION).toBe(true)
     expect(env.HOLD_DAYS).toBe(7)
     expect(env.MIN_PAYOUT_CENTS).toBe(2500)
     expect(env.AUTO_APPROVE_LAUNCHES).toBe(true)
@@ -134,6 +140,8 @@ describe("parseEnv: development", () => {
     ["HOLD_DAYS", "-1"],
     ["MIN_PAYOUT_CENTS", "10.50"],
     ["AUTO_APPROVE_LAUNCHES", "maybe"],
+    ["YOUTUBE_LONG_RETENTION", "sometimes"],
+    ["STRIPE_CONNECT_WEBHOOK_SECRET", "not-a-signing-secret"],
   ])("rejects %s=%s", (key, value) => {
     const problems = problemsOf({ ...base, [key]: value })
     expect(problems).toHaveLength(1)
@@ -187,6 +195,15 @@ describe("parseEnv: production", () => {
       "VOYAGE_API_KEY: is required in production",
       "R2_BUCKET: is required in production",
     ])
+  })
+
+  it("requires the Stripe Connect webhook secret (§19.10)", () => {
+    const { STRIPE_CONNECT_WEBHOOK_SECRET: _connect, ...incomplete } = production
+    expect(problemsOf(incomplete)).toEqual([
+      "STRIPE_CONNECT_WEBHOOK_SECRET: is required in production",
+    ])
+    // YOUTUBE_LONG_RETENTION has a default (§17), so production does not require it.
+    expect(parseEnv(production).YOUTUBE_LONG_RETENTION).toBe(false)
   })
 
   it("requires APP_NAME, which brands every page and email", () => {
@@ -329,6 +346,22 @@ describe("isFake", () => {
       GOOGLE_YT_CLIENT_SECRET: "s",
     })
     expect(isSocialProviderFake("youtube", forced)).toBe(true)
+  })
+})
+
+describe("stripeWebhookSecrets", () => {
+  it("verifies against both endpoint secrets", () => {
+    expect(stripeWebhookSecrets(parseEnv(production))).toEqual({
+      platform: "whsec_test_secret",
+      connect: "whsec_connect_123",
+    })
+  })
+
+  it("falls back to STRIPE_WEBHOOK_SECRET for Connect events outside production", () => {
+    expect(stripeWebhookSecrets(parseEnv(base))).toEqual({
+      platform: "whsec_test_secret",
+      connect: "whsec_test_secret",
+    })
   })
 })
 

@@ -41,6 +41,9 @@ export default defineConfig({
   reporter: isCI
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
+  // `next dev` compiles each route on its first request, which can take several seconds; a
+  // navigation or redirect that triggers a compile would trip the default 5 s. Builds (CI) keep it.
+  expect: { timeout: isCI ? 5_000 : 15_000 },
   use: {
     baseURL,
     trace: "retain-on-failure",

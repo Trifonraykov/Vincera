@@ -1,6 +1,9 @@
+import { ArrowRight } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { Button } from "@/components/ui/button"
 import { requireUser } from "@/lib/auth/session"
 import { appRolesOf } from "@/lib/auth/user"
 import { ROLE_LABELS } from "@/lib/nav"
@@ -11,13 +14,31 @@ export const metadata: Metadata = { title: "Choose your role" }
 
 /**
  * First onboarding step (§12): creator, builder or both. Also where existing users add their
- * other role ("Become a builder" in the role switcher).
- * TODO(Phase 1): polish, then continue to the profile steps.
+ * other role ("Become a builder" in the role switcher). Choosing continues with the new role's
+ * profile step (`chooseRoles` redirects to the next onboarding step).
  */
 export default async function OnboardingRolePage() {
   const user = await requireUser()
   const roles = appRolesOf(user)
   const firstName = user.name?.split(/\s+/)[0]
+  const hasBoth = roles.includes("creator") && roles.includes("builder")
+
+  if (hasBoth) {
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title="You're a creator and a builder"
+          description="You already have both roles. Switch between them from the sidebar in the app."
+        />
+        <Button asChild>
+          <Link href="/app">
+            Go to the app
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -33,7 +54,7 @@ export default async function OnboardingRolePage() {
             : "Pick the side you're on. You can add the other role later."
         }
       />
-      <RoleForm />
+      <RoleForm currentRoles={roles} />
     </div>
   )
 }

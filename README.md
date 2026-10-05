@@ -151,6 +151,14 @@ The repository root is also a Next.js app: a two-sided platform where creators a
   - Docker: `docker run -d --name creator-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 pgvector/pgvector:pg17`
   - or a local server plus the pgvector package (for example `postgresql-16-pgvector` on Debian/Ubuntu).
 
+## Quick start with Docker
+
+```bash
+docker compose up --build    # http://localhost:3000
+```
+
+This starts Postgres with pgvector and the app, with every external service faked. Sign in with any email and click the magic link in the dev mailbox at <http://localhost:3000/api/dev/mailbox>. Sign up as `admin@example.com` for admin access. See [`docker/README.md`](./docker/README.md) for updating and resetting.
+
 ## Local setup
 
 ```bash
@@ -169,6 +177,7 @@ All variables are listed in [`.env.example`](./.env.example) (its first block be
 - Always required: `DATABASE_URL`, `AUTH_SECRET` (32+ characters), `ENCRYPTION_KEY` (32 bytes, base64) and `STRIPE_WEBHOOK_SECRET` (the example value works locally).
 - `APP_ENV` (`development` | `test` | `production`) defaults from `NODE_ENV`. In production every external credential is required and fakes are refused.
 - `ADMIN_EMAILS` (comma list) get the admin role when they sign up. For an existing account: `pnpm admin:grant <email>`.
+- `STRIPE_CONNECT_WEBHOOK_SECRET` (the Connect endpoint's signing secret) is required in production; elsewhere it falls back to `STRIPE_WEBHOOK_SECRET`. `YOUTUBE_LONG_RETENTION` (default `false`) keeps YouTube statistics beyond 30 days; see `CLAUDE.md` §19.10.
 
 ## Fake services
 
@@ -178,14 +187,16 @@ Outside production, every external service runs a fake implementation when its c
 |---|---|
 | Email (Resend) | One JSON file per email in `.data/outbox/` |
 | Storage (Cloudflare R2) | Files under `.data/storage/`, served through signed, expiring `/api/dev/storage/*` URLs |
-| Stripe | Fake checkout, Connect onboarding and transfers; webhooks are signed with `STRIPE_WEBHOOK_SECRET` and go through the real handler (built with Phases 1 and 4) |
-| Social providers | A fake authorize page and fixture profile and audience data (built with Phase 1) |
+| Stripe | Fake Connect onboarding (`/api/dev/fake-stripe/*`) that posts signed `account.updated` webhooks to the real handler; fake checkout and transfers arrive with Phases 4–5 |
+| Social providers | A fake consent page per provider (`/api/dev/fake-oauth/<provider>/authorize`, "Authorize as <fixture account>") that redirects to the real OAuth callback; recorded API responses (`tests/fixtures/social/`) go through the real parsers |
 | Claude / embeddings | Deterministic stub output / hashed bag-of-words vectors |
 | Jobs (Inngest) | Handlers run in-process right after the request |
 | Rate limiting (Upstash) | In-memory, per process |
 | Sentry / PostHog | Off unless a DSN / key is set |
 
 **Signing in locally:** sign-in is by email magic link (plus Google / GitHub once their `AUTH_*` credentials are set). With the fake email service nothing is sent: open the newest file in `.data/outbox/` and follow its `/api/auth/callback/email?...` link. See `CLAUDE.md` §19.3 and §19.9.
+
+**What works so far (Phase 1):** sign up, pick creator, builder or both, and walk onboarding: profile (handle, niche, languages / skills, stack, availability), connect YouTube, Instagram or TikTok (or enter numbers by hand), review the AI audience summary, GitHub and portfolio for builders, then Stripe payouts. Then `/app/audience`, Settings (profile, connections, payouts, notifications, account) and the public profiles at `/c/<handle>` and `/b/<handle>`. With fakes, every connection and the payouts onboarding work offline. Real provider apps need their credentials in `.env.local`; each provider's redirect URI is `<NEXT_PUBLIC_APP_URL>/api/oauth/<provider>/callback`. Background jobs (`social/sync`, the daily resync and YouTube retention) run in-process when Inngest is fake.
 
 ## Scripts
 
@@ -195,13 +206,13 @@ Outside production, every external service runs a fake implementation when its c
 | `pnpm typecheck` / `pnpm lint` | `tsc --noEmit`, ESLint |
 | `pnpm format` / `pnpm format:check` | Prettier (write / check) |
 | `pnpm test` | Vitest: the `unit` and `integration` projects (`pnpm test:unit`, `pnpm test:integration`) |
-| `pnpm test:e2e` | Playwright end-to-end tests |
+| `pnpm test:e2e` | Playwright end-to-end tests (`CI=1 pnpm test:e2e` builds and runs `next start`) |
 | `pnpm db:generate` | Generate a Drizzle migration from `lib/db/schema` (`--custom --name <name>` for hand-written SQL) |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL` |
 | `pnpm db:reset` | Drop, re-create and migrate the `DATABASE_URL` database (never in production) |
 | `pnpm db:seed` | Seed demo data (placeholder until Phase 2) |
 | `pnpm admin:grant <email>` | Give an existing user the admin role (audited) |
-| `pnpm stripe:listen` | Forward Stripe test webhooks to the local app (Stripe CLI) |
+| `pnpm stripe:listen` | Forward Stripe test webhooks, platform and Connect, to the local app (Stripe CLI) |
 | `pnpm inngest:dev` | Run the Inngest dev server against the local app |
 | `pnpm email:dev` | Preview email templates (`lib/email/templates`) on port 3001 |
 | `pnpm ledger:check` | Reconcile the ledger against orders and Stripe transfers |
@@ -210,7 +221,7 @@ Outside production, every external service runs a fake implementation when its c
 
 - **Unit** (`tests/unit`) need nothing else.
 - **Integration** (`tests/integration`) run against real Postgres. `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5432/postgres`) is a maintenance connection whose user may create databases: each run builds a migrated template database (`ct_tpl_*`), and each test file works in its own clone (`ct_*`), dropped afterwards.
-- **End-to-end** (`tests/e2e`, Playwright, Chromium). Install the browser once with `pnpm exec playwright install chromium`. Each run drops, re-creates, migrates and seeds `E2E_DATABASE_URL` (default `creator_e2e`; the name must contain `e2e` or `test` as a whole word) and empties `.data/`. It then drives `pnpm dev` on port 3100 (`PORT` to change it; a server already listening there is reused) with `FAKE_SERVICES=all`, reading magic links from the fake outbox. `CI=1 pnpm test:e2e` runs `pnpm build && pnpm start` instead.
+- **End-to-end** (`tests/e2e`, Playwright, Chromium). Install the browser once with `pnpm exec playwright install chromium`. Each run drops, re-creates, migrates and seeds `E2E_DATABASE_URL` (default `creator_e2e`; the name must contain `e2e` or `test` as a whole word) and empties `.data/`. It then drives `pnpm dev` on port 3100 (`PORT` to change it; a server already listening there is reused) with `FAKE_SERVICES=all`, reading magic links from the fake outbox. `CI=1 pnpm test:e2e` runs `pnpm build && pnpm start` instead. Specs can run a background job under a mocked clock through the test-only `POST /api/test/jobs/<job id>` route (`runJob` in `tests/e2e/helpers/jobs.ts`).
 
 `TEST_DATABASE_URL` and `E2E_DATABASE_URL` are read from the environment or `.env.local`. Both must point at a Postgres on this machine, because the tests create and drop databases there; set `ALLOW_REMOTE_TEST_DB=1` to use another server that holds only test databases.
 

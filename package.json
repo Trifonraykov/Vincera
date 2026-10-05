@@ -23,7 +23,7 @@
     "db:seed": "tsx --tsconfig tsconfig.scripts.json scripts/seed.ts",
     "db:reset": "tsx --tsconfig tsconfig.scripts.json scripts/db-reset.ts",
     "admin:grant": "tsx --tsconfig tsconfig.scripts.json scripts/admin-grant.ts",
-    "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe",
+    "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe --forward-connect-to localhost:3000/api/webhooks/stripe",
     "ledger:check": "tsx --tsconfig tsconfig.scripts.json scripts/ledger-check.ts",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "email:dev": "email dev --dir lib/email/templates --port 3001"

@@ -53,6 +53,29 @@ export function hasCompletedOnboarding(user: Pick<AuthzUser, "onboardingComplete
   return user.onboardingCompletedAt !== null
 }
 
+// --- Profiles (Phase 1) -----------------------------------------------------------------------
+
+/** Create or edit the user's own creator profile (onboarding step, Settings → Profile). */
+export function canEditCreatorProfile(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isActive(user) && hasRole(user, "creator")
+}
+
+/** Create or edit the user's own builder profile, and add portfolio items to it. */
+export function canEditBuilderProfile(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isActive(user) && hasRole(user, "builder")
+}
+
+/** What portfolio item rules need: the user who owns the item's builder profile. */
+export type PortfolioItemAccess = { ownerUserId: string }
+
+/** Edit or delete a portfolio item: only on the user's own builder profile. */
+export function canManagePortfolioItem(
+  user: Pick<AuthzUser, "id" | "roles" | "status">,
+  item: PortfolioItemAccess,
+): boolean {
+  return canEditBuilderProfile(user) && item.ownerUserId === user.id
+}
+
 // --- Collaboration (Phases 3–4) ---------------------------------------------------------------
 
 /** What collab rules need: the ids of the collab's members (`collab_members.user_id`). */

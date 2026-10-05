@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth/auth"
 import { guardRoute } from "@/lib/auth/route-guard"
 import { PATHNAME_HEADER, sameOriginRedirectUrl } from "@/lib/auth/routes"
 import { parseAuthUser } from "@/lib/auth/user"
+import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 
 /**
  * Next.js 16 proxy (formerly middleware; runs on Node.js). Applies the route rules from
@@ -13,13 +14,14 @@ import { parseAuthUser } from "@/lib/auth/user"
  * onboarding, and signed-in users skip `/sign-in` / `/sign-up`.
  *
  * Wrapping with Auth.js `auth()` validates the database session (one query joining `users`) and
- * refreshes the session cookie's expiry. Layouts and pages check again with
+ * refreshes the session cookie's expiry. For `/app/*`, users who have not finished onboarding cost
+ * one more query (their onboarding snapshot, lib/onboarding/gate.ts). Layouts and pages check again with
  * requireUser()/requireAdmin() (defence in depth).
  */
 // The unused `_event` parameter selects Auth.js's middleware overload (not the route-handler one).
-const guarded = auth((request: NextAuthRequest, _event: NextFetchEvent) => {
+const guarded = auth(async (request: NextAuthRequest, _event: NextFetchEvent) => {
   const user = parseAuthUser(request.auth?.user)
-  const decision = guardRoute(request.nextUrl, user)
+  const decision = await guardRoute(request.nextUrl, user, (u) => resolveOnboardingRedirect(u))
   if (decision.type === "redirect") {
     return NextResponse.redirect(sameOriginRedirectUrl(decision.to, request.nextUrl.href))
   }

@@ -1,0 +1,68 @@
+{
+  "label": "Fresh Start (stats not shared, no videos)",
+  "description": "A brand-new account that unticked the profile and stats scopes and has posted nothing yet: followers are unknown and there are no videos.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 86400,
+        "open_id": "1b0e2c3d-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+        "refresh_token": "{{refresh_token}}",
+        "refresh_expires_in": 31536000,
+        "scope": "user.info.basic,video.list",
+        "token_type": "Bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 86400,
+        "open_id": "1b0e2c3d-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+        "refresh_token": "{{refresh_token}}",
+        "refresh_expires_in": 31536000,
+        "scope": "user.info.basic,video.list",
+        "token_type": "Bearer"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://open.tiktokapis.com/v2/user/info/",
+      "query": {
+        "fields": "open_id,union_id,avatar_url,display_name"
+      },
+      "body": {
+        "data": {
+          "user": {
+            "open_id": "1b0e2c3d-4f5a-4b6c-8d7e-9f0a1b2c3d4e",
+            "union_id": "5e2b9c1a-7d4f-4a3b-9c8d-0e1f2a3b4c5d",
+            "avatar_url": "https://p16-sign-va.tiktokcdn.com/fake/fresh-start~c5_168x168.jpeg",
+            "display_name": "Fresh Start"
+          }
+        },
+        "error": {
+          "code": "ok",
+          "message": "",
+          "log_id": "20261005093000FAKE0000000000000001"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://open.tiktokapis.com/v2/video/list/",
+      "body": {
+        "data": {
+          "videos": [],
+          "cursor": 0,
+          "has_more": false
+        },
+        "error": {
+          "code": "ok",
+          "message": "",
+          "log_id": "20261005093000FAKE0000000000000001"
+        }
+      }
+    }
+  ]
+}

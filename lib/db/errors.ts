@@ -6,6 +6,8 @@ export const PG_ERROR = {
   foreignKeyViolation: "23503",
   checkViolation: "23514",
   notNullViolation: "23502",
+  /** e.g. a value that is not one of an enum's labels. */
+  invalidTextRepresentation: "22P02",
   /** Raised by the append-only triggers (drizzle/0002_append_only_guards.sql). */
   appendOnlyViolation: "AO001",
 } as const

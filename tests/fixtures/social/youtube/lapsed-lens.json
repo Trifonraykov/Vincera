@@ -1,0 +1,431 @@
+{
+  "label": "Lapsed Lens (refresh token revoked)",
+  "description": "A photography channel connected while the Google app was in Testing status: its refresh token is rejected (invalid_grant) once the 1-hour access token expires, so the next sync marks the connection expired. Demographics are below YouTube's thresholds (no rows).",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 3599,
+        "refresh_token": "{{refresh_token}}",
+        "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "token_type": "Bearer",
+        "refresh_token_expires_in": 604799
+      }
+    },
+    "refresh": {
+      "status": 400,
+      "body": {
+        "error": "invalid_grant",
+        "error_description": "Token has been expired or revoked."
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/channels",
+      "query": {
+        "part": "snippet,statistics,contentDetails",
+        "mine": "true"
+      },
+      "body": {
+        "kind": "youtube#channelListResponse",
+        "etag": "fake-etag-lapsedlens",
+        "pageInfo": {
+          "totalResults": 1,
+          "resultsPerPage": 5
+        },
+        "items": [
+          {
+            "kind": "youtube#channel",
+            "etag": "fake-etag-ch-lapsedlens",
+            "id": "UCLaP5edLen5Ph0toGr4phy",
+            "snippet": {
+              "title": "Lapsed Lens",
+              "description": "Photography tips, gear and Lightroom edits.",
+              "customUrl": "@lapsedlens",
+              "publishedAt": "2024-02-10T12:00:00Z",
+              "thumbnails": {
+                "default": {
+                  "url": "https://yt3.ggpht.com/fake-lapsedlens=s88-c-k-c0x00ffffff-no-rj",
+                  "width": 88,
+                  "height": 88
+                },
+                "medium": {
+                  "url": "https://yt3.ggpht.com/fake-lapsedlens=s240-c-k-c0x00ffffff-no-rj",
+                  "width": 240,
+                  "height": 240
+                },
+                "high": {
+                  "url": "https://yt3.ggpht.com/fake-lapsedlens=s800-c-k-c0x00ffffff-no-rj",
+                  "width": 800,
+                  "height": 800
+                }
+              },
+              "localized": {
+                "title": "Lapsed Lens",
+                "description": "Photography tips, gear and Lightroom edits."
+              },
+              "country": "PT"
+            },
+            "contentDetails": {
+              "relatedPlaylists": {
+                "likes": "",
+                "uploads": "UULaP5edLen5Ph0toGr4phy"
+              }
+            },
+            "statistics": {
+              "viewCount": "241000",
+              "subscriberCount": "3210",
+              "hiddenSubscriberCount": false,
+              "videoCount": "38"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+      "query": {
+        "part": "contentDetails",
+        "playlistId": "UULaP5edLen5Ph0toGr4phy"
+      },
+      "body": {
+        "kind": "youtube#playlistItemListResponse",
+        "etag": "fake-etag-playlist",
+        "pageInfo": {
+          "totalResults": 5,
+          "resultsPerPage": 25
+        },
+        "items": [
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-lL000000005",
+            "id": "UULaP5edLen5Ph0toGr4phy.lL000000005",
+            "contentDetails": {
+              "videoId": "lL000000005",
+              "videoPublishedAt": "2026-09-22T19:30:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-lL000000004",
+            "id": "UULaP5edLen5Ph0toGr4phy.lL000000004",
+            "contentDetails": {
+              "videoId": "lL000000004",
+              "videoPublishedAt": "2026-09-08T19:30:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-lL000000003",
+            "id": "UULaP5edLen5Ph0toGr4phy.lL000000003",
+            "contentDetails": {
+              "videoId": "lL000000003",
+              "videoPublishedAt": "2026-08-25T19:30:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-lL000000002",
+            "id": "UULaP5edLen5Ph0toGr4phy.lL000000002",
+            "contentDetails": {
+              "videoId": "lL000000002",
+              "videoPublishedAt": "2026-08-11T19:30:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-lL000000001",
+            "id": "UULaP5edLen5Ph0toGr4phy.lL000000001",
+            "contentDetails": {
+              "videoId": "lL000000001",
+              "videoPublishedAt": "2026-07-28T19:30:00Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/videos",
+      "query": {
+        "part": "snippet,statistics,contentDetails"
+      },
+      "body": {
+        "kind": "youtube#videoListResponse",
+        "etag": "fake-etag-videos",
+        "pageInfo": {
+          "totalResults": 5,
+          "resultsPerPage": 5
+        },
+        "items": [
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-lL000000005",
+            "id": "lL000000005",
+            "snippet": {
+              "publishedAt": "2026-09-22T19:30:00Z",
+              "channelId": "UCLaP5edLen5Ph0toGr4phy",
+              "title": "Golden hour portraits with a 50mm lens",
+              "description": "",
+              "tags": ["photography", "portraits", "50mm"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT11M20S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "4120",
+              "favoriteCount": "0",
+              "likeCount": "302",
+              "commentCount": "41"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-lL000000004",
+            "id": "lL000000004",
+            "snippet": {
+              "publishedAt": "2026-09-08T19:30:00Z",
+              "channelId": "UCLaP5edLen5Ph0toGr4phy",
+              "title": "Lightroom presets I actually use",
+              "description": "",
+              "tags": ["lightroom", "photography", "presets"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT9M5S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "6230",
+              "favoriteCount": "0",
+              "likeCount": "410",
+              "commentCount": "66"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-lL000000003",
+            "id": "lL000000003",
+            "snippet": {
+              "publishedAt": "2026-08-25T19:30:00Z",
+              "channelId": "UCLaP5edLen5Ph0toGr4phy",
+              "title": "Street photography in Lisbon",
+              "description": "",
+              "tags": ["street photography", "photography", "lisbon"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT14M52S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "3010",
+              "favoriteCount": "0",
+              "likeCount": "245",
+              "commentCount": "19"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-lL000000002",
+            "id": "lL000000002",
+            "snippet": {
+              "publishedAt": "2026-08-11T19:30:00Z",
+              "channelId": "UCLaP5edLen5Ph0toGr4phy",
+              "title": "Budget camera gear for beginners",
+              "description": "",
+              "tags": ["camera gear", "photography", "beginners"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT12M37S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "8120",
+              "favoriteCount": "0",
+              "likeCount": "512",
+              "commentCount": "88"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-lL000000001",
+            "id": "lL000000001",
+            "snippet": {
+              "publishedAt": "2026-07-28T19:30:00Z",
+              "channelId": "UCLaP5edLen5Ph0toGr4phy",
+              "title": "Editing portraits in Lightroom",
+              "description": "",
+              "tags": ["lightroom", "portraits"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT18M2S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "2540",
+              "favoriteCount": "0",
+              "likeCount": "199",
+              "commentCount": "14"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "metrics": "views,engagedViews,estimatedMinutesWatched,averageViewDuration,likes,comments,shares,subscribersGained,subscribersLost"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "engagedViews",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "estimatedMinutesWatched",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "averageViewDuration",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "likes",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "comments",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "shares",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersGained",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersLost",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ],
+        "rows": [[61230, 57410, 140210, 137, 3120, 410, 95, 180, 22]]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "country",
+        "metrics": "views"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "country",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ],
+        "rows": [
+          ["PT", 18230],
+          ["BR", 12010],
+          ["US", 9120],
+          ["ES", 4310]
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "ageGroup,gender",
+        "metrics": "viewerPercentage"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "ageGroup",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "gender",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "viewerPercentage",
+            "columnType": "METRIC",
+            "dataType": "FLOAT"
+          }
+        ]
+      }
+    }
+  ]
+}

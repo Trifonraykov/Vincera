@@ -5,11 +5,12 @@ import Stripe from "stripe"
 import { env, isFake } from "@/lib/env"
 
 /**
- * Stripe client (§7.2). Checkout, Connect, transfers and webhooks are built in later phases
- * (`checkout.ts`, `connect.ts`, `transfers.ts`, `webhooks.ts` next to this file).
+ * Stripe client (§7.2), used only by the live gateway (`./live.ts`). Business code goes through
+ * `getStripeGateway()` (`./gateway.ts`), which picks the live gateway or the fake (§19.3, §19.12):
+ * Connect (`./connect.ts`) and webhooks (`./webhooks.ts`) since Phase 1; checkout and transfers
+ * extend the gateway in Phases 4–5.
  *
- * In fake mode (§19.3) there is no Stripe client: those modules branch on `isStripeFake()` and
- * run their fake checkout / onboarding / transfer flows instead.
+ * In fake mode there is no Stripe client: `getStripe()` throws.
  */
 
 /**

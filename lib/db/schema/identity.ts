@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -31,6 +32,7 @@ import {
   userStatusEnum,
   type UserRole,
 } from "./enums"
+import type { OnboardingStepsRecord } from "./types"
 
 /**
  * Identity & profiles (§5), plus the Auth.js Drizzle adapter tables.
@@ -52,10 +54,19 @@ export const users = pgTable(
     activeRole: userRoleEnum("active_role"),
     status: userStatusEnum("status").notNull().default("active"),
     onboardingCompletedAt: timestamptz("onboarding_completed_at"),
+    /**
+     * Onboarding steps the user completed or skipped (step id → `{ status, at }`), Phase 1.
+     * Profile steps are judged by whether the profile exists; see lib/onboarding/next-step.ts.
+     */
+    onboardingSteps: jsonb("onboarding_steps")
+      .$type<OnboardingStepsRecord>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     ...timestamps(),
   },
   (t) => [
     check("users_roles_valid", sql`${t.roles} <@ ARRAY['creator', 'builder', 'admin']::text[]`),
+    check("users_onboarding_steps_object", sql`jsonb_typeof(${t.onboardingSteps}) = 'object'`),
     check(
       "users_active_role_in_roles",
       sql`${t.activeRole} IS NULL OR ${t.activeRole}::text = ANY(${t.roles})`,
@@ -155,6 +166,13 @@ export const creatorProfiles = pgTable(
     audienceSummary: text("audience_summary"),
     /** Prompt version that produced audience_summary (§7.3). */
     audienceSummaryPromptVersion: text("audience_summary_prompt_version"),
+    /** When the AI last wrote audience_summary (null: never generated). */
+    audienceSummaryGeneratedAt: timestamptz("audience_summary_generated_at"),
+    /**
+     * When the creator last edited audience_summary themselves (§7.3 "user-editable"). While it is
+     * set, syncs keep the creator's text instead of regenerating it (CLAUDE.md §19.11).
+     */
+    audienceSummaryEditedAt: timestamptz("audience_summary_edited_at"),
     embedding: embedding(),
     embeddingModel: embeddingModel(),
     verifiedAt: timestamptz("verified_at"),

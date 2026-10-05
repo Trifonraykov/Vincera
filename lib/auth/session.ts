@@ -4,7 +4,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { cache } from "react"
 
-import { nextOnboardingStep } from "@/lib/onboarding/next-step"
+import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 
 import { auth } from "./auth"
 import { canAccessAdmin, isActive } from "./authz"
@@ -47,7 +47,7 @@ export async function requireUser(): Promise<AuthUser> {
 /** `requireUser()` plus onboarding: unfinished users go to their next onboarding step. */
 export async function requireOnboardedUser(): Promise<AuthUser> {
   const user = await requireUser()
-  const step = nextOnboardingStep(user)
+  const step = await resolveOnboardingRedirect(user)
   if (step) redirect(step)
   return user
 }

@@ -2,29 +2,50 @@ import { sql } from "drizzle-orm"
 import { boolean, check, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core"
 
 import { now } from "../../clock"
-import { createdAt, currency, id, timestamps, timestamptz } from "./columns"
-import { ledgerAccountEnum, transferStatusEnum } from "./enums"
+import { createdAt, currency, id, textArray, timestamps, timestamptz } from "./columns"
+import { ledgerAccountEnum, stripeCapabilityStatusEnum, transferStatusEnum } from "./enums"
 import { orders, refunds } from "./commerce"
 import { users } from "./identity"
 import type { JsonObject } from "./types"
 
 /** Money (§5, §9). Nothing here is ever cascaded: deletes are RESTRICTed. */
 
-/** Stripe Connect Express account per user, synced from `account.updated` (§7.2). */
-export const stripeAccounts = pgTable("stripe_accounts", {
-  id: id(),
-  userId: uuid("user_id")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "restrict" }),
-  stripeAccountId: text("stripe_account_id").notNull().unique(),
-  chargesEnabled: boolean("charges_enabled").notNull().default(false),
-  payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
-  detailsSubmitted: boolean("details_submitted").notNull().default(false),
-  country: text("country"),
-  updatedFromStripeAt: timestamptz("updated_from_stripe_at"),
-  ...timestamps(),
-})
+/**
+ * Stripe Connect account per user (v1 account with Express dashboard controller properties,
+ * §19.10), synced from `account.updated` / `capability.updated` (§7.2). "Payouts ready" =
+ * `payouts_enabled` AND `transfers_capability = 'active'` (lib/payouts/readiness.ts).
+ */
+export const stripeAccounts = pgTable(
+  "stripe_accounts",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "restrict" }),
+    stripeAccountId: text("stripe_account_id").notNull().unique(),
+    chargesEnabled: boolean("charges_enabled").notNull().default(false),
+    payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
+    detailsSubmitted: boolean("details_submitted").notNull().default(false),
+    /** `account.capabilities.transfers`; `unrequested` when absent. */
+    transfersCapability: stripeCapabilityStatusEnum("transfers_capability")
+      .notNull()
+      .default("unrequested"),
+    /** `account.requirements.currently_due` (includes `past_due`): what Stripe still needs. */
+    requirementsCurrentlyDue: textArray("requirements_currently_due"),
+    /** `account.requirements.disabled_reason`, e.g. `requirements.past_due`; null when enabled. */
+    disabledReason: text("disabled_reason"),
+    /** ISO 3166-1 alpha-2, as Stripe reports it. */
+    country: text("country"),
+    /**
+     * When the Stripe data last applied was current: the event's `created` for webhooks, the
+     * retrieval time for `accounts.retrieve`. An older event never overwrites newer data.
+     */
+    updatedFromStripeAt: timestamptz("updated_from_stripe_at"),
+    ...timestamps(),
+  },
+  (t) => [check("stripe_accounts_country_format", sql`${t.country} ~ '^[A-Z]{2}$'`)],
+)
 
 /** One Stripe transfer per user per payout batch (§9). */
 export const transfers = pgTable(
@@ -94,6 +115,8 @@ export const stripeEvents = pgTable("stripe_events", {
   /** Stripe event id (evt_...). */
   id: text("id").primaryKey(),
   type: text("type").notNull(),
+  /** Connected account (`event.account`) for Connect events; null for platform events. */
+  account: text("account"),
   payload: jsonb("payload").$type<JsonObject>().notNull(),
   receivedAt: timestamptz("received_at").notNull().defaultNow().$defaultFn(now),
   processedAt: timestamptz("processed_at"),

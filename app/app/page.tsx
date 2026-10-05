@@ -1,13 +1,29 @@
-import { Compass, Lightbulb, Package, Send, Users, Wallet, type LucideIcon } from "lucide-react"
+import {
+  CircleCheck,
+  Compass,
+  FolderGit2,
+  Lightbulb,
+  Package,
+  Send,
+  UserPlus,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
 import { toShellViewer } from "@/components/layout/viewer"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { requireOnboardedUser } from "@/lib/auth/session"
+import { getDb } from "@/lib/db/client"
 import type { AppRole } from "@/lib/nav"
+import type { OnboardingSnapshot } from "@/lib/onboarding/next-step"
+import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
+import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 
 export const metadata: Metadata = { title: "Home" }
 
@@ -18,62 +34,102 @@ type HomeCard = {
   action: { label: string; href: string }
 }
 
-/** Placeholder widgets per active role (§12: `/app` is role-aware); real data from Phase 1. */
-const HOME: Record<AppRole, { title: string; description: string; cards: HomeCard[] }> = {
+const TITLES: Record<AppRole, { title: string; description: string }> = {
   creator: {
     title: "Creator home",
     description: "Your audience, your ideas, and the builders who can make them real.",
-    cards: [
-      {
-        icon: Users,
-        title: "Connect your audience",
-        description: "Link YouTube, Instagram or TikTok so builders can see who you reach.",
-        action: { label: "Connect an account", href: "/app/settings/connections" },
-      },
-      {
-        icon: Lightbulb,
-        title: "No ideas yet",
-        description: "Post what your audience keeps asking for. Builders pitch on open ideas.",
-        action: { label: "Post an idea", href: "/app/ideas/new" },
-      },
-      {
-        icon: Compass,
-        title: "No matches yet",
-        description: "Once your profile is complete, ranked builder matches appear here.",
-        action: { label: "Discover builders", href: "/app/discover/builders" },
-      },
-    ],
   },
   builder: {
     title: "Builder home",
     description: "Your products, open briefs from creators, and your next launch.",
-    cards: [
-      {
-        icon: Package,
-        title: "No products yet",
-        description: "List something you built or want to build that needs distribution.",
-        action: { label: "List a product", href: "/app/products/new" },
-      },
-      {
-        icon: Lightbulb,
-        title: "Browse creator briefs",
-        description: "Ideas posted by creators, ranked by how well they fit your skills.",
-        action: { label: "See briefs", href: "/app/discover/briefs" },
-      },
-      {
-        icon: Wallet,
-        title: "Set up payouts",
-        description: "Connect Stripe before you sign an agreement, so you get paid on every sale.",
-        action: { label: "Set up payouts", href: "/app/settings/payouts" },
-      },
-    ],
   },
+}
+
+/**
+ * Cards per active role (§12: `/app` is role-aware). Setup cards come from the user's real state
+ * (connections, portfolio, payouts); the rest point at the next phases' pages.
+ */
+function homeCards(role: AppRole, snapshot: OnboardingSnapshot): HomeCard[] {
+  const payoutsCard: HomeCard | null =
+    snapshot.payouts === "ready"
+      ? null
+      : {
+          icon: Wallet,
+          title: snapshot.payouts === "pending" ? "Finish setting up payouts" : "Set up payouts",
+          description:
+            "Connect Stripe before you sign an agreement, so you get paid on every sale.",
+          action: { label: "Set up payouts", href: "/app/settings/payouts" },
+        }
+
+  const cards: (HomeCard | null)[] =
+    role === "creator"
+      ? [
+          snapshot.creatorConnectionCount === 0
+            ? {
+                icon: Users,
+                title: "Connect your audience",
+                description: "Link YouTube, Instagram or TikTok so builders can see who you reach.",
+                action: { label: "Connect an account", href: "/app/settings/connections" },
+              }
+            : {
+                icon: Users,
+                title: "Your audience",
+                description: "Follower counts, engagement and who watches, from your accounts.",
+                action: { label: "See your audience", href: "/app/audience" },
+              },
+          {
+            icon: Lightbulb,
+            title: "No ideas yet",
+            description: "Post what your audience keeps asking for. Builders pitch on open ideas.",
+            action: { label: "Post an idea", href: "/app/ideas/new" },
+          },
+          payoutsCard ?? {
+            icon: Compass,
+            title: "No matches yet",
+            description: "Once your profile is complete, ranked builder matches appear here.",
+            action: { label: "Discover builders", href: "/app/discover/builders" },
+          },
+        ]
+      : [
+          {
+            icon: Package,
+            title: "No products yet",
+            description: "List something you built or want to build that needs distribution.",
+            action: { label: "List a product", href: "/app/products/new" },
+          },
+          snapshot.portfolioItemCount === 0 && snapshot.githubConnectionCount === 0
+            ? {
+                icon: FolderGit2,
+                title: "Show your work",
+                description: "Connect GitHub or add projects, so creators can see what you build.",
+                action: { label: "Edit your portfolio", href: "/app/settings/profile" },
+              }
+            : {
+                icon: Lightbulb,
+                title: "Browse creator briefs",
+                description: "Ideas posted by creators, ranked by how well they fit your skills.",
+                action: { label: "See briefs", href: "/app/discover/briefs" },
+              },
+          payoutsCard ?? {
+            icon: Compass,
+            title: "Find creators",
+            description: "Creators whose audience fits what you build, ranked for you.",
+            action: { label: "Discover creators", href: "/app/discover/creators" },
+          },
+        ]
+  return cards.filter((card): card is HomeCard => card !== null)
 }
 
 export default async function AppHomePage() {
   // Pages check access themselves too: layouts are not re-rendered on client navigations.
-  const { activeRole } = toShellViewer(await requireOnboardedUser())
-  const home = HOME[activeRole]
+  const user = await requireOnboardedUser()
+  const { activeRole } = toShellViewer(user)
+  const snapshot = await loadOnboardingSnapshot(getDb(), user.id)
+  const home = TITLES[activeRole]
+  const hasProfile =
+    snapshot !== null &&
+    (activeRole === "creator" ? snapshot.hasCreatorProfile : snapshot.hasBuilderProfile)
+  const cards = snapshot ? homeCards(activeRole, snapshot) : []
 
   return (
     <div className="space-y-8">
@@ -89,8 +145,42 @@ export default async function AppHomePage() {
           </Button>
         }
       />
+
+      {!hasProfile ? (
+        // A role added after onboarding and left midway (CLAUDE.md §19.11).
+        <Alert>
+          <UserPlus aria-hidden="true" />
+          <AlertTitle>Set up your {activeRole} profile</AlertTitle>
+          <AlertDescription>
+            <p>
+              {activeRole === "creator"
+                ? "Builders can't find you as a creator until you have a profile."
+                : "Creators can't find you as a builder until you have a profile."}
+            </p>
+            <Button asChild size="sm" className="mt-2">
+              <Link
+                href={
+                  ONBOARDING_STEP_PATHS[
+                    activeRole === "creator" ? "creator.profile" : "builder.profile"
+                  ]
+                }
+              >
+                Set up your profile
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {snapshot?.payouts === "ready" ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CircleCheck className="size-4 text-primary" aria-hidden="true" />
+          Payouts are set up.
+        </p>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {home.cards.map((card) => (
+        {cards.map((card) => (
           <EmptyState
             key={card.title}
             icon={card.icon}

@@ -117,6 +117,15 @@ const INBOX_ITEMS: NavItem[] = [
   { title: "Notifications", href: "/app/notifications", icon: Bell },
 ]
 
+/** Settings pages (§12), in the sidebar under "Settings" and as tabs on every settings page. */
+export const SETTINGS_NAV: NavLink[] = [
+  { title: "Profile", href: "/app/settings/profile" },
+  { title: "Connections", href: "/app/settings/connections" },
+  { title: "Payouts", href: "/app/settings/payouts" },
+  { title: "Notifications", href: "/app/settings/notifications" },
+  { title: "Account", href: "/app/settings/account" },
+]
+
 const ACCOUNT_ITEMS: NavItem[] = [
   {
     title: "Earnings",
@@ -132,13 +141,7 @@ const ACCOUNT_ITEMS: NavItem[] = [
     href: "/app/settings/profile",
     match: "/app/settings",
     icon: Settings,
-    children: [
-      { title: "Profile", href: "/app/settings/profile" },
-      { title: "Connections", href: "/app/settings/connections" },
-      { title: "Payouts", href: "/app/settings/payouts" },
-      { title: "Notifications", href: "/app/settings/notifications" },
-      { title: "Account", href: "/app/settings/account" },
-    ],
+    children: SETTINGS_NAV,
   },
 ]
 

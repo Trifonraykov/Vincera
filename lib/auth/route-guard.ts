@@ -1,5 +1,3 @@
-import { nextOnboardingStep } from "@/lib/onboarding/next-step"
-
 import { canAccessAdmin, isActive } from "./authz"
 import { AUTH_ROUTES, safeCallbackUrl, signInUrl } from "./routes"
 import type { AuthUser } from "./user"
@@ -13,7 +11,9 @@ import type { AuthUser } from "./user"
  *   `/sign-in?callbackUrl=<where they were going>`.
  * - Suspended users are sent to `/sign-in?error=AccountSuspended`.
  * - `/admin/*` needs the admin role; other users are redirected to `/app`.
- * - `/app/*` sends users with unfinished onboarding to the next onboarding step.
+ * - `/app/*` sends users with unfinished onboarding to the next onboarding step. Deciding that may
+ *   need the database, so the caller injects `resolveOnboardingStep` (the proxy passes
+ *   `resolveOnboardingRedirect` from lib/onboarding/gate.ts; tests pass a stub).
  * - Signed-in users opening `/sign-in` or `/sign-up` go to their callbackUrl or `/app`, unless the
  *   page is showing an error.
  */
@@ -38,10 +38,14 @@ export function areaOf(pathname: string): GuardedArea | null {
   return null
 }
 
-export function guardRoute(
+/** Where `/app` must send `user` first (an onboarding step), or null to let them in. */
+export type OnboardingStepResolver = (user: AuthUser) => Promise<string | null>
+
+export async function guardRoute(
   url: { pathname: string; search: string; searchParams: URLSearchParams },
   user: AuthUser | null,
-): GuardDecision {
+  resolveOnboardingStep: OnboardingStepResolver,
+): Promise<GuardDecision> {
   const area = areaOf(url.pathname)
   if (area === null) return NEXT
 
@@ -58,7 +62,7 @@ export function guardRoute(
   if (area === "admin" && !canAccessAdmin(user)) return redirectTo(AUTH_ROUTES.afterSignIn)
 
   if (area === "app") {
-    const step = nextOnboardingStep(user)
+    const step = await resolveOnboardingStep(user)
     if (step) return redirectTo(step)
   }
   return NEXT

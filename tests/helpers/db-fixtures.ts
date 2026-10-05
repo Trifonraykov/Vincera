@@ -10,9 +10,12 @@ import {
   ideas,
   launches,
   orders,
+  portfolioItems,
   products,
   proposalRevisions,
   proposals,
+  socialConnections,
+  stripeAccounts,
   users,
   type UserRole,
 } from "@/lib/db/schema"
@@ -152,4 +155,52 @@ export async function insertOrder(db: DbOrTx, launchId: string, paidAt: Date) {
     .returning()
   if (!order) throw new Error("insertOrder: no row returned")
   return order
+}
+
+/**
+ * A social data connection. Defaults: an active, verified OAuth YouTube connection without
+ * tokens (tests that sync pass encrypted tokens via `overrides`).
+ */
+export async function insertSocialConnection(
+  db: DbOrTx,
+  userId: string,
+  overrides: Partial<typeof socialConnections.$inferInsert> = {},
+) {
+  const source = overrides.source ?? "oauth"
+  const [connection] = await db
+    .insert(socialConnections)
+    .values({
+      userId,
+      provider: "youtube",
+      providerAccountId: source === "oauth" ? `acct-${suffix()}` : null,
+      username: `user_${suffix()}`,
+      verifiedAt: source === "oauth" ? new Date("2026-01-01T00:00:00Z") : null,
+      ...overrides,
+    })
+    .returning()
+  if (!connection) throw new Error("insertSocialConnection: no row returned")
+  return connection
+}
+
+/** A Stripe Connect account row. Defaults to one that has not finished onboarding. */
+export async function insertStripeAccount(
+  db: DbOrTx,
+  userId: string,
+  overrides: Partial<typeof stripeAccounts.$inferInsert> = {},
+) {
+  const [account] = await db
+    .insert(stripeAccounts)
+    .values({ userId, stripeAccountId: `acct_test_${suffix()}`, ...overrides })
+    .returning()
+  if (!account) throw new Error("insertStripeAccount: no row returned")
+  return account
+}
+
+export async function insertPortfolioItem(db: DbOrTx, builderProfileId: string) {
+  const [item] = await db
+    .insert(portfolioItems)
+    .values({ builderProfileId, title: "Invoice CLI", url: "https://example.test/cli" })
+    .returning()
+  if (!item) throw new Error("insertPortfolioItem: no row returned")
+  return item
 }

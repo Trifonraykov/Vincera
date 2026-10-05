@@ -549,7 +549,7 @@ Every external integration sits behind a small interface with a **live** and a *
 ### 19.4 Testing
 - Integration tests run against real Postgres + pgvector. Each test run clones a freshly migrated template database, so parallel runs don't collide. Locally, set `TEST_DATABASE_URL`. CI uses a `pgvector/pgvector` service container.
 - E2E runs `next build && next start` (or `next dev` locally) against a dedicated e2e database that is reset, migrated and seeded before the run, with `FAKE_SERVICES=all`.
-- Test-only routes under `/api/test/*` (run a job with a mocked clock, read the outbox) exist only when `E2E_TEST_ROUTES=1` **and** `NODE_ENV !== 'production'`.
+- Test-only routes under `/api/test/*` (run a job with a mocked clock, read the outbox) exist only when `E2E_TEST_ROUTES=1` **and** `NODE_ENV !== 'production'`. Built so far: `POST /api/test/jobs/<job id>` (§19.11). There is no outbox route: Playwright runs on the server's machine and reads `.data/outbox/` through `lib/email/outbox.ts`.
 - Time: business logic takes `now` from `lib/clock.ts`, never from `new Date()` directly, so jobs can run with a mocked clock.
 - Because e2e runs `next start` (`NODE_ENV=production`), the `/api/test/*` rule is implemented as `E2E_TEST_ROUTES=1` **and** `APP_ENV !== 'production'`: use `testRoutesEnabled()` from `lib/env.ts`.
 - ESLint forbids `new Date()` with no arguments and `Date.now()` in `lib/**` and `inngest/**` (except `lib/clock.ts`). `lib/clock.ts` offers `now()`, `runWithClock(date, fn)` (AsyncLocalStorage, safe inside a running server, e.g. a test route) and `setClockForTests(date | null)` (refused when `NODE_ENV=production`).
@@ -576,12 +576,12 @@ Every external integration sits behind a small interface with a **live** and a *
 - `ON DELETE`: personal child rows of a user cascade (auth rows, handles, profiles, social connections, notifications, saved items); child rows of collabs (members, agreements, tasks, thread) and threads (messages, reads) cascade; everything that money, attribution or history hangs off is RESTRICT (proposals, ideas/products in deals, launches, orders, ledger, transfers, events). Users are anonymised, never hard-deleted.
 - **Append-only at the DB level** (`drizzle/0002_append_only_guards.sql`): triggers reject UPDATE, DELETE and TRUNCATE on `events`, `audience_snapshots`, `proposal_revisions`, `agreement_signatures`, `link_clicks`, `admin_audit_log` with SQLSTATE `AO001` (`PG_ERROR.appendOnlyViolation`). `ledger_entries` also rejects them, except one UPDATE: setting `transfer_id` from NULL to a transfer with no other column changing (the payout job, §9). Because entries are immutable, a chargeback "freezes" untransferred entries by excluding orders in `disputed` status from the payout query, not by flagging entries.
 - GDPR escape hatch: inside a transaction, `allowGdprErasure(tx)` (`lib/db/append-only.ts`) sets `app.gdpr_erasure` for that transaction only, which lets DELETE through on `audience_snapshots` (disconnecting a social account deletes its snapshots, §14). Updates and every other append-only table stay blocked; Phase 6 must extend the trigger explicitly if it needs to redact more.
-- Migrations: `0000` enables pgvector (custom), `0001` is the generated schema, `0002` adds the append-only triggers (custom), `0003` seeds matching v0 (custom), `0004` adds `audience_snapshots.countries_basis` (generated).
+- Migrations: `0000` enables pgvector (custom), `0001` is the generated schema, `0002` adds the append-only triggers (custom), `0003` seeds matching v0 (custom), `0004` adds `audience_snapshots.countries_basis` (generated), `0005` adds the Phase 1 columns (generated, §19.11).
 - **Audience snapshot shapes:** the `audience_snapshots` columns store a provider's `AudienceSnapshotInput` (lib/social/types.ts) as it is: `age_gender` is `{ basis, buckets: { ageGroup, gender, share }[] } | null`, `top_countries` is `{ country, share }[]` with its basis in `countries_basis`, and `raw` is a JSON object (Zod `z.json()` values). YouTube shares are of viewers, Instagram's of followers, so the basis is never dropped. Gender is `female | male | other | unknown` (`other` = YouTube "user_specified", `unknown` = Instagram "U"). A compile-time check in lib/social/types.ts fails the typecheck when a field and its column drift apart. Add custom SQL with `pnpm db:generate --custom --name <name>`. Postgres truncates identifiers at 63 characters, so long foreign keys are named explicitly.
 - `lib/db/client.ts`: `db` (lazy, connects on first use like `env`) / `getDb()`, `createDb(url)` for scripts and tests, `closeDb()`, `withTransaction(fn, dbOrTx?)` (nested calls become savepoints), types `Db`, `Tx`, `DbOrTx`. Queries live in `lib/db/queries/<domain>.ts` and take `DbOrTx` first. `lib/db/errors.ts` (`getPgError`, `isPgError`, `PG_ERROR`) unwraps drizzle's `DrizzleQueryError`. Its message includes the query parameters, so never show it to users or send it to Sentry unscrubbed.
 
 ### 19.6 Event log
-- The catalog is `EventCatalog` in `lib/events/types.ts`: every event's subject type and exact properties, plus the runtime lists `EVENT_TYPES` and `SUBJECT_TYPES`. Properties are snake_case ids, enums, counts and amounts only. Added beyond §11: `proposal.withdrawn` (the status exists, so the transition needs an event). `ai.generated` also records `model` and `fallback`; `accepted_by_user` is `boolean | null` because it is unknown at generation time.
+- The catalog is `EventCatalog` in `lib/events/types.ts`: every event's subject type and exact properties, plus the runtime lists `EVENT_TYPES` and `SUBJECT_TYPES`. Properties are snake_case ids, enums, counts and amounts only. Added beyond §11: `proposal.withdrawn` (the status exists, so the transition needs an event), and the Phase 1 events listed in §19.11. `ai.generated` also records `model` and `fallback`; `accepted_by_user` is `boolean | null` because it is unknown at generation time.
 - `track(type, { actorUserId, subjectType, subjectId, properties, context, occurredAt? }, dbOrTx?)` and `trackMany(batch, dbOrTx?)` in `lib/events/track.ts`. Pass the state change's transaction. `occurred_at` defaults to the clock; `subjectId` must be a UUID; properties must be JSON; `context` is strict `{ ip_country, ua_hash, session_id }`. `session_id` is an analytics session id, never the Auth.js session token.
 - PII guard (`lib/events/pii.ts`): property keys containing the words email, body, token, password, passwd, secret, cookie, authorization or phone, and string values that contain an email address, make `track()` throw `EventPiiError` outside production. In production the fields are dropped or redacted and the key paths, never the values, are logged with `console.error`, so an analytics mistake never fails a business write.
 
@@ -596,7 +596,7 @@ Every external integration sits behind a small interface with a **live** and a *
 - **Claude requests:** output uses `output_config.format` (JSON schema from the SDK's `zodOutputFormat`) and is then validated with our own Zod schema. Defaults are `max_tokens` 16000 (thinking tokens count toward it) and a 60 s timeout; `effort` is set per call. For claude-opus-5-5, claude-opus-5, claude-sonnet-5-5 and claude-fable-5-1, requests go through `client.beta.messages.create` with the server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). `deps.transport` is injectable for tests.
 - **Fake Claude:** deterministic JSON generated from the Zod schema's JSON Schema, seeded by the prompt. A prompt containing `FAKE_AI_INVALID`, `FAKE_AI_REFUSAL` or `FAKE_AI_ERROR` forces that failure path. Prompt versions are `<use>@v<n>` (`definePrompt`, `lib/ai/prompts`).
 - **Embeddings:** `VOYAGE_MODEL` was added to `lib/env.ts`, default `voyage-3.5` (1024-dim). Requests always send `output_dimension: 1024`. docs.voyageai.com is blocked from the build sandbox, so the Voyage 4 models could not be checked; switching later is an env change plus a re-embed. Batches are 128 texts with a 30 s timeout, responses are Zod-checked (1024 dims, sorted by index), and empty text throws. The fake is a hashed bag-of-words (FNV-1a, lowercased, stopwords dropped), L2-normalised.
-- **Stripe:** `getStripe()` throws in fake mode, so callers check `isStripeFake()` first. `STRIPE_API_VERSION = "2026-09-30.endive"` is checked with `satisfies` against the SDK's literal type, so an SDK upgrade fails typecheck until the version is bumped on purpose.
+- **Stripe:** `getStripe()` throws in fake mode, so callers check `isStripeFake()` first. Business code does not call it: it goes through `getStripeGateway()` (live or fake, §19.12). `STRIPE_API_VERSION = "2026-09-30.endive"` is checked with `satisfies` against the SDK's literal type, so an SDK upgrade fails typecheck until the version is bumped on purpose.
 - **Social** (`lib/social/types.ts`): the §7.1 interface gained `id`, `scopes`, `supportsPkce`, and optional PKCE arguments: `authUrl(state, pkce?)` and `exchangeCode(code, pkce?)`. Google and GitHub support PKCE; Instagram and TikTok on the web do not.
 - **Social data shapes:** `TokenSet` has nullable `refreshToken`, `expiresAt`, `refreshExpiresAt` and `providerAccountId`. `AudienceSnapshotInput` has `topCountries` (ISO-2 country + share; empty when unknown), `countriesBasis` (required when there are countries) and `ageGender: { basis: viewers | followers, buckets } | null`; it matches the `audience_snapshots` columns (§19.5). `SocialTokenError` signals an expired or revoked token.
 - **Jobs** (`inngest/`): event names and Zod payload schemas are in `inngest/client.ts`. `defineJob({ id, event, handler, cron?: { schedule, data }, retries?, concurrency?, debounce? })` in `inngest/define.ts` builds both the Inngest function and an inline runner from one handler, which receives `{ data, step.run, runId, attempt, mode }`. Register each job in `inngest/functions/index.ts`.
@@ -620,14 +620,14 @@ Every external integration sits behind a small interface with a **live** and a *
 - **Suspension:** the `signIn` callback refuses suspended accounts (looked up by id or email) before a magic link is sent and again on the callback, so the form shows the `AccessDenied` message. That message reveals that a suspended account exists for the address; every other case answers "check your email" whether or not the account exists. Existing sessions of a suspended user are redirected to `/sign-in?error=AccountSuspended` by the proxy and `requireUser()`. Phase 6's suspend action should also delete the user's `sessions` rows.
 - **Route rules** (`lib/auth/route-guard.ts`, pure, applied by `proxy.ts`; matcher `/app/*`, `/onboarding/*`, `/admin/*`, `/sign-in`, `/sign-up`): signed out → `/sign-in?callbackUrl=<path>`; non-admins on `/admin/*` are **redirected to `/app`** (no 403 page); `/app/*` goes to `nextOnboardingStep()` first; signed-in users on `/sign-in` / `/sign-up` go to their callbackUrl or `/app`, except when the page shows an `?error=`. `safeCallbackUrl()` (`lib/auth/routes.ts`) accepts only same-origin relative paths and never `/sign-in`, `/sign-up` or `/api/*`; it checks the path again after URL parsing, because dot segments collapse (`/.//evil.example` → `//evil.example`). The proxy also resolves every redirect with `sameOriginRedirectUrl()`, which falls back to `/app` for anything off-site.
 - **Defence in depth:** layouts call `requireOnboardedUser()` / `requireAdmin()`, and pages call them too, because layouts are not re-rendered on client-side navigation. `getCurrentUser()` is wrapped in React `cache`, so this costs one session lookup per render. The proxy forwards the requested path in the `x-pathname` request header so `requireUser()` can build a callbackUrl.
-- **Onboarding (Phase 0):** having at least one app role (creator or builder) is enough to enter `/app`; `onboarding_completed_at` stays null until Phase 1's last step sets it. `lib/onboarding/next-step.ts` is the single place Phase 1 extends. `/onboarding/role` adds roles (never removes them), sets `active_role`, emits `user.role_added` per new role; existing users reach it through "Become a builder/creator" in the role switcher. Admin-only users (ADMIN_EMAILS) also pass through it before `/app`, but can open `/admin` directly.
+- **Onboarding:** the step logic and the `/app` gate are described in §19.11 (Phase 1 replaced Phase 0's "any app role enters `/app`"). `/onboarding/role` adds roles (never removes them), sets `active_role`, emits `user.role_added` per new role; existing users reach it through "Become a builder/creator" in the role switcher. Admin-only users (ADMIN_EMAILS) also pass through it before `/app`, but can open `/admin` directly.
 - **Pages:** `/sign-in` is also Auth.js's error page (`?error=<code>`, plain-language messages in `SIGN_IN_ERROR_MESSAGES`) and verify-request page (`?type=email` → "check your email"). Both pages post to the `requestMagicLink` server action (Zod, then Auth.js `signIn("email", { redirect: false })`).
 - **Auth rate limit (§14):** magic links are limited in the `signIn` callback when `email.verificationRequest` is set (`isAuthRateLimited`, `lib/auth/rate-limit.ts`: per IP and per email). Every magic-link request passes there, from any entry point; a refusal redirects to `/sign-in?error=RateLimited`, which the server action turns into the form message. The client IP comes from the route handler's request, or from `headers()` when a server action runs Auth.js in-process (`config(undefined)`). OAuth has no hook before the redirect to the provider, so `signInWithProvider` limits per IP itself. The `/api/auth` route answers 405 to `POST /api/auth/signin/*`: sign-in starts only from our server actions (in-process, never over HTTP), and Auth.js's HTTP endpoint would skip their validation and the OAuth limit. Callbacks, session, CSRF and sign-out stay open. The optional /sign-up name waits in an httpOnly cookie `pending_signup_name` scoped to `/api/auth` (24 h) until the callback creates the user; the auth route clears it after a successful callback. Sign-out is the `signOutAction` server action (deletes the database session) and lands on `/`. The marketing header always shows "Sign in / Get started" so marketing pages stay static; signed-in visitors who click them are sent on to `/app` by the proxy.
 - **Server actions:** `defineAction({ name, input, authorize, run })` (`lib/actions/define-action.ts`) parses input (objects or FormData), calls `requireUser()`, applies `authorize`, and returns `ActionResult` (`lib/actions/result.ts`, client-safe): `{ ok: true, data }` or `{ ok: false, error, fieldErrors? }`. Throw `ActionError` for messages users should read; other errors go to Sentry with the action name and the user sees a generic message. `redirect()` / `notFound()` pass through (`unstable_rethrow`). Transactions and events stay explicit in `run`. `authorize` is required (the type requires it and `defineAction` throws without it), so no action can skip §4 step 3; actions that only touch the signed-in user's own account use `canManageOwnAccount(user)` (active user) from authz.ts.
 - **Auth logging:** Auth.js's expected user-caused errors (`Verification`, `AccessDenied`, `OAuthAccountNotLinked`, `AccountNotLinked`, `MissingCSRF`) are not sent to Sentry; every other Auth.js error is.
 
 ### 19.10 Integration decisions from provider research (briefs in `docs/integrations/`)
-Open items for Trifon are marked **(pending confirmation)**; the default below is what we build until he decides otherwise.
+Trifon delegated the open items to the build (2026-10-05). They are marked **(decided by delegation)**; revisit them before real money or real creator data flows.
 
 **Social (§7.1)** (see `docs/integrations/social-providers.md`)
 - **YouTube:** scopes `youtube.readonly` + `yt-analytics.readonly`; `access_type=offline`, `prompt=consent`, PKCE S256.
@@ -635,7 +635,7 @@ Open items for Trifon are marked **(pending confirmation)**; the default below i
   - Demographics are *viewer* demographics (`viewerPercentage`); countries are ranked by views. Snapshot basis = `viewers`.
   - Store both `views` and `engagedViews` (in `raw`); `avg_views` uses `views`.
   - Never call `search.list`.
-- **YouTube retention (pending confirmation):** Google's policy limits storing YouTube statistics to 30 days unless the platform accepts the derived-metrics policy. Env flag `YOUTUBE_LONG_RETENTION` (default `false`). While it is false, a daily job deletes YouTube-sourced `audience_snapshots` older than 30 days, using the GDPR erasure hatch. The newest snapshot and the derived profile fields (`size_tier`, `audience_summary`, `embedding`) are kept.
+- **YouTube retention (decided by delegation):** Google's policy limits storing YouTube statistics to 30 days unless the platform accepts the derived-metrics policy. Env flag `YOUTUBE_LONG_RETENTION` (default `false`). While it is false, a daily job deletes YouTube-sourced `audience_snapshots` older than 30 days, using the GDPR erasure hatch. The newest snapshot and the derived profile fields (`size_tier`, `audience_summary`, `embedding`) are kept.
 - **Instagram:** "Instagram API with Instagram Login", Graph API pinned to `v26.0`.
   - Scopes: `instagram_business_basic` and `instagram_business_manage_insights`.
   - No refresh token. Exchange the short-lived token for a long-lived 60-day one; `refresh()` calls `ig_refresh_token` once the token is ≥24h old.
@@ -660,6 +660,429 @@ Open items for Trifon are marked **(pending confirmation)**; the default below i
   - Idempotency key: `payout:<batchId>:<userId>`.
   - Ops requirement: set the platform's own Stripe payout schedule to manual.
 - **Refunds:** handled from the `refund.created` / `refund.updated` / `refund.failed` events; `charge.refunded` is accepted too, and everything is idempotent on the refund id.
-  - Stripe keeps its fee on refunds. **Default (pending confirmation): the platform absorbs the unreturned fee.** Member shares are reversed proportionally; the platform's loss is an `adjustment` entry.
+  - Stripe keeps its fee on refunds. **Decided by delegation: the platform absorbs the unreturned fee.** Member shares are reversed proportionally; the platform's loss is an `adjustment` entry.
   - If a transfer reversal fails (the connected balance is too low), the negative entries stay and are netted against future payouts.
-- **§18.1 merchant of record (pending confirmation):** we build the spec default, with the platform as seller and Stripe Tax for VAT. Stripe Managed Payments (merchant of record) does not support Connect.
+- **§18.1 merchant of record (decided by delegation):** we build the spec default, with the platform as seller and Stripe Tax for VAT. Stripe Managed Payments (merchant of record) does not support Connect.
+
+### 19.11 Phase 1 groundwork: schema, onboarding, notifications, test routes
+Shared contracts the Phase 1 features build on. Schema changes are in migration `0005_phase1_profiles_onboarding` (generated).
+
+**Schema**
+- `users.onboarding_steps` (jsonb, default `{}`, CHECK object): step id → `{ status: "done" | "skipped", at }`. Only `completeOnboardingStep()` writes it.
+- `creator_profiles.audience_summary_generated_at` and `audience_summary_edited_at`. A creator's own edit of the summary sets `edited_at`. While it is set, syncs keep the creator's summary and topics; a "Regenerate" action clears it.
+- `social_connections`:
+  - Display data from `SocialProfile`: `display_name`, `avatar_url`, `profile_url` (also the link an admin checks for manual rows).
+  - Token data: `refresh_expires_at` (TikTok) and `token_obtained_at` (Instagram refreshes only tokens ≥24h old).
+  - `last_sync_error` (a short code such as `token_expired`, `rate_limited` or `provider_error`; never a token or a response body) with `last_sync_error_at` (CHECK: both or neither). A successful sync clears them.
+  - CHECK: manual rows hold no tokens.
+- **Connection rules:**
+  - The existing uniques stay: one connection per (user, provider), so reconnecting, or upgrading a manual row to OAuth, updates that row; and one platform user per provider account, so the callback answers `?error=account_in_use`.
+  - `verified_at` is set by the OAuth callback (the API proved ownership) and by an admin for manual rows. A "verified connection" (size tier, matching) is `status = 'active' AND verified_at IS NOT NULL`.
+  - Disconnecting deletes the row inside a transaction that first calls `allowGdprErasure(tx)`, so the snapshots cascade (§14), and emits `social.disconnected`.
+- `stripe_accounts`:
+  - `transfers_capability` is a `stripe_capability_status` enum (`active | inactive | pending | unrequested`). The default `unrequested` means absent from `account.capabilities`. Map unknown future Stripe values to `inactive` (fail closed).
+  - Also `requirements_currently_due text[]` (Stripe's list includes past-due items), `disabled_reason`, and a CHECK on the `country` format.
+  - `updated_from_stripe_at` is the applied event's `created` (or the retrieval time). Handlers skip events older than it.
+- `stripe_events.account`: the connected account of a Connect event, else null.
+- `notifications.dedupe_key`, unique per user (see `notify` below). `PG_ERROR.invalidTextRepresentation` (`22P02`, e.g. a bad enum value).
+
+**Env**
+- `STRIPE_CONNECT_WEBHOOK_SECRET` (`whsec_`): required in production.
+- `stripeWebhookSecrets()` returns `{ platform, connect }`. Outside production `connect` falls back to `STRIPE_WEBHOOK_SECRET`, because fake Stripe and `stripe listen` sign Connect events with that one secret.
+- `YOUTUBE_LONG_RETENTION` is a flag, default `false`.
+- `pnpm stripe:listen` adds `--forward-connect-to`.
+
+**Onboarding**
+- **Files** (`lib/onboarding/`):
+  - `steps.ts` (client-safe): step ids, pages, labels, the skippable set (connect, portfolio, payouts), and a tolerant `onboarding_steps` parser.
+  - `next-step.ts`: pure logic over an `OnboardingSnapshot` (roles, completed_at, steps, profile flags, non-revoked creator/GitHub connection counts, portfolio count, payouts `none | pending | ready`).
+  - `snapshot.ts`: loads the snapshot in one query.
+  - `complete-step.ts`: `completeOnboardingStep`, `advanceOnboarding`.
+  - `gate.ts`: `resolveOnboardingRedirect`.
+  - `page.ts`: `requireOnboardingStep(step)` returns `{ user, snapshot, progress }` and redirects when the step is off the path or comes after an incomplete one.
+  - `actions.ts`: `chooseRoles`, `skipOnboardingStep`.
+  - UI: `components/onboarding/onboarding-progress.tsx` and `skip-step-button.tsx`.
+- **Path:** role → creator steps (if creator) → builder steps (if builder; creators first) → payouts.
+- **When a step is complete:**
+  - Profile steps: the profile exists. A record does not count.
+  - Connect: recorded, or ≥1 non-revoked YouTube, Instagram or TikTok connection.
+  - Review: recorded `done` only; it cannot be skipped.
+  - Portfolio: recorded, or ≥1 portfolio item or a GitHub connection.
+  - Payouts: recorded, or payouts-ready.
+  - A `done` record is never downgraded to `skipped`.
+- **Gate vs navigation:**
+  - The `/app` gate (proxy and `requireOnboardedUser`):
+    - No app role → `/onboarding/role`.
+    - `onboarding_completed_at` set → let in, with no database query.
+    - Otherwise the snapshot decides.
+  - `guardRoute(url, user, resolver)` is now async, with the resolver injected.
+  - `nextOnboardingStep()` (navigation) ignores `completed_at`. A user who adds a role later is sent through that role's steps (`chooseRoles` redirects there). They can still open `/app` if they leave midway, so **role pages must handle a missing profile** (link to `/onboarding/<role>/profile`).
+- **Finishing:** `advanceOnboarding` sets `onboarding_completed_at` once (a conditional update) and emits `onboarding.completed { roles, skipped_steps }` in the same transaction. It runs:
+  - after a step is recorded;
+  - after roles are added;
+  - from the `/app` gate, so a path completed by facts alone (payouts became ready after the user left) finishes on the next visit. The proxy may write this once.
+  - The Stripe webhook may also call it.
+- **How pages record steps:**
+  - Profile pages call `completeOnboardingStep(tx, { step: "<role>.profile", status: "done" })` in the transaction that inserts the profile, then `redirect(nextStep ?? "/app")`.
+  - Review, connect, portfolio and payouts record `done` on Confirm / Continue / Finish.
+  - "Do this later" is `SkipStepButton`.
+- **E2E:** specs that are not about onboarding use `completeOnboardingInDb(email)` (`tests/e2e/helpers/db.ts`); the onboarding pages themselves are walked by `tests/e2e/onboarding.spec.ts` and `phase1-acceptance.spec.ts` (§19.15).
+
+**Events added beyond §11**
+- `onboarding.step_completed { step, status }`.
+- `creator_profile.created` / `.updated` and `builder_profile.created` / `.updated`. `updated` carries `fields` (column names only) and `source` (`onboarding | settings`).
+- `social.disconnected`.
+- `payouts.account_created` and `payouts.account_updated` (subject type `stripe_account`, newly added). Emit `updated` only when a synced field changed.
+- `ai.reviewed { use, prompt_version, accepted, edited }`: the user's decision on generated text.
+- `onboarding.completed` changed from `{ role }` to `{ roles, skipped_steps }`.
+
+**Notifications** (`lib/notifications/`)
+- `types.ts` (client-safe) holds the `NotificationCatalog` (`social.expired`, `payouts.ready`; later phases extend it), `NOTIFICATION_TYPE_LABELS` and `NOTIFICATION_LINKS`.
+- `notify({ userId, type, payload, email?: { subject, react }, dedupeKey? }, dbOrTx)`:
+  - Reads `notification_prefs` for the type; with no row, both channels are on.
+  - Inserts the in-app row with the given `dbOrTx`.
+  - Sends the email immediately; a send failure goes to Sentry and never fails the caller.
+  - Skips the email for users without an email address.
+  - A repeated `dedupeKey` writes and sends nothing.
+  - Because the email goes out even if the caller's transaction later rolls back, notify at the end of the transaction.
+- Generic template: `lib/email/templates/notification.tsx` (heading, paragraphs, one button). Email links use `absoluteUrl(path)` from `lib/urls.ts`.
+
+**Jobs and test routes**
+- `POST /api/test/jobs/<job id>`, body `{ now?: ISO, data?: object }`, exists only when `testRoutesEnabled()`; every method answers 404 otherwise.
+  - `data` defaults to the job's cron payload, else `{}`, and is validated against the event schema (400 when invalid).
+  - The route runs `job.runInline` under `runWithClock(now)` and returns `{ ok, job, now, result }`, or 500 with the error.
+  - E2E helper: `runJob(request, id, { now, data })`.
+- `Job.cron` is exposed and `findJob(id)` was added to the registry.
+- Job events declared ahead for Phase 1: `social/daily-sync.requested` (the daily fan-out) and `social/youtube-retention.requested`.
+
+**Other**
+- `lib/payouts/readiness.ts`: `isPayoutsReady`, `payoutsStateOf`.
+- `CREATOR_SOCIAL_PROVIDERS` lives in `lib/social/types.ts`.
+- `ActionError` moved to `lib/actions/errors.ts` (re-exported by `define-action.ts`), so domain modules can throw it without an import cycle through `lib/auth/session.ts`.
+- Test fixtures: `insertSocialConnection`, `insertStripeAccount`, `insertPortfolioItem`.
+
+### 19.12 Phase 1: Stripe Connect, webhooks and payouts pages
+**Gateway** (`lib/stripe/`)
+- `gateway.ts`: the `StripeGateway` interface (`createConnectedAccount`, `retrieveAccount`, `createAccountLink`, `createLoginLink`) and `getStripeGateway()`: live when `STRIPE_SECRET_KEY` is set, else the fake. Methods return objects parsed by `schemas.ts` (Stripe's field names, only the fields we use). Phases 4–5 add methods to the interface and to both implementations.
+- `live.ts`: the SDK client from `client.ts`.
+  - `accounts.create` takes `connectedAccountParams()` (`shared.ts`): the §19.10 controller properties, `capabilities.transfers.requested`, `tos_acceptance.service_agreement = full` and `metadata.user_id`. The idempotency key is `acct:<userId>`.
+  - `business_type` is not prefilled: creators and builders may be companies, and Stripe's form asks.
+  - Account links are `account_onboarding` with Stripe's default (`currently_due`) collection.
+- `fake.ts`: Stripe-shaped JSON in `.data/fake-stripe/<object type>/<id>.json` (`account`, `account_link`, `event`), written atomically (temp file + rename).
+  - Account ids are `acct_fake_` + the first 16 hex characters of sha256(idempotency key). A key therefore replays like Stripe's, and the same key with other parameters fails with `invalid_request`.
+  - Account links last 5 minutes and work once; their URL is the fake onboarding page.
+  - Login links need `details_submitted`, as in Stripe.
+  - Tests pass `createFakeStripeGateway({ root: <temp dir>, appUrl })`.
+- **Fake pages** (`fake-pages.ts`; routes under `/api/dev/fake-stripe/` that answer 404 unless Stripe is fake):
+  - `connect/[accountId]?link=` offers three endings:
+    - "Complete onboarding": payouts enabled, transfers active.
+    - "Submit details (verification pending)": details submitted, transfers pending, `requirements.pending_verification`.
+    - "Return without finishing".
+  - An expired or used link redirects to `refresh_url`.
+  - Completing posts a signed `account.updated` (with `previous_attributes`) to `absoluteUrl("/api/webhooks/stripe")` (the configured `NEXT_PUBLIC_APP_URL`, never the request's Host header, so a forged Host cannot receive a signed event), signed with `stripeWebhookSecrets().connect`, then redirects to `return_url`. A failed delivery is reported but still redirects; the return page re-fetches the account.
+  - `dashboard/[accountId]` stands in for the Express Dashboard.
+- `countries.ts` (client-safe): the payout countries are the cross-border regions: the EEA countries Stripe supports, plus GB, CH, US and CA. The country comes from a picker that defaults to the creator profile's country (builder profiles have none). It cannot change after the account exists.
+
+**Connect** (`connect.ts`)
+- **Functions:**
+  - `ensureConnectedAccount`: one account per user; the row insert tolerates concurrent calls.
+  - `createOnboardingLink`: creates the account first when needed.
+  - `createDashboardLink`: needs `details_submitted`.
+  - `refreshAccountFromStripe`.
+  - `syncAccountFromStripe`: `account.updated`, or a retrieval.
+  - `syncTransfersCapability`: `capability.updated`.
+- **Mapping** (`stripeAccountColumns`):
+  - A missing capability → `unrequested`; an unknown status → `inactive`.
+  - `requirements_currently_due` = `currently_due`, deduplicated.
+  - A malformed country is ignored and the stored one kept.
+- **Stale data:** skipped when its whole second is older than `updated_from_stripe_at`. Events have second precision, so same-second data is applied rather than lost. `updated_from_stripe_at` only moves forward.
+- **Events:**
+  - `payouts.account_updated` is emitted only when a synced field changed; the actor is null because Stripe drove the change.
+  - Readiness has no §11 event; `payouts.account_updated.ready` records it.
+- **Becoming payouts-ready:**
+  - It runs `advanceOnboarding`.
+  - It notifies `payouts.ready` with dedupe key `payouts.ready:<acct>`: once per account, ever. Losing and regaining readiness does not notify again.
+- **Adoption:** the webhook can beat our own insert after `accounts.create`.
+  - When `account.updated` has no row but its `metadata.user_id` names a user without one, the handler creates the row (`payouts.account_created`, actor null), then applies the update.
+  - Any other unknown account is acknowledged and ignored.
+
+**Webhooks** (`webhooks.ts`; the route calls `handleStripeWebhookRequest(request, { db, secrets })`)
+- **Verification:** against both secrets, with Stripe's `constructEvent` (300 s tolerance). Failures answer 400 with `missing_signature`, `invalid_signature` or `invalid_payload`.
+- **Recording:** the event goes into `stripe_events` insert-if-absent, outside the handler's transaction, so a failed event keeps its payload.
+- **Processing**, in one transaction:
+  - Lock the row.
+  - `processed_at` already set → `duplicate`.
+  - Run the handler, then set `processed_at`.
+  - A handler error rolls everything back and answers 500. `processed_at` stays null, so Stripe's retry reprocesses the event.
+- Types without a handler are acknowledged (`ignored`) and marked processed. `processed_at IS NULL` therefore always means failed or in flight.
+- **Handlers** live in `lib/stripe/handlers/`, one file per topic (`account.ts`: `account.updated`, `capability.updated`). Each exports a `StripeHandlerGroup` (event type → handler, keyed by `Stripe.Event.Type`, so a typo fails typecheck).
+  - Each entry is `on(schema, handler)` (`handlers/define.ts`). The handler receives the event, with `data.object` parsed by the entry's Zod schema, and `{ tx, now }`. A payload that does not parse fails the event (500, retried).
+  - `handlers/index.ts` registers the groups, one line each, and `webhooks.ts` looks types up with `stripeEventHandler(type)`. Two groups handling the same type throw when the module loads.
+  - To add a type (Phases 4–5): add a schema to `schemas.ts`, a handler to a topic file (or a new `<topic>.ts`), and, for a new file, one line in `handlers/index.ts`. `handledStripeEventTypes()` lists the events to enable on the Stripe endpoints.
+- Fixtures: `tests/fixtures/stripe/*.json`.
+- **E2E** (`tests/e2e/payouts.spec.ts`): a builder at the payouts step (profile and portfolio set up in the database) leaves the fake onboarding, reopens the used link (refresh route → fresh link), completes it (webhook processed, onboarding finished, `payouts.ready` email), then Finish → `/app`; a creator in settings ends with verification pending and opens the fake Express Dashboard; the webhook route answers 400 to unsigned and forged requests.
+
+**Pages**
+- `/onboarding/payouts` and `/app/settings/payouts` share `components/payouts/` and `lib/stripe/page-state.ts`.
+- **Status** (`payoutsStatusOf` in `lib/payouts/readiness.ts`): `not_started`, `action_required`, `verifying`, `restricted` (a `rejected.*` disabled reason) or `ready`.
+- **Return:** Stripe's `return_url` is the page with `?return=1`.
+  - The page re-fetches the account on return, and on every visit while it is not ready (webhooks can lag).
+  - A failed re-fetch shows a notice and never breaks the page.
+- **Refresh:** Stripe's `refresh_url` is `/onboarding/payouts/refresh` or `/app/settings/payouts/refresh`.
+  - A GET route handler there makes a new link for the user's existing account and redirects (303). It never creates an account.
+  - On failure it goes back to the page with `?error=link`.
+- **Actions** (`lib/stripe/actions.ts`, authorized with `canManageOwnAccount`): `startPayoutsOnboarding({ from, country? })`, `openStripeDashboard` and `finishPayoutsStep`.
+- **Finishing the step:** "Finish" / "Continue" records `payouts` as `done` when payouts are ready, **or** when Stripe is verifying everything the user submitted (they have done their part). Readiness is still checked when signing.
+  - In every other state the page offers only "Do this later".
+- Settings pages share tabs (`app/app/settings/layout.tsx`, §19.15).
+
+**Open items**
+- **GDPR (Phase 6):** `stripe_events.payload` of `account.*` events holds the connected account's email and business profile, so account deletion must redact it.
+- Payouts actions have no rate limit. Each click makes one or two Stripe API calls on the user's own account.
+
+### 19.13 Phase 1: social providers library (`lib/social/`)
+**Files:** `types.ts` (contracts, §19.7), `catalog.ts` (labels; who may connect what: YouTube, Instagram, TikTok → creator; GitHub → builder or creator; `canConnectProvider`), `errors.ts`, `http.ts`, `metrics.ts`, `topics.ts`, `raw.ts`, `tokens.ts`, `pkce.ts`, `oauth-cookie.ts`, `registry.ts`, `youtube.ts` / `instagram.ts` / `tiktok.ts` / `github.ts`, `fake/`. Get a provider only through `getProvider(id, { fetch?, now? })`.
+
+**Errors**
+- `SocialTokenError`: the token is expired or revoked (401, `invalid_grant`, Graph code 190, TikTok `access_token_invalid`, an Instagram token past its expiry, a TikTok refresh token past `refreshExpiresAt`).
+- `SocialRetryableError` (`reason`: `rate_limited` | `unavailable`, plus `retryAfterSeconds`): 429, Google quota reasons, Graph codes 4/17/32/613, GitHub 403 with `x-ratelimit-remaining: 0` or a "rate limit" message, GraphQL `RATE_LIMITED`; 408/425/5xx, network errors and timeouts.
+- `SocialProviderError` with a `code`: `invalid_response` (Zod), `invalid_code`, `no_channel`, `scope_missing`, `not_eligible`, `provider_error`.
+- Our own configuration errors (`invalid_client`, `unauthorized_client`, `incorrect_client_credentials`, TikTok `invalid_request`, Instagram OAuth code 101) are `provider_error`, never token errors, so a misconfigured app cannot expire users' connections. A rejected grant during the code exchange is `invalid_code`.
+- `socialErrorCode(error)` gives the short code for `last_sync_error` and the callback's `?error=`; `socialErrorMessage(code, label)` the plain-language text.
+- Error messages hold the provider, an endpoint label and the HTTP status only: never URLs (Instagram sends the token in the query string), bodies, or Zod issue messages (paths and codes only).
+
+**Transport:** every HTTP call goes through an injectable `SocialFetch` (`ProviderConfig.fetch`). Live: `fetch` with a 20 s timeout and `cache: "no-store"`. Fake: `createFakeSocialFetch(provider)`. Tests wrap either.
+
+**Mapping decisions beyond §19.10**
+- **YouTube:** one uploads page (25) → one `videos.list` (≤ 50 ids). Upcoming/live broadcasts are skipped, and so are videos under 3 days old when older ones exist (still gathering views). `avg_views` and engagement use ≤ 20 settled videos; engagement = (likes + comments) ÷ views, hidden likes or disabled comments count as 0. Analytics covers the 90 days ending yesterday (UTC): totals, top 10 countries by views, ageGroup × gender. Country shares are of the window's total views; `ZZ` is dropped. An Analytics 403 or an unticked analytics scope keeps the Data API numbers (`raw.analytics.available = false`). `age18-24` → `18-24`, `age65-` → `65+`. A refresh response without `refresh_token` keeps the stored one; `refresh_token_expires_in` (apps in Testing status) fills `refreshExpiresAt`.
+- **Instagram:** the connection's identity is the professional account id (`/me` `user_id`), which the media and insights edges also take. `TokenSet.providerAccountId` stays null, because the token's `user_id` is documented as the app-scoped id. `PERSONAL` accounts → `not_eligible`. The last 12 posts (no stories or ads) get insights, 4 requests at a time; a failing post insight (e.g. #100) is tolerated and counted in `raw.insights.failedMedia`. Engagement = (likes + comments + shares) ÷ views over posts with views. Demographics: `follower_demographics` by `country` and by `age,gender`, normalised to shares; country shares divide by max(listed total, followers) because only the top 45 are listed; top 10 kept. Below 100 followers or without the insights scope no demographics are requested (`raw.demographics.reason`).
+- **TikTok:** user fields are requested per granted scope and `video.list` only when granted; missing scopes are listed in `raw.missingScopes`. Engagement = (likes + comments + shares) ÷ views over ≤ 20 videos. Token errors can arrive with HTTP 200, so the body is checked first.
+- **GitHub (builders):** `followers` = GitHub followers; `top_topics` = the top 8 languages by bytes, lowercase; `avg_views`, engagement and demographics are null/empty. Everything else is in `raw` (`githubRawSchema`): public repo count, total stars and forks (owned, public, non-fork; first 100 repos by stars), top languages with bytes and share, top 10 repos, and the last 365 days of `contributionsCollection` counts (private contributions only as a count). **Typed accessor:** `gitHubStatsFromRaw(snapshot.raw)` (null for anything else). Classic OAuth App tokens never expire; `refresh()` is a no-op unless the app opted into expiring tokens.
+- `top_topics` is a deterministic best effort (`deriveTopics`): hashtags and tags count double, title words once; with ≥ 3 items a term must recur; stopwords and platform words dropped; ≤ 8. The curated topics come from the AI summary.
+- `raw` shapes are versioned Zod schemas (`raw.ts`, `v: 1`) used both to write and to read (`parseSnapshotRaw`, `recentContentTitles`). They hold public titles/captions, never tokens or viewer data.
+
+**Token timing:** `tokenNeedsRefresh(provider, token, now)` is the one rule: refresh within 5 minutes of expiry; Instagram also once the token is ≥ 24 h old (from `obtainedAt`, else estimated as `expiresAt` − 60 days); never for tokens without expiry. `refresh()` re-checks: Instagram returns the token unchanged when it is younger than 24 h, TikTok refuses a refresh token past `refreshExpiresAt` without calling TikTok. `TokenSet.obtainedAt` maps to `social_connections.token_obtained_at`.
+
+**OAuth state cookie** (`oauth-cookie.ts`)
+- `beginOAuthState({ provider, userId, returnTo, usePkce })` → `{ state, pkce, cookie }` (set with `response.cookies.set(name, value, options)`). `verifyOAuthState({ provider, userId, cookieValue, state })` → `{ ok: true, codeVerifier, returnTo }` or `{ ok: false, reason, returnTo }` with reason `missing | invalid | expired | state_mismatch | user_mismatch | provider_mismatch`. `clearedOAuthStateCookie(provider)` for every callback response.
+- Cookie `oauth_state_<provider>`, path `/api/oauth/<provider>` (start and callback both see it), httpOnly, SameSite=Lax, Secure on https, 10 minutes, AES-GCM (`lib/crypto`) with the provider as AAD. `returnTo` goes through `safeCallbackUrl` (default `/app/settings/connections`). State and user id are compared timing-safely (SHA-256, then `timingSafeEqual`).
+
+**Fakes** (§19.3)
+- Same provider code: the registry swaps the authorize URL for `/api/dev/fake-oauth/<provider>/authorize` and the transport for `fake/transport.ts`.
+- Fixtures `tests/fixtures/social/<provider>/<account>.json`: label, description, `oauth` reply templates (`token`, Instagram `longLived`, `refresh`; `{{access_token}}` / `{{refresh_token}}` placeholders, lifetimes from their `expires_in` fields; a non-2xx `status` records a failure) and recorded API `responses` matched by method, URL and a subset of query parameters (most specific wins). Accounts: YouTube `ada-codes` (full analytics; an upcoming premiere, hidden likes, comments off), `quiet-kitchen` (hidden subscriber count, analytics without rows), `lapsed-lens` (refresh → `invalid_grant`; no demographic rows); Instagram `luna-bakes` (demographics; one failing insight), `tiny-studio` (64 followers, no demographics; flat token reply); TikTok `max-moves` (all scopes), `fresh-start` (profile/stats scopes unticked, no videos); GitHub `octo-builder`, `new-dev` (no repos).
+- Codes and tokens are self-contained HMAC-signed values (`fake/signing.ts`, key derived from `AUTH_SECRET`) that carry the provider, fixture account, issue and expiry times, and for codes the PKCE challenge and redirect URI: no fake state in memory or on disk. The fake token endpoint checks client credentials, grant type, provider, expiry (codes 10 minutes, on the app clock), the exact `redirect_uri` and PKCE S256. API calls need an unexpired fake access token, so a mocked clock exercises refreshes. Failures use each provider's real error shapes.
+- The consent page lists the fixture accounts ("Authorize as <label>") and validates the client id, `response_type=code` (GitHub's authorize endpoint takes none), the state, an S256 challenge and an exact `redirect_uri` match (a mismatch is refused on the page, never redirected to). "Cancel" returns `error=access_denied`. Instagram's redirect gets its `#_` suffix. The CSP `form-action` names the app origin, because browsers apply it to the redirect after the post. Every method answers 404 unless that provider is fake (`isProviderFakeSafe`, always false in production).
+
+**Audience summary** (`lib/ai/prompts/audience-summary.ts`): `audience_summary@v1` → `{ summary, topics }` (3–5 sentences, ≤ 1200 characters; ≤ 8 lowercase topics). `generateAudienceSummary(input, deps)` never throws (`effort: "low"`); `normalizeAudienceSummary` lowercases and de-duplicates topics and collapses whitespace; an empty summary counts as `invalid_output` with the empty fallback, and the caller keeps the old summary. `hasAudienceData()` lets the sync skip the call. Input: the profile's niche, topics, languages and country, plus per-connection aggregates with their basis and ≤ 10 recent titles; no names, handles, emails or tokens. Titles sit inside `<untrusted_content>` (angle brackets stripped) and the system prompt forbids following instructions there. Unverified manual entries are labelled as such.
+
+**Connection flow:** `/api/oauth/[provider]/start` and `/callback`, `lib/social/sync.ts` and the sync jobs are built (§19.14). The callback takes the identity from `fetchProfile().providerAccountId` and its `?error=` from `socialErrorCode()`.
+
+**Tests:** `tests/unit/social/` (each provider against its fixtures, malformed responses, error classes, refresh rules, cookie and PKCE including the RFC 7636 vector, the fake page), `tests/integration/social/fixture-snapshots.test.ts` (every fixture's snapshot stored in Postgres and read back), `tests/e2e/social-fake-oauth.spec.ts` (the consent page in a browser).
+
+### 19.14 Phase 1: social connection flow, sync, audience pages and public profiles
+**Files**
+- `lib/social/`: `oauth-flow.ts` (the start/callback logic; the routes under `app/api/oauth/[provider]/` only pass the session user and the database), `connect-errors.ts` (`?error=` codes and messages), `connections.ts` (token columns, OAuth upsert, disconnect), `sync.ts`, `derived.ts` (size tier, audience summary, embedding), `size-tier.ts`, `retention.ts`, `manual.ts` + `manual-policy.ts`, `revoke.ts`, `summary.ts` + `summary-form.ts` (the creator's review/edits), `queries.ts` (never selects token columns), `view.ts` / `audience.ts` (page view models), `authz.ts`, `actions.ts`, `background.ts`, `revalidate.ts`.
+- `lib/public-profiles/` (`load.ts`, `metadata.ts`); jobs `inngest/functions/social-sync.ts`, `social-daily-sync.ts`, `social-youtube-retention.ts`; email `lib/email/templates/social-expired.tsx`; UI in `components/social/`, `components/audience/`, `components/public-profile/`.
+- Pages: `/onboarding/creator/connect`, `/onboarding/creator/review`, `/app/audience`, `/app/settings/connections`, `/c/[handle]`, `/b/[handle]`.
+
+**Authorization:** the social rules (`canConnectSocial`, `canManageSocialConnection`, `canVerifySocialConnection`, `canViewOwnAudience`) live in `lib/social/authz.ts`, built on `isActive` / `isAdmin` from `lib/auth/authz.ts`. Deviation from §6's single file, made to keep the shared file untouched during the parallel build; they can move into `authz.ts` later.
+
+**OAuth flow**
+- Start: needs a session (signed out → `/sign-in?callbackUrl=<returnTo>`, since an `/api` path is never a callbackUrl), the provider allowed for the user's roles, and the rate limit `oauth-start` (10 per user per 10 minutes). Every redirect is a 303 to `absoluteUrl()` (NEXT_PUBLIC_APP_URL).
+- Callback answers: `returnTo?connected=<provider>` or `returnTo?error=<code>&provider=<provider>`.
+  - Codes: the `SocialErrorCode`s, plus `access_denied` (Cancel on the consent screen), `state_invalid` (cookie missing, tampered with, other state, other user), `session_expired` (more than 10 minutes), `account_in_use` and `not_allowed`.
+  - Without a readable cookie the return path is unknown, so it goes to `/app/settings/connections`.
+  - The state cookie is cleared on every callback answer.
+  - Expected user-side failures (`invalid_code`, `no_channel`, `scope_missing`, `not_eligible`, `rate_limited`) are not sent to Sentry; everything else is.
+- Identity is `fetchProfile().providerAccountId`. A reconnect, or a manual entry upgraded to OAuth, updates the existing row: active, `verified_at = now`, sync error cleared, evidence key cleared (the screenshot is deleted, best effort). If the row now points at a different provider account (another channel), its old snapshots are deleted under `allowGdprErasure` and `last_synced_at` is reset. `social.connected` is emitted on every successful callback, reconnects included.
+- Tokens: AES-GCM (`lib/crypto.ts`) with the AAD `social_connections.<access|refresh>_token:<row id>`, so a ciphertext only decrypts on its own row. Tokens that cannot be decrypted (e.g. a rotated key) are treated as expired.
+- After the upsert the callback enqueues `social/sync.requested` (`reason: connected`); an enqueue failure is reported, and the daily sync picks the connection up.
+
+**Sync** (`syncConnection(connectionId, { db, now, provider, ai, embed })`)
+- Order: refresh when `tokenNeedsRefresh` (the new tokens are stored at once, before anything else can fail), then `fetchProfile` (refreshes username, display name, avatar and profile link; one cheap call) and `fetchAudience` (parsed again with `audienceSnapshotInputSchema`).
+- One transaction: the snapshot, the connection update (`last_synced_at`, sync error cleared), the size tier and `social.synced`. The summary and embedding come after it, outside any transaction (no model call inside a transaction). GitHub syncs skip the summary and embedding.
+- `SocialTokenError` marks the connection expired, with reason `refresh_failed` during the refresh, else `unauthorized`:
+  - `active → expired` is a conditional update, so this happens once;
+  - `social.expired` and a size tier recompute (an expired connection is no longer verified);
+  - `notify("social.expired")`: in-app plus email (`social-expired.tsx`), dedupe key `social.expired:<id>:<token_obtained_at ms>`.
+- Retryable errors record `last_sync_error` and come back `retryable`; the job throws *inside* its step so Inngest retries it (a step that returned is memoised and would never run again). Other provider errors record the code, go to Sentry and are final. Anything that is not a provider error (database, bug) propagates.
+- Results: `synced | skipped (not_found, revoked, expired, manual) | expired | failed`.
+
+**Jobs**
+- `social-sync` (`social/sync.requested`): 3 retries, concurrency 1 per `connectionId`.
+- `social-daily-sync` (cron 04:15 UTC): active OAuth connections not synced in the last 20 hours. Under Inngest one event each, with the idempotency id `social-sync:<id>:<day>`. Inline (fake jobs, `/api/test/jobs/social-daily-sync`) the syncs run in sequence and it returns `{ due, failed }`.
+- `social-youtube-retention` (cron 03:45 UTC): `purgeExpiredYouTubeSnapshots()` deletes YouTube snapshots older than 30 days except each connection's newest; other providers are untouched; `{ skipped: true }` when `YOUTUBE_LONG_RETENTION=true`.
+- Open item: Google's other rule (delete within 30 days once a token can no longer be refreshed) is not implemented for expired YouTube connections; decide together with the retention flag.
+
+**Size tier:** the largest single platform's followers, not the sum (audiences overlap). Verified connections (active and `verified_at` set) are preferred; otherwise other non-revoked creator connections (unverified manual entries, expired ones), and the tier shows as "Unverified". Boundaries: < 10K nano, < 100K micro, ≤ 500K mid, > 500K macro. GitHub never counts. It is recomputed inside the transaction of every snapshot, expiry, disconnect, manual entry and verification.
+
+**Audience summary and topics**
+- The sync writes `creator_profiles.audience_summary` **and `topics`** (the AI topics) unless `audience_summary_edited_at` is set. Profile forms that edit `topics` should set `audience_summary_edited_at` too, or the next sync overwrites them.
+- No audience data → no model call. A failed generation keeps the old summary. An edit saved while the model runs wins (conditional update).
+- "Regenerate" (5 per user per hour) forces a new summary and clears `audience_summary_edited_at`.
+- Events:
+  - `ai.generated` at generation: subject `creator_profile`, actor null for syncs, `accepted_by_user: null`, `fallback`.
+  - `ai.reviewed` when the creator confirms the AI text (`accepted`) or changes it (`edited`), on the review page or `/app/audience`.
+  - `creator_profile.updated { fields, source }` for edits, which also set `audience_summary_edited_at`.
+- On `/onboarding/creator/review`, "Continue" saves the summary and topics, emits those events and records `creator.review` done, all in one transaction.
+
+**Embedding:** `creatorProfileEmbeddingText()` (niche, topics, bio, audience summary, languages, country; no names or handles), with `embedding_model` `fake:hashed-bow-1024` or `voyage:<VOYAGE_MODEL>`. An embedding failure is reported and keeps the old vector. Phase 2's `embeddings/refresh` should reuse the same text builder.
+
+**Manual entry fallback**
+- Form: profile link (https, on the provider's domain; it is what the admin checks), follower count, screenshot.
+- Upload: a signed PUT (10 minutes) to the key `social-evidence/<userId>/<provider>-<uuid>.<ext>`.
+  - The policy is the image MIME allow-list with a **25 MB** limit (the attachment limit, as the task asked; §19.7 lists screenshots under the 10 MB `image` purpose).
+  - The submit checks that the key is under the user's own prefix, then `statObject`s it (type and size); a refused object is deleted.
+- Refused while an OAuth row exists for the provider (resync or reconnect instead).
+- Storing it:
+  - A new entry: a `manual` row (no tokens, `verified_at` null) and a snapshot holding only the followers (`raw = { source: "manual", v: 1 }`).
+  - Events: `social.connected` (source `manual`) on the first entry, `social.synced` on every entry.
+  - Re-entering updates the row and resets `verified_at`.
+- Shown as "Unverified" on the connection cards, `/app/audience`, the review page and the public profile.
+- Admin verification:
+  - `verifyManualConnection(db, admin, id)` and the server action `verifySocialConnection` set `verified_at`, write `admin_audit_log` (`social_connection.verified`) and recompute the tier, in one transaction. Idempotent.
+  - `evidenceViewUrl()` gives the admin a 5-minute screenshot link.
+  - The admin UI is Phase 6.
+
+**Disconnect**
+- After a confirmation dialog, the row is deleted under `allowGdprErasure` (snapshots cascade, tokens gone), with `social.disconnected` and the size tier in the same transaction.
+- After the commit, best effort:
+  - Token revocation: Google `/revoke` with the refresh token; GitHub `DELETE /applications/{client_id}/grant`; TikTok `/v2/oauth/revoke/`. Instagram has no endpoint. Fakes are skipped.
+  - The evidence screenshot is deleted.
+  - The summary and embedding are refreshed. When nothing remains to summarise, the existing summary is kept.
+
+**Rate limits:** `oauth-start` 10 per 10 minutes per user; `social-resync` 3 per 15 minutes per connection; `social-evidence-upload` 10 per hour per user; `audience-summary-regenerate` 5 per hour per user.
+
+**Pages and background work**
+- `runInBackground` uses `after()` inside a request and runs inline elsewhere. Resync enqueues the job.
+- Pages poll (`SyncRefresher`: `router.refresh()` every 2.5 s, at most 24 times) while:
+  - a connection made less than 2 minutes ago has no snapshot yet, or
+  - new data arrived less than 2 minutes ago and its summary is still being written.
+- Older pending states are shown as they are, so a lost job never blocks a page.
+- `/app/audience`:
+  - Non-creators see "Become a creator"; creators without a profile get a link to the profile step (§19.11).
+  - Demographics are shown per platform with their basis (YouTube: viewers over the last 90 days; Instagram: followers). Gender groups are female, male and "other or unspecified" (YouTube's user_specified and Instagram's U together).
+  - Charts are ranked bar tables, and stacked age bars with a legend carrying totals and a table view. Colors come from the dataviz reference palette (blue, orange, aqua), checked for color-vision deficiency in both themes against the card surface.
+- `ConnectButton` / `connectHref(provider, returnTo)` (`components/social/connect-button.tsx`) is the link every Connect button uses, e.g. GitHub on `/onboarding/builder/portfolio`.
+
+**Public profiles** (`lib/public-profiles/load.ts`)
+- Each loader selects only the public fields listed in its header:
+  - Creator: handle, name, bio, niche, topics, languages, country, size tier, and whether the tier rests on verified numbers.
+  - The audience summary, and per platform: followers, average views, engagement, verified or unverified, and the date.
+  - The channel link only for verified connections. Verified reach is the sum of the verified platforms.
+  - Builder: skills, stack, availability, deal preference, portfolio, and GitHub stats.
+- No emails, ids, tokens, raw payloads, demographic breakdowns or screenshots. Only http(s) URLs reach an `href`.
+- Unknown, invalid or suspended → 404. Uppercase handles redirect (308) to lowercase.
+- ISR: `revalidate = 300` and an empty `generateStaticParams`, plus a best-effort `revalidatePath` after syncs, expiries, disconnects and summary changes. A 404 can stay cached for up to 5 minutes.
+- Metadata: title, description (bio, else summary, else a default; ≤ 160 characters), canonical URL, Open Graph `profile`, Twitter `summary`. No OG image.
+
+**Tests**
+- Integration (`tests/integration/social/`):
+  - `connection-flow.test.ts`: start and callback, the state cookie, wrong state or user, expiry, cancel, reconnect, `account_in_use`, manual → OAuth upgrade, disconnect.
+  - `sync.test.ts`: snapshot, summary, tier, embedding and events; edited summary kept; model fallback; token refresh; expiry with notification and email; retryable errors; GitHub; jobs; retention and its flag; manual entry and admin verification; review events.
+  - `public-profiles.test.ts`.
+- Unit: `tests/unit/social/connection-pure.test.ts`.
+- E2E: `tests/e2e/phase1-acceptance.spec.ts`. Every step goes through the pages and the fakes, the profile forms included (only the manual-entry test sets its profile up in the database).
+
+### 19.15 Phase 1: profiles, onboarding pages and settings
+**Files**
+- `lib/profiles/`:
+  - Client-safe: `handle-format.ts` (the handle pattern; `lib/db/schema/columns.ts` re-exports it), `locale.ts` (country and language lists, English names via `Intl.DisplayNames`), `fields.ts` (limits, labels, Zod form schemas).
+  - Server: `handles.ts`, `save.ts`, `portfolio.ts`, `queries.ts`, `page-data.ts`, `embedding.ts`, `actions.ts`.
+- `lib/users/account.ts` + `account-actions.ts`; `lib/notifications/prefs.ts` + `actions.ts`.
+- Pages: `/onboarding/creator/profile`, `/onboarding/builder/profile`, `/onboarding/builder/portfolio`, `/app/settings/profile`, `/app/settings/notifications`, `/app/settings/account`, and `app/app/settings/layout.tsx`.
+- UI: `components/profiles/`, `components/settings/`, `components/layout/settings-nav.tsx`, `components/onboarding/continue-step-button.tsx`.
+- Rules in `lib/auth/authz.ts`: `canEditCreatorProfile`, `canEditBuilderProfile` (the role and an active account) and `canManagePortfolioItem` (the owner only; admins included, they get admin tools in Phase 6). `finishConnectStep` now authorizes with `canEditCreatorProfile` instead of `canManageOwnAccount`.
+
+**Saving a profile**
+- One action per form: `saveCreatorProfileAction` / `saveBuilderProfileAction`, with input `from: onboarding | settings`. It creates or updates the profile in one transaction:
+  - claim the handle;
+  - insert or update the profile;
+  - release the old handle;
+  - emit `<role>_profile.created`, or `.updated { fields, source }` with changed column names only;
+  - `completeOnboardingStep(<role>.profile, done)` (idempotent).
+- From onboarding it redirects to the next step. From settings it returns, and the form shows "Saved.".
+- **Creator form:** display name, handle, niche, bio, country, languages.
+  - Topics are not on it. The audience summary writes them, and the creator edits them next to the summary (review step, `/app/audience`).
+  - Editing topics sets `audience_summary_edited_at` (§19.14). On the profile step, that would stop the first sync from ever writing a summary.
+- **Builder form:** display name, handle, bio, skills, stack, availability (default `open`), deal preference (default `either`).
+  - Skills and stack are comma lists: ≤ 12 items of ≤ 40 characters, duplicates dropped ignoring case, the first spelling kept.
+- **Limits:** names 60 characters, bio 500, niche 80, ≤ 6 languages.
+- **Country:** optional, any ISO 3166-1 alpha-2 code (plus XK). It preselects the payout country (§19.12).
+- **Languages:** 49 ISO 639-1 codes (common creator languages plus the EU languages), stored lowercase in list order and shown by English name on public profiles. Twelve are shown up front, the rest under "More languages".
+- **After the commit, in the background:**
+  - `runInBackground` moved to `lib/jobs/background.ts` and takes an `area` tag; `lib/social/background.ts` wraps it.
+  - The creator embedding (lib/social/derived.ts) is refreshed when niche, bio, languages or country changed.
+  - The builder embedding (`builderProfileEmbeddingText`: skills, stack, bio, portfolio items; no names) is refreshed when bio, skills, stack or the portfolio changed. Phase 2's `embeddings/refresh` should reuse both text builders.
+  - Public profiles are revalidated, and after a rename the old handle's paths too.
+
+**Handles**
+- **Input:** typed with or without `@`, in any case, and stored lowercase.
+- **Reserved:** `RESERVED_HANDLES` (admin, support, staff, official, vincera, …), so no profile can pose as the platform.
+- **Claiming:** `claimHandle` inserts into `handles` with `ON CONFLICT DO NOTHING`. A handle owned by someone else throws `HandleTakenError`.
+  - `HandleTakenError` is an `ActionError` carrying `fieldErrors.handle`.
+  - `ActionError` gained optional `fieldErrors`, which `defineAction` returns.
+- **Sharing:** a new profile starts from the user's other profile (handle, name, bio), so one handle can serve both `/c/` and `/b/`.
+- **Renaming:**
+  - Changing one profile's handle claims the new one.
+  - The old `handles` row is deleted only when neither profile still uses it.
+  - Renames are allowed at any time. Old public URLs answer 404; no redirects are kept.
+- **Suggestions:** without another profile, `suggestHandle` derives a handle from the name or email (accents stripped) and adds a numeric suffix when that one is taken or reserved.
+
+**Portfolio**
+- **Fields:**
+  - Title: ≤ 80 characters.
+  - Link: http(s) only, `https://` added when missing, ≤ 500.
+  - Description: ≤ 300.
+  - Format: optional, `product_format`.
+  - Shipped: a checkbox.
+- At most 12 items per builder.
+- `image_url` is not collected yet: there is no upload flow for portfolio images, and public pages show none.
+- **Events:** changes emit `builder_profile.updated { fields: ["portfolio_items"], source }`. §11 has no portfolio event, and for matching it is the builder profile that changed.
+- **Onboarding:** "Continue" (`finishPortfolioStep`) needs ≥ 1 item or a GitHub connection, like the connect step; otherwise the page offers "Do this later".
+
+**Other pages**
+- **Role page:** roles the user already has are marked and disabled. A user with both roles sees a link to `/app` instead of the form.
+- **`/app` home:**
+  - Cards come from the real state: connections, portfolio, payouts.
+  - A role without a profile shows "Set up your <role> profile" (§19.11).
+- **Settings:**
+  - Every settings page has the tabs from `SETTINGS_NAV` (lib/nav.ts, also the sidebar's children): Profile, Connections, Payouts, Notifications, Account.
+  - **Profile:** the user's profiles, active role first, plus the portfolio for builders. A missing profile links to its onboarding step.
+  - **Notifications:** email and in-app switches per `NOTIFICATION_TYPES` entry, upserted into `notification_prefs`. Built ahead of Phase 3 because the sidebar links to it and `notify()` already reads the switches.
+  - **Account:**
+    - Name (`users.name`).
+    - Sign-in email, read-only: changing it needs a verification flow that is not built.
+    - Roles: the missing one can be added through `/onboarding/role`.
+    - Session count, and "Sign out everywhere", which deletes every `sessions` row and then signs this browser out.
+    - Data export and deletion are described as coming (§14, Phase 6). There are no dead buttons.
+
+**Forms:** `components/profiles/form-kit.tsx`
+- `useFormAction` keeps the submitted values when an action fails. React resets uncontrolled fields after every form action, so without it a typo would wipe the form.
+- Also `Field`, `describe()` (`aria-describedby` / `aria-invalid`), `NativeSelect` and `RadioCard`.
+- Forms submit with `noValidate`, so the server's plain-language messages show.
+
+**Tests**
+- **Unit:** `tests/unit/profiles/fields.test.ts`, plus the new rules in `tests/unit/auth/authz.test.ts`.
+- **Integration:** `tests/integration/profiles/profiles.test.ts`:
+  - handles, saves and events;
+  - portfolio ownership and limits, and the builder embedding;
+  - the actions, with a mocked session and `next/cache`;
+  - account settings and notification preferences.
+- **E2E:** `tests/e2e/onboarding.spec.ts`:
+  - a creator, a builder, and a user with both roles;
+  - validation errors that keep the typed values;
+  - settings tabs, a handle rename and its public page, notification switches, sign out everywhere.
+- `phase1-acceptance.spec.ts` now fills the profile forms.
+- **Test helpers:**
+  - `stubServiceEnv()` also blanks the social credentials (`GOOGLE_YT_*`, `META_*`, `TIKTOK_*`, `GITHUB_DATA_*`).
+  - Playwright's `expect.timeout` is 15 s under `next dev`, where a first request compiles the route and a server action's redirect took over 5 s. It stays at 5 s for CI's build and start.
+
+**Phase 1 gate (W1)**
+- `app/icon.svg` (the logo mark, light and dark) was added. Without an icon, every page's request for `/favicon.ico` was a 404 in the browser console.
+- A walk on `pnpm dev` with `FAKE_SERVICES=all`, scripted with Playwright, covers the §16 Phase 1 criteria:
+  - a creator connects YouTube and sees `/app/audience` with fixture data;
+  - a builder connects GitHub and adds a project;
+  - both finish fake Stripe Connect: the webhook is delivered and processed, `stripe_accounts` shows payouts enabled with transfers active, and Settings → Payouts says "Payouts are ready";
+  - `/c/<handle>` and `/b/<handle>` render.
+- The same walk checked at 390 px wide in dark mode (no horizontal scroll), that tokens are stored encrypted, and that the §11 events exist without emails or tokens in their properties.

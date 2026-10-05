@@ -51,6 +51,8 @@ export type JobOptions<N extends JobEventName> = {
 export type Job = {
   id: string
   event: JobEventName
+  /** The schedule and payload of scheduled runs, when the job also runs on a cron. */
+  cron?: { schedule: string; data: unknown }
   fn: ReturnType<typeof createInngestFunction>
   /** Validate `data` against the event schema and run the handler in-process. */
   runInline(data: unknown): Promise<unknown>
@@ -70,6 +72,7 @@ export function defineJob<N extends JobEventName>(options: JobOptions<N>): Job {
   return {
     id: options.id,
     event: options.event,
+    cron: options.cron,
     fn: createInngestFunction(options, parse),
     runInline: async (data) =>
       options.handler({

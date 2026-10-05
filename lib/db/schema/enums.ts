@@ -159,6 +159,19 @@ export const ledgerAccountEnum = pgEnum("ledger_account", [
 export type LedgerAccount = (typeof ledgerAccountEnum.enumValues)[number]
 
 /**
+ * Status of a Stripe capability on a connected account (§19.10: payouts-ready needs `transfers`
+ * to be `active`). `Account.capabilities.transfers` reports active | inactive | pending; a
+ * capability that was never requested is absent there and `unrequested` on the Capability object.
+ */
+export const stripeCapabilityStatusEnum = pgEnum("stripe_capability_status", [
+  "active",
+  "inactive",
+  "pending",
+  "unrequested",
+])
+export type StripeCapabilityStatus = (typeof stripeCapabilityStatusEnum.enumValues)[number]
+
+/**
  * §5 leaves transfers.status open. `pending` is written before the Stripe call (the row id is the
  * idempotency key), `created` once Stripe returns the transfer; reversals update the status.
  */

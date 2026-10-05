@@ -15,6 +15,17 @@ export const SOCIAL_PROVIDER_IDS = ["youtube", "instagram", "tiktok", "github"] 
 export const socialProviderIdSchema = z.enum(SOCIAL_PROVIDER_IDS)
 export type SocialProviderId = z.infer<typeof socialProviderIdSchema>
 
+/**
+ * Audience providers: what creators connect (§7.1); creator onboarding's "connect" step counts
+ * these. GitHub is the builders' provider (creators may connect it too).
+ */
+export const CREATOR_SOCIAL_PROVIDERS = [
+  "youtube",
+  "instagram",
+  "tiktok",
+] as const satisfies readonly SocialProviderId[]
+export type CreatorSocialProviderId = (typeof CREATOR_SOCIAL_PROVIDERS)[number]
+
 // Compile-time check that this list matches the one lib/env.ts uses for credentials.
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Assert<T extends true> = T
@@ -36,6 +47,12 @@ export const tokenSetSchema = z.object({
   scopes: z.array(z.string()),
   /** Provider account id when the token response includes it (TikTok `open_id`, IG `user_id`). */
   providerAccountId: z.string().min(1).nullable(),
+  /**
+   * When the access token was issued (`social_connections.token_obtained_at`). Providers set it on
+   * exchange and refresh; Instagram refreshes only tokens at least 24h old (§19.10). Optional so
+   * hand-built token sets stay valid; unknown means "estimate from expiresAt".
+   */
+  obtainedAt: z.date().nullable().optional(),
 })
 export type TokenSet = z.infer<typeof tokenSetSchema>
 

@@ -1,0 +1,22 @@
+{
+  "id": "evt_1QfixtureCheckoutCompleted",
+  "object": "event",
+  "api_version": "2026-09-30.endive",
+  "created": 1791201600,
+  "data": {
+    "object": {
+      "id": "cs_test_fixture",
+      "object": "checkout.session",
+      "amount_total": 2900,
+      "currency": "eur",
+      "metadata": { "order_ref": "fixture" },
+      "mode": "payment",
+      "payment_status": "paid",
+      "status": "complete"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "checkout.session.completed"
+}

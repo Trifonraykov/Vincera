@@ -1,0 +1,380 @@
+{
+  "label": "Tiny Studio (64 followers)",
+  "description": "A Creator account below Instagram's 100-follower minimum, so no demographics. Its token reply uses the flat shape with a numeric user_id and a permissions array.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "user_id": 17841459990000001,
+        "permissions": ["instagram_business_basic", "instagram_business_manage_insights"]
+      }
+    },
+    "longLived": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "token_type": "bearer",
+        "expires_in": 5183944
+      }
+    },
+    "refresh": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "token_type": "bearer",
+        "expires_in": 5183944
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://graph.instagram.com/v26.0/me",
+      "query": {
+        "fields": "user_id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count"
+      },
+      "body": {
+        "user_id": "17841459990000001",
+        "username": "tiny.studio",
+        "name": "Tiny Studio",
+        "account_type": "MEDIA_CREATOR",
+        "profile_picture_url": "https://scontent.cdninstagram.com/v/t51.2885-19/fake_tiny_studio.jpg",
+        "followers_count": 64,
+        "follows_count": 120,
+        "media_count": 3,
+        "id": "7208415100000001"
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://graph.instagram.com/v26.0/17841459990000001/media",
+      "query": {
+        "fields": "id,caption,media_type,media_product_type,permalink,timestamp,like_count,comments_count"
+      },
+      "body": {
+        "data": [
+          {
+            "id": "18040000000000003",
+            "caption": "Hand-thrown mugs, first batch from the new kiln #ceramics #pottery",
+            "media_type": "IMAGE",
+            "media_product_type": "FEED",
+            "permalink": "https://www.instagram.com/p/DFakeTiny03/",
+            "timestamp": "2026-09-30T12:00:00+0000",
+            "like_count": 23,
+            "comments_count": 4
+          },
+          {
+            "id": "18040000000000002",
+            "caption": "Glazing day #pottery",
+            "media_type": "VIDEO",
+            "media_product_type": "REELS",
+            "permalink": "https://www.instagram.com/reel/DFakeTiny02/",
+            "timestamp": "2026-09-20T12:00:00+0000",
+            "like_count": 31,
+            "comments_count": 3
+          },
+          {
+            "id": "18040000000000001",
+            "caption": "Studio tour #ceramics #studio",
+            "media_type": "IMAGE",
+            "media_product_type": "FEED",
+            "permalink": "https://www.instagram.com/p/DFakeTiny01/",
+            "timestamp": "2026-09-10T12:00:00+0000",
+            "like_count": 18,
+            "comments_count": 2
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIUmZAiZAWZAke",
+            "after": "QVFIUmxrZAk5ZAE"
+          },
+          "next": "https://graph.instagram.com/v26.0/17841459990000001/media?after=QVFIUmxrZAk5ZAE"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://graph.instagram.com/v26.0/18040000000000003/insights",
+      "query": {
+        "metric": "views,reach,likes,comments,shares,saved,total_interactions"
+      },
+      "body": {
+        "data": [
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 410
+              }
+            ],
+            "title": "Views",
+            "description": "",
+            "id": "18040000000000003/insights/views/lifetime"
+          },
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 260
+              }
+            ],
+            "title": "Reach",
+            "description": "",
+            "id": "18040000000000003/insights/reach/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 23
+              }
+            ],
+            "title": "Likes",
+            "description": "",
+            "id": "18040000000000003/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 4
+              }
+            ],
+            "title": "Comments",
+            "description": "",
+            "id": "18040000000000003/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2
+              }
+            ],
+            "title": "Shares",
+            "description": "",
+            "id": "18040000000000003/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 5
+              }
+            ],
+            "title": "Saved",
+            "description": "",
+            "id": "18040000000000003/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 34
+              }
+            ],
+            "title": "Total interactions",
+            "description": "",
+            "id": "18040000000000003/insights/total_interactions/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://graph.instagram.com/v26.0/18040000000000002/insights",
+      "query": {
+        "metric": "views,reach,likes,comments,shares,saved,total_interactions"
+      },
+      "body": {
+        "data": [
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 980
+              }
+            ],
+            "title": "Views",
+            "description": "",
+            "id": "18040000000000002/insights/views/lifetime"
+          },
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 720
+              }
+            ],
+            "title": "Reach",
+            "description": "",
+            "id": "18040000000000002/insights/reach/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 31
+              }
+            ],
+            "title": "Likes",
+            "description": "",
+            "id": "18040000000000002/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3
+              }
+            ],
+            "title": "Comments",
+            "description": "",
+            "id": "18040000000000002/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 6
+              }
+            ],
+            "title": "Shares",
+            "description": "",
+            "id": "18040000000000002/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 9
+              }
+            ],
+            "title": "Saved",
+            "description": "",
+            "id": "18040000000000002/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 49
+              }
+            ],
+            "title": "Total interactions",
+            "description": "",
+            "id": "18040000000000002/insights/total_interactions/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://graph.instagram.com/v26.0/18040000000000001/insights",
+      "query": {
+        "metric": "views,reach,likes,comments,shares,saved,total_interactions"
+      },
+      "body": {
+        "data": [
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 290
+              }
+            ],
+            "title": "Views",
+            "description": "",
+            "id": "18040000000000001/insights/views/lifetime"
+          },
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 200
+              }
+            ],
+            "title": "Reach",
+            "description": "",
+            "id": "18040000000000001/insights/reach/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 18
+              }
+            ],
+            "title": "Likes",
+            "description": "",
+            "id": "18040000000000001/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2
+              }
+            ],
+            "title": "Comments",
+            "description": "",
+            "id": "18040000000000001/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Shares",
+            "description": "",
+            "id": "18040000000000001/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 1
+              }
+            ],
+            "title": "Saved",
+            "description": "",
+            "id": "18040000000000001/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 21
+              }
+            ],
+            "title": "Total interactions",
+            "description": "",
+            "id": "18040000000000001/insights/total_interactions/lifetime"
+          }
+        ]
+      }
+    }
+  ]
+}

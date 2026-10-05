@@ -30,6 +30,15 @@ export const jobEventSchemas = {
     reason: z.enum(["connected", "scheduled", "manual"]),
   }),
 
+  /** Daily fan-out (§7.1 "Re-sync daily"): enqueue `social/sync.requested` per active connection. */
+  "social/daily-sync.requested": z.object({}),
+
+  /**
+   * Daily YouTube retention (§19.10): while YOUTUBE_LONG_RETENTION is false, delete YouTube
+   * snapshots older than 30 days except each connection's newest (GDPR erasure hatch).
+   */
+  "social/youtube-retention.requested": z.object({}),
+
   /** Re-embed one profile, idea or product after it changed. */
   "embeddings/refresh.requested": z.object({
     subjectType: z.enum(["creator_profile", "builder_profile", "idea", "product"]),

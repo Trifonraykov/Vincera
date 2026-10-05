@@ -1,6 +1,8 @@
 import type {
+  Availability,
   CollabRole,
   CollabStage,
+  DealPreference,
   DeliveryType,
   DisputeKind,
   EventContext,
@@ -11,10 +13,12 @@ import type {
   SizeTier,
   SocialConnectionSource,
   SocialProvider,
+  StripeCapabilityStatus,
   TargetType,
   ThreadKind,
   UserRole,
 } from "@/lib/db/schema"
+import type { OnboardingStepId, OnboardingStepStatus } from "@/lib/onboarding/steps"
 
 /**
  * The business event catalog (CLAUDE.md §11): every event type, the kind of entity it is about
@@ -33,6 +37,7 @@ export const SUBJECT_TYPES = [
   "creator_profile",
   "builder_profile",
   "social_connection",
+  "stripe_account",
   "idea",
   "product",
   "match",
@@ -67,6 +72,9 @@ export type AiUse = "audience_summary" | "idea_brief" | "match_explanation" | "l
 /** Why a social connection stopped working (§7.1). */
 export type SocialExpiryReason = "refresh_failed" | "unauthorized" | "revoked"
 
+/** Where a profile was edited. */
+export type ProfileEditSource = "onboarding" | "settings"
+
 /** Who paused a launch. */
 export type LaunchPausedBy = "member" | "admin" | "dispute"
 
@@ -96,7 +104,40 @@ export interface EventCatalog {
   // Identity & onboarding
   "user.signed_up": { subject: "user"; properties: { method: AuthMethod } }
   "user.role_added": { subject: "user"; properties: { role: UserRole; source: RoleSource } }
-  "onboarding.completed": { subject: "user"; properties: { role: CollabRole } }
+  /** A step recorded done or skipped ("Do this later"); Phase 1 funnel. Not in the §11 list. */
+  "onboarding.step_completed": {
+    subject: "user"
+    properties: { step: OnboardingStepId; status: OnboardingStepStatus }
+  }
+  /** Once per user, when the path is first complete (§19.11). */
+  "onboarding.completed": {
+    subject: "user"
+    properties: { roles: CollabRole[]; skipped_steps: OnboardingStepId[] }
+  }
+
+  // Profiles (not in the §11 list: profile changes feed embeddings and matching)
+  "creator_profile.created": {
+    subject: "creator_profile"
+    properties: { country: string | null; topic_count: number; language_count: number }
+  }
+  /** `fields`: names of the changed columns, never their values. */
+  "creator_profile.updated": {
+    subject: "creator_profile"
+    properties: { fields: string[]; source: ProfileEditSource }
+  }
+  "builder_profile.created": {
+    subject: "builder_profile"
+    properties: {
+      skill_count: number
+      stack_count: number
+      availability: Availability
+      deal_preference: DealPreference
+    }
+  }
+  "builder_profile.updated": {
+    subject: "builder_profile"
+    properties: { fields: string[]; source: ProfileEditSource }
+  }
 
   // Social connections
   "social.connected": {
@@ -115,6 +156,27 @@ export interface EventCatalog {
   "social.expired": {
     subject: "social_connection"
     properties: { provider: SocialProvider; reason: SocialExpiryReason }
+  }
+  /** Not in the §11 list. The connection, its tokens and snapshots are deleted (§14). */
+  "social.disconnected": {
+    subject: "social_connection"
+    properties: { provider: SocialProvider; source: SocialConnectionSource }
+  }
+
+  // Payouts onboarding (Stripe Connect, §7.2; not in the §11 list)
+  "payouts.account_created": { subject: "stripe_account"; properties: { country: string | null } }
+  /** When a synced field changed (from `account.updated` / `capability.updated`). */
+  "payouts.account_updated": {
+    subject: "stripe_account"
+    properties: {
+      charges_enabled: boolean
+      payouts_enabled: boolean
+      details_submitted: boolean
+      transfers_capability: StripeCapabilityStatus
+      /** Payouts-ready (lib/payouts/readiness.ts) after the change. */
+      ready: boolean
+      requirements_due_count: number
+    }
   }
 
   // Supply & demand
@@ -269,6 +331,14 @@ export interface EventCatalog {
       fallback: boolean
     }
   }
+  /**
+   * The user's decision on generated text, e.g. the creator confirming or editing the audience
+   * summary on /onboarding/creator/review (records what `ai.generated.accepted_by_user` cannot).
+   */
+  "ai.reviewed": {
+    subject: "user" | "creator_profile" | "idea" | "match" | "launch"
+    properties: { use: AiUse; prompt_version: string; accepted: boolean; edited: boolean }
+  }
 }
 
 export type EventType = keyof EventCatalog
@@ -279,10 +349,18 @@ export type EventProperties<T extends EventType> = EventCatalog[T]["properties"]
 export const EVENT_TYPES = [
   "user.signed_up",
   "user.role_added",
+  "onboarding.step_completed",
   "onboarding.completed",
+  "creator_profile.created",
+  "creator_profile.updated",
+  "builder_profile.created",
+  "builder_profile.updated",
   "social.connected",
   "social.synced",
   "social.expired",
+  "social.disconnected",
+  "payouts.account_created",
+  "payouts.account_updated",
   "idea.created",
   "idea.published",
   "idea.archived",
@@ -322,6 +400,7 @@ export const EVENT_TYPES = [
   "dispute.opened",
   "dispute.resolved",
   "ai.generated",
+  "ai.reviewed",
 ] as const satisfies readonly EventType[]
 
 // Compile-time check that EVENT_TYPES lists every catalog entry.

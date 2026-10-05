@@ -10,13 +10,16 @@ import {
   handles,
   launches,
   matches,
+  notifications,
   orders,
   PROPOSAL_TTL_DAYS,
   proposalRevisions,
   proposals,
   socialConnections,
+  stripeAccounts,
   users,
   type MatchFeatures,
+  type OnboardingStepsRecord,
 } from "@/lib/db/schema"
 import { audienceSnapshotInputSchema } from "@/lib/social/types"
 
@@ -338,5 +341,101 @@ describe("audience snapshots", () => {
     )
     await testDb.db.insert(audienceSnapshots).values({ ...base, topCountries: [] })
     await testDb.db.insert(audienceSnapshots).values(base)
+  })
+})
+
+describe("Phase 1 columns", () => {
+  it("defaults users.onboarding_steps to an empty object and rejects non-objects", async () => {
+    const user = await insertUser(testDb.db)
+    expect(user.onboardingSteps).toEqual({})
+
+    const steps: OnboardingStepsRecord = {
+      "creator.connect": { status: "skipped", at: "2026-01-01T00:00:00.000Z" },
+    }
+    const [updated] = await testDb.db
+      .update(users)
+      .set({ onboardingSteps: steps })
+      .where(eq(users.id, user.id))
+      .returning()
+    expect(updated?.onboardingSteps).toEqual(steps)
+
+    await expectPgError(
+      testDb.db.execute(sql`UPDATE users SET onboarding_steps = '[]'::jsonb WHERE id = ${user.id}`),
+      PG_ERROR.checkViolation,
+      "users_onboarding_steps_object",
+    )
+  })
+
+  it("keeps tokens off manual social connections and timestamps sync errors", async () => {
+    const user = await insertUser(testDb.db)
+    await expectPgError(
+      testDb.db.insert(socialConnections).values({
+        userId: user.id,
+        provider: "instagram",
+        source: "manual",
+        accessTokenEnc: "ciphertext",
+      }),
+      PG_ERROR.checkViolation,
+      "social_connections_manual_has_no_tokens",
+    )
+    const [manual] = await testDb.db
+      .insert(socialConnections)
+      .values({
+        userId: user.id,
+        provider: "instagram",
+        source: "manual",
+        username: "ada",
+        profileUrl: "https://www.instagram.com/ada",
+      })
+      .returning()
+    expect(manual).toMatchObject({ providerAccountId: null, lastSyncError: null })
+
+    await expectPgError(
+      testDb.db
+        .update(socialConnections)
+        .set({ lastSyncError: "rate_limited" })
+        .where(eq(socialConnections.id, manual!.id)),
+      PG_ERROR.checkViolation,
+      "social_connections_sync_error_has_time",
+    )
+  })
+
+  it("stores the transfers capability and requirements of a Stripe account", async () => {
+    const user = await insertUser(testDb.db)
+    const [account] = await testDb.db
+      .insert(stripeAccounts)
+      .values({ userId: user.id, stripeAccountId: `acct_${user.id.slice(0, 8)}` })
+      .returning()
+    expect(account).toMatchObject({
+      transfersCapability: "unrequested",
+      requirementsCurrentlyDue: [],
+      disabledReason: null,
+    })
+    await expectPgError(
+      testDb.db
+        .update(stripeAccounts)
+        .set({ country: "es" })
+        .where(eq(stripeAccounts.id, account!.id)),
+      PG_ERROR.checkViolation,
+      "stripe_accounts_country_format",
+    )
+    await expectPgError(
+      testDb.db.execute(
+        sql`UPDATE stripe_accounts SET transfers_capability = 'enabled' WHERE id = ${account!.id}`,
+      ),
+      PG_ERROR.invalidTextRepresentation,
+    )
+  })
+
+  it("allows one notification per user and dedupe key, and any number without a key", async () => {
+    const user = await insertUser(testDb.db)
+    const row = { userId: user.id, type: "social.expired", payload: {} }
+    await testDb.db.insert(notifications).values([row, row])
+    await testDb.db.insert(notifications).values({ ...row, dedupeKey: "k1" })
+    await expectPgError(
+      testDb.db.insert(notifications).values({ ...row, dedupeKey: "k1" }),
+      PG_ERROR.uniqueViolation,
+      "notifications_user_dedupe_key",
+    )
   })
 })

@@ -36,6 +36,13 @@
       "when": 1791206007488,
       "tag": "0004_audience_snapshot_basis",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791207318583,
+      "tag": "0005_phase1_profiles_onboarding",
+      "breakpoints": true
     }
   ]
 }

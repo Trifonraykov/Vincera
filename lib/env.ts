@@ -131,6 +131,13 @@ const envSchema = z.object({
     .string()
     .startsWith("pk_", "must start with pk_")
     .optional(),
+  // Signing secret of the Connect webhook endpoint (`account.updated`, `capability.updated`;
+  // §19.10). Required in production; elsewhere `stripeConnectWebhookSecret()` falls back to
+  // STRIPE_WEBHOOK_SECRET, which is what fake Stripe signs with.
+  STRIPE_CONNECT_WEBHOOK_SECRET: z
+    .string()
+    .startsWith("whsec_", "must start with whsec_")
+    .optional(),
 
   // Social data connections (§7.1)
   GOOGLE_YT_CLIENT_ID: nonEmpty.optional(),
@@ -141,6 +148,8 @@ const envSchema = z.object({
   TIKTOK_CLIENT_SECRET: nonEmpty.optional(),
   GITHUB_DATA_CLIENT_ID: nonEmpty.optional(),
   GITHUB_DATA_CLIENT_SECRET: nonEmpty.optional(),
+  // Keep YouTube statistics longer than 30 days (needs Google's derived-metrics policy; §19.10).
+  YOUTUBE_LONG_RETENTION: flag,
 
   // AI
   ANTHROPIC_API_KEY: nonEmpty.optional(),
@@ -211,6 +220,7 @@ const PRODUCTION_REQUIRED = [
   "RESEND_API_KEY",
   "EMAIL_FROM",
   "STRIPE_SECRET_KEY",
+  "STRIPE_CONNECT_WEBHOOK_SECRET",
   "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
   "GOOGLE_YT_CLIENT_ID",
   "GOOGLE_YT_CLIENT_SECRET",
@@ -436,6 +446,21 @@ export function isFake(service: FakeableService, e: Env = getEnv()): boolean {
     throw new EnvValidationError([`${service}: fake implementation used in production`])
   }
   return fake
+}
+
+/**
+ * The secrets `/api/webhooks/stripe` verifies signatures against (§7.2, §19.10): the platform
+ * endpoint's and the Connect endpoint's. Outside production the Connect secret is optional and
+ * falls back to STRIPE_WEBHOOK_SECRET (fake Stripe signs every event with that one).
+ */
+export function stripeWebhookSecrets(e: Env = getEnv()): {
+  platform: string
+  connect: string
+} {
+  return {
+    platform: e.STRIPE_WEBHOOK_SECRET,
+    connect: e.STRIPE_CONNECT_WEBHOOK_SECRET ?? e.STRIPE_WEBHOOK_SECRET,
+  }
 }
 
 /** `/api/test/*` routes exist only when explicitly enabled and never in production (§19.4). */

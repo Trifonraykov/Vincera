@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
   canAccessAdmin,
+  canEditBuilderProfile,
+  canEditCreatorProfile,
   canEditLaunch,
+  canManagePortfolioItem,
   canManageOwnAccount,
   canSendProposal,
   canSwitchToRole,
@@ -59,6 +62,35 @@ describe("roles and status", () => {
   it("hasCompletedOnboarding reads onboarding_completed_at", () => {
     expect(hasCompletedOnboarding(authUser())).toBe(false)
     expect(hasCompletedOnboarding(authUser({ onboardingCompletedAt: ONBOARDED }))).toBe(true)
+  })
+})
+
+describe("profile rules", () => {
+  it("each profile needs its role and an active account", () => {
+    expect(canEditCreatorProfile(authUser({ roles: ["creator"] }))).toBe(true)
+    expect(canEditCreatorProfile(authUser({ roles: ["builder"] }))).toBe(false)
+    expect(canEditCreatorProfile(authUser({ roles: ["admin"] }))).toBe(false)
+    expect(canEditCreatorProfile(authUser({ status: "suspended" }))).toBe(false)
+    expect(canEditBuilderProfile(authUser({ roles: ["creator", "builder"] }))).toBe(true)
+    expect(canEditBuilderProfile(authUser({ roles: ["creator"] }))).toBe(false)
+    expect(canEditBuilderProfile(authUser({ roles: ["builder"], status: "suspended" }))).toBe(false)
+  })
+
+  it("portfolio items are managed only by the builder who owns them", () => {
+    const builder = authUser({ roles: ["builder"] })
+    expect(canManagePortfolioItem(builder, { ownerUserId: builder.id })).toBe(true)
+    expect(canManagePortfolioItem(builder, { ownerUserId: OTHER_USER_ID })).toBe(false)
+    // Even admins do not edit someone else's portfolio through the builder's actions.
+    expect(
+      canManagePortfolioItem(authUser({ roles: ["admin", "builder"] }), {
+        ownerUserId: OTHER_USER_ID,
+      }),
+    ).toBe(false)
+    expect(
+      canManagePortfolioItem(authUser({ roles: ["creator"] }), {
+        ownerUserId: authUser().id,
+      }),
+    ).toBe(false)
   })
 })
 

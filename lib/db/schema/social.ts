@@ -34,13 +34,30 @@ export const socialConnections = pgTable(
     /** Null for manual entries (no provider account behind them). */
     providerAccountId: text("provider_account_id"),
     username: text("username"),
+    /** Provider display data from `SocialProfile` (refreshed on connect and sync). */
+    displayName: text("display_name"),
+    avatarUrl: text("avatar_url"),
+    /** Public profile/channel URL; for manual rows, the link an admin checks before verifying. */
+    profileUrl: text("profile_url"),
     /** AES-GCM ciphertexts from lib/crypto.ts (§4). Never plaintext. */
     accessTokenEnc: text("access_token_enc"),
     refreshTokenEnc: text("refresh_token_enc"),
+    /** Access token expiry (`TokenSet.expiresAt`); null when it does not expire. */
     expiresAt: timestamptz("expires_at"),
+    /** Refresh token expiry (`TokenSet.refreshExpiresAt`, TikTok); null when unknown/none. */
+    refreshExpiresAt: timestamptz("refresh_expires_at"),
+    /** When the current access token was issued (Instagram refreshes only tokens ≥24h old). */
+    tokenObtainedAt: timestamptz("token_obtained_at"),
     scopes: textArray("scopes"),
     status: socialConnectionStatusEnum("status").notNull().default("active"),
+    /** Last successful sync. */
     lastSyncedAt: timestamptz("last_synced_at"),
+    /**
+     * Why the last sync failed, as a short code (e.g. `token_expired`, `rate_limited`,
+     * `provider_error`); never a token or a provider response body. Cleared by a successful sync.
+     */
+    lastSyncError: text("last_sync_error"),
+    lastSyncErrorAt: timestamptz("last_sync_error_at"),
     /** Manual fallback (§7.1): `manual` rows are unverified until an admin sets verified_at. */
     source: socialConnectionSourceEnum("source").notNull().default("oauth"),
     verifiedAt: timestamptz("verified_at"),
@@ -55,6 +72,15 @@ export const socialConnections = pgTable(
     check(
       "social_connections_oauth_has_account",
       sql`${t.source} <> 'oauth' OR ${t.providerAccountId} IS NOT NULL`,
+    ),
+    // Manual entries (§7.1 fallback) have no provider tokens.
+    check(
+      "social_connections_manual_has_no_tokens",
+      sql`${t.source} <> 'manual' OR (${t.accessTokenEnc} IS NULL AND ${t.refreshTokenEnc} IS NULL)`,
+    ),
+    check(
+      "social_connections_sync_error_has_time",
+      sql`${t.lastSyncError} IS NULL OR ${t.lastSyncErrorAt} IS NOT NULL`,
     ),
   ],
 )

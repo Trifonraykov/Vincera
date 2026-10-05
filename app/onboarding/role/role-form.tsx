@@ -1,13 +1,23 @@
 "use client"
 
-import { CircleAlert, Hammer, Layers, Loader2, Megaphone, type LucideIcon } from "lucide-react"
+import {
+  Check,
+  CircleAlert,
+  Hammer,
+  Layers,
+  Loader2,
+  Megaphone,
+  type LucideIcon,
+} from "lucide-react"
 import { useActionState } from "react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ActionResult } from "@/lib/actions/result"
 import { chooseRoles } from "@/lib/onboarding/actions"
+import type { AppRole } from "@/lib/nav"
 import type { RoleChoice } from "@/lib/onboarding/role-choices"
+import { cn } from "@/lib/utils"
 
 const OPTIONS: { value: RoleChoice; title: string; description: string; icon: LucideIcon }[] = [
   {
@@ -32,7 +42,15 @@ const OPTIONS: { value: RoleChoice; title: string; description: string; icon: Lu
   },
 ]
 
-export function RoleForm() {
+/**
+ * Creator, builder or both (§12). Roles are only ever added: options the user already has are
+ * shown as such and cannot be picked again.
+ */
+export function RoleForm({ currentRoles = [] }: { currentRoles?: readonly AppRole[] }) {
+  const has = (value: RoleChoice) =>
+    value === "both"
+      ? currentRoles.includes("creator") && currentRoles.includes("builder")
+      : currentRoles.includes(value)
   const [state, formAction, pending] = useActionState(
     async (_previous: ActionResult<unknown> | null, formData: FormData) => chooseRoles(formData),
     null,
@@ -51,17 +69,36 @@ export function RoleForm() {
 
       <fieldset className="grid gap-3 sm:grid-cols-3">
         <legend className="sr-only">Your role</legend>
-        {OPTIONS.map(({ value, title, description, icon: Icon }) => (
-          <label
-            key={value}
-            className="relative flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-5 shadow-xs transition-colors hover:bg-accent/50 has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
-          >
-            <input type="radio" name="choice" value={value} className="peer sr-only" required />
-            <Icon className="size-6 text-primary" aria-hidden="true" />
-            <span className="font-medium">{title}</span>
-            <span className="text-sm text-muted-foreground">{description}</span>
-          </label>
-        ))}
+        {OPTIONS.map(({ value, title, description, icon: Icon }) => {
+          const already = has(value)
+          return (
+            <label
+              key={value}
+              className={cn(
+                "relative flex flex-col gap-3 rounded-xl border bg-card p-5 shadow-xs transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                already ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-accent/50",
+              )}
+            >
+              <input
+                type="radio"
+                name="choice"
+                value={value}
+                className="peer sr-only"
+                required
+                disabled={already}
+              />
+              <Icon className="size-6 text-primary" aria-hidden="true" />
+              <span className="font-medium">{title}</span>
+              <span className="text-sm text-muted-foreground">{description}</span>
+              {already ? (
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-foreground">
+                  <Check className="size-4" aria-hidden="true" />
+                  {value === "both" ? "You have both roles" : "Your current role"}
+                </span>
+              ) : null}
+            </label>
+          )
+        })}
       </fieldset>
 
       <div className="flex justify-end">

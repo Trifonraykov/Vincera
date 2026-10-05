@@ -1,3 +1,7 @@
+// Relative import: drizzle-kit loads the schema without the `@/` alias. The module is
+// dependency-free and client-safe.
+import type { OnboardingStepsRecord } from "../../onboarding/steps"
+
 import type { AudienceBasis, CollabRole, DeliveryType } from "./enums"
 
 /**
@@ -8,6 +12,14 @@ import type { AudienceBasis, CollabRole, DeliveryType } from "./enums"
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 export type JsonObject = { [key: string]: JsonValue }
+
+// --- Identity & profiles ---------------------------------------------------------------------
+
+/**
+ * users.onboarding_steps: step id → `{ status: "done" | "skipped", at }` (lib/onboarding/steps.ts).
+ * Written only by `completeOnboardingStep()` (lib/onboarding/complete-step.ts).
+ */
+export type { OnboardingStepsRecord }
 
 // --- Social data -------------------------------------------------------------------------------
 // The shapes providers return (`AudienceSnapshotInput`, lib/social/types.ts) are stored as they

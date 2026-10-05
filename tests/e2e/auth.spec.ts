@@ -1,21 +1,31 @@
 import { expect, test } from "./fixtures"
 import { E2E_ADMIN_EMAIL, uniqueEmail } from "./helpers/accounts"
 import { chooseRole, requestMagicLink, signIn, signOutFromApp, signUp } from "./helpers/auth"
+import { completeOnboardingInDb } from "./helpers/db"
 
 /**
  * Phase 0 acceptance (CLAUDE.md §16): a user can sign up, sign in and sign out; /admin is blocked
- * for non-admins. Runs with FAKE_SERVICES=all: magic links come from the fake outbox.
+ * for non-admins. Runs with FAKE_SERVICES=all: magic links come from the fake outbox. Onboarding
+ * past the role step is set up in the database (`completeOnboardingInDb`); the onboarding pages
+ * have their own spec.
  */
 
 test.describe("authentication", () => {
   test("sign up, onboard, sign out, sign in again and switch roles", async ({ page }) => {
     const email = uniqueEmail("creator")
 
-    // (a) Sign up with a new email → magic link → onboarding → creator → /app.
+    // (a) Sign up with a new email → magic link → onboarding → creator → the creator steps.
     await signUp(page, email, "Ada Creator")
     await expect(page).toHaveURL(/\/onboarding\/role$/)
     await expect(page.getByRole("heading", { name: /Welcome, Ada/ })).toBeVisible()
     await chooseRole(page, "creator")
+    await expect(page).toHaveURL(/\/onboarding\/creator\/profile$/)
+    // Unfinished onboarding keeps /app closed.
+    await page.goto("/app")
+    await expect(page).toHaveURL(/\/onboarding\/creator\/profile$/)
+    // The onboarding steps themselves are covered by the onboarding spec.
+    await completeOnboardingInDb(email)
+    await page.goto("/app")
     await expect(page).toHaveURL(/\/app$/)
     await expect(page.getByRole("heading", { name: "Creator home" })).toBeVisible()
 
@@ -36,10 +46,14 @@ test.describe("authentication", () => {
     await expect(page).toHaveURL(/\/app$/)
     await expect(page.getByRole("heading", { name: "Creator home" })).toBeVisible()
 
-    // The role switcher: add the builder role, then switch back to creator.
+    // The role switcher: add the builder role (which continues with the builder's onboarding
+    // steps), then switch back to creator.
     await page.getByRole("button", { name: /Switch role/ }).click()
     await page.getByRole("menuitem", { name: "Become a builder" }).click()
     await chooseRole(page, "builder")
+    await expect(page).toHaveURL(/\/onboarding\/builder\/profile$/)
+    await completeOnboardingInDb(email)
+    await page.goto("/app")
     await expect(page.getByRole("heading", { name: "Builder home" })).toBeVisible()
     await page.getByRole("button", { name: /Acting as Builder/ }).click()
     await page.getByRole("menuitem", { name: "Creator" }).click()
@@ -58,8 +72,12 @@ test.describe("authentication", () => {
     await expect(page).toHaveURL(/\/sign-in\?callbackUrl=%2Fadmin$/)
 
     // (d) A signed-in builder is sent back to the app.
-    await signUp(page, uniqueEmail("builder"))
+    const email = uniqueEmail("builder")
+    await signUp(page, email)
     await chooseRole(page, "builder")
+    await expect(page).toHaveURL(/\/onboarding\/builder\/profile$/)
+    await completeOnboardingInDb(email)
+    await page.goto("/app")
     await expect(page.getByRole("heading", { name: "Builder home" })).toBeVisible()
     await page.goto("/admin")
     await expect(page).toHaveURL(/\/app$/)

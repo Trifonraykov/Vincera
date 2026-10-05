@@ -4,6 +4,7 @@ import { text, timestamp, uuid, vector, type AnyPgColumn } from "drizzle-orm/pg-
 // Relative imports: drizzle-kit loads this folder without the `@/` path alias.
 import { now } from "../../clock"
 import { newId } from "../../ids"
+import { HANDLE_PATTERN } from "../../profiles/handle-format"
 
 /**
  * Column helpers shared by every table (§4, §5).
@@ -17,8 +18,7 @@ import { newId } from "../../ids"
 export const EMBEDDING_DIMENSIONS = 1024
 
 /** Handles: lowercase, 3–30 of [a-z0-9_] (§4). Enforced by CHECK constraints too. */
-export const HANDLE_PATTERN = "^[a-z0-9_]{3,30}$"
-export const HANDLE_REGEX = new RegExp(HANDLE_PATTERN)
+export { HANDLE_PATTERN, HANDLE_REGEX } from "../../profiles/handle-format"
 
 /** Default currency for money columns (ISO 4217, lowercase like Stripe). */
 export const DEFAULT_CURRENCY = "eur"

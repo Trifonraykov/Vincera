@@ -48,9 +48,17 @@ export const notifications = pgTable(
       .notNull()
       .default(sql`'{}'::jsonb`),
     readAt: timestamptz("read_at"),
+    /**
+     * Optional idempotency key from `notify({ dedupeKey })`: at most one notification per user and
+     * key, so a retried job never notifies twice. Null for notifications without one.
+     */
+    dedupeKey: text("dedupe_key"),
     ...timestamps(),
   },
-  (t) => [index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt.desc())],
+  (t) => [
+    index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
+    unique("notifications_user_dedupe_key").on(t.userId, t.dedupeKey),
+  ],
 )
 
 export const notificationPrefs = pgTable(

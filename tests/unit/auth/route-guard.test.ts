@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import { areaOf, guardRoute } from "@/lib/auth/route-guard"
-import type { AuthUser } from "@/lib/auth/user"
+import { areaOf, guardRoute, type OnboardingStepResolver } from "@/lib/auth/route-guard"
+import { appRolesOf, type AuthUser } from "@/lib/auth/user"
 
 import { authUser } from "../../helpers/auth-users"
 
-function guard(path: string, user: AuthUser | null) {
+/** Stand-in for lib/onboarding/gate.ts: users without an app role pick one; others pass. */
+const roleOnly: OnboardingStepResolver = async (user) =>
+  appRolesOf(user).length === 0 ? "/onboarding/role" : null
+
+function guard(path: string, user: AuthUser | null, resolve: OnboardingStepResolver = roleOnly) {
   const url = new URL(path, "http://localhost")
-  return guardRoute(url, user)
+  return guardRoute(url, user, resolve)
 }
 
 const creator = authUser({ roles: ["creator"], activeRole: "creator" })
@@ -30,72 +34,107 @@ describe("areaOf", () => {
 })
 
 describe("guardRoute", () => {
-  it("sends signed-out visitors of protected areas to sign-in with a callbackUrl", () => {
-    expect(guard("/app/ideas?tab=open", null)).toEqual({
+  it("sends signed-out visitors of protected areas to sign-in with a callbackUrl", async () => {
+    await expect(guard("/app/ideas?tab=open", null)).resolves.toEqual({
       type: "redirect",
       to: "/sign-in?callbackUrl=%2Fapp%2Fideas%3Ftab%3Dopen",
     })
-    expect(guard("/onboarding/role", null)).toEqual({
+    await expect(guard("/onboarding/role", null)).resolves.toEqual({
       type: "redirect",
       to: "/sign-in?callbackUrl=%2Fonboarding%2Frole",
     })
-    expect(guard("/admin", null)).toEqual({
+    await expect(guard("/admin", null)).resolves.toEqual({
       type: "redirect",
       to: "/sign-in?callbackUrl=%2Fadmin",
     })
   })
 
-  it("lets anyone open public pages and signed-out visitors open the auth pages", () => {
-    expect(guard("/pricing", null)).toEqual({ type: "next" })
-    expect(guard("/sign-in", null)).toEqual({ type: "next" })
-    expect(guard("/sign-up", null)).toEqual({ type: "next" })
+  it("lets anyone open public pages and signed-out visitors open the auth pages", async () => {
+    await expect(guard("/pricing", null)).resolves.toEqual({ type: "next" })
+    await expect(guard("/sign-in", null)).resolves.toEqual({ type: "next" })
+    await expect(guard("/sign-up", null)).resolves.toEqual({ type: "next" })
   })
 
-  it("sends users without a role from /app to onboarding", () => {
-    expect(guard("/app", newUser)).toEqual({ type: "redirect", to: "/onboarding/role" })
-    expect(guard("/app/settings/profile", newUser)).toEqual({
+  it("sends users without a role from /app to onboarding", async () => {
+    await expect(guard("/app", newUser)).resolves.toEqual({
       type: "redirect",
       to: "/onboarding/role",
     })
-    expect(guard("/onboarding/role", newUser)).toEqual({ type: "next" })
-    expect(guard("/app", creator)).toEqual({ type: "next" })
+    await expect(guard("/app/settings/profile", newUser)).resolves.toEqual({
+      type: "redirect",
+      to: "/onboarding/role",
+    })
+    await expect(guard("/onboarding/role", newUser)).resolves.toEqual({ type: "next" })
+    await expect(guard("/app", creator)).resolves.toEqual({ type: "next" })
   })
 
-  it("redirects non-admins from /admin to /app and lets admins in", () => {
-    expect(guard("/admin", creator)).toEqual({ type: "redirect", to: "/app" })
-    expect(guard("/admin/users", creator)).toEqual({ type: "redirect", to: "/app" })
-    expect(guard("/admin", admin)).toEqual({ type: "next" })
+  it("sends /app visitors with unfinished onboarding to the step the resolver names", async () => {
+    const resolve = vi.fn<OnboardingStepResolver>(async () => "/onboarding/creator/connect")
+    await expect(guard("/app/audience", creator, resolve)).resolves.toEqual({
+      type: "redirect",
+      to: "/onboarding/creator/connect",
+    })
+    expect(resolve).toHaveBeenCalledWith(creator)
+
+    // Only /app is gated on onboarding: onboarding pages, admin and auth pages never ask.
+    resolve.mockClear()
+    await expect(guard("/onboarding/creator/profile", creator, resolve)).resolves.toEqual({
+      type: "next",
+    })
+    await expect(guard("/admin", { ...creator, roles: ["admin"] }, resolve)).resolves.toEqual({
+      type: "next",
+    })
+    await expect(guard("/app", null, resolve)).resolves.toMatchObject({ type: "redirect" })
+    await expect(guard("/app", suspended, resolve)).resolves.toMatchObject({ type: "redirect" })
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it("redirects non-admins from /admin to /app and lets admins in", async () => {
+    await expect(guard("/admin", creator)).resolves.toEqual({ type: "redirect", to: "/app" })
+    await expect(guard("/admin/users", creator)).resolves.toEqual({ type: "redirect", to: "/app" })
+    await expect(guard("/admin", admin)).resolves.toEqual({ type: "next" })
     // An admin-only user still onboards before using /app.
-    expect(guard("/app", admin)).toEqual({ type: "redirect", to: "/onboarding/role" })
+    await expect(guard("/app", admin)).resolves.toEqual({
+      type: "redirect",
+      to: "/onboarding/role",
+    })
   })
 
-  it("sends suspended users to the sign-in page with an explanation", () => {
+  it("sends suspended users to the sign-in page with an explanation", async () => {
     const expected = { type: "redirect", to: "/sign-in?error=AccountSuspended" }
-    expect(guard("/app", suspended)).toEqual(expected)
-    expect(guard("/onboarding/role", suspended)).toEqual(expected)
-    expect(guard("/admin", { ...suspended, roles: ["admin"] })).toEqual(expected)
-    expect(guard("/sign-in?error=AccountSuspended", suspended)).toEqual({ type: "next" })
+    await expect(guard("/app", suspended)).resolves.toEqual(expected)
+    await expect(guard("/onboarding/role", suspended)).resolves.toEqual(expected)
+    await expect(guard("/admin", { ...suspended, roles: ["admin"] })).resolves.toEqual(expected)
+    await expect(guard("/sign-in?error=AccountSuspended", suspended)).resolves.toEqual({
+      type: "next",
+    })
   })
 
-  it("sends signed-in users away from the auth pages, honouring a safe callbackUrl", () => {
-    expect(guard("/sign-in", creator)).toEqual({ type: "redirect", to: "/app" })
-    expect(guard("/sign-up", creator)).toEqual({ type: "redirect", to: "/app" })
-    expect(guard("/sign-in?callbackUrl=%2Fapp%2Fideas", creator)).toEqual({
+  it("sends signed-in users away from the auth pages, honouring a safe callbackUrl", async () => {
+    await expect(guard("/sign-in", creator)).resolves.toEqual({ type: "redirect", to: "/app" })
+    await expect(guard("/sign-up", creator)).resolves.toEqual({ type: "redirect", to: "/app" })
+    await expect(guard("/sign-in?callbackUrl=%2Fapp%2Fideas", creator)).resolves.toEqual({
       type: "redirect",
       to: "/app/ideas",
     })
-    expect(guard("/sign-in?callbackUrl=https%3A%2F%2Fevil.example", creator)).toEqual({
+    await expect(
+      guard("/sign-in?callbackUrl=https%3A%2F%2Fevil.example", creator),
+    ).resolves.toEqual({
       type: "redirect",
       to: "/app",
     })
     // Dot segments that normalise to a protocol-relative "//evil.example".
     for (const callbackUrl of ["/.//evil.example", "/%2e//evil.example", "/a/..//evil.example"]) {
-      expect(guard(`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`, creator)).toEqual({
+      await expect(
+        guard(`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`, creator),
+      ).resolves.toEqual({
         type: "redirect",
         to: "/app",
       })
     }
     // Error pages stay visible (e.g. "this account is already linked").
-    expect(guard("/sign-in?error=OAuthAccountNotLinked", creator)).toEqual({ type: "next" })
+    await expect(guard("/sign-in?error=OAuthAccountNotLinked", creator)).resolves.toEqual({
+      type: "next",
+    })
   })
 })

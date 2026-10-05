@@ -1,0 +1,795 @@
+{
+  "label": "Ada Codes (48.2K subscribers)",
+  "description": "A productivity channel with full YouTube Analytics: viewer countries, ages and genders. Includes an upcoming premiere and a video from yesterday (both skipped), one video with hidden likes and one with comments off.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 3599,
+        "refresh_token": "{{refresh_token}}",
+        "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "token_type": "Bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 3599,
+        "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "token_type": "Bearer"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/channels",
+      "query": {
+        "part": "snippet,statistics,contentDetails",
+        "mine": "true"
+      },
+      "body": {
+        "kind": "youtube#channelListResponse",
+        "etag": "fake-etag-adacodes",
+        "pageInfo": {
+          "totalResults": 1,
+          "resultsPerPage": 5
+        },
+        "items": [
+          {
+            "kind": "youtube#channel",
+            "etag": "fake-etag-ch-adacodes",
+            "id": "UCaDaC0des5x7Qm1RkT9pLzw",
+            "snippet": {
+              "title": "Ada Codes",
+              "description": "Weekly Notion, no-code and productivity tutorials for students and freelancers. Nuevos vídeos cada sábado.",
+              "customUrl": "@adacodes",
+              "publishedAt": "2019-03-14T10:22:31Z",
+              "thumbnails": {
+                "default": {
+                  "url": "https://yt3.ggpht.com/fake-adacodes=s88-c-k-c0x00ffffff-no-rj",
+                  "width": 88,
+                  "height": 88
+                },
+                "medium": {
+                  "url": "https://yt3.ggpht.com/fake-adacodes=s240-c-k-c0x00ffffff-no-rj",
+                  "width": 240,
+                  "height": 240
+                },
+                "high": {
+                  "url": "https://yt3.ggpht.com/fake-adacodes=s800-c-k-c0x00ffffff-no-rj",
+                  "width": 800,
+                  "height": 800
+                }
+              },
+              "localized": {
+                "title": "Ada Codes",
+                "description": "Weekly Notion, no-code and productivity tutorials for students and freelancers. Nuevos vídeos cada sábado."
+              },
+              "country": "ES"
+            },
+            "contentDetails": {
+              "relatedPlaylists": {
+                "likes": "",
+                "uploads": "UUaDaC0des5x7Qm1RkT9pLzw"
+              }
+            },
+            "statistics": {
+              "viewCount": "6123456",
+              "subscriberCount": "48200",
+              "hiddenSubscriberCount": false,
+              "videoCount": "142"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+      "query": {
+        "part": "contentDetails",
+        "playlistId": "UUaDaC0des5x7Qm1RkT9pLzw"
+      },
+      "body": {
+        "kind": "youtube#playlistItemListResponse",
+        "etag": "fake-etag-playlist",
+        "pageInfo": {
+          "totalResults": 14,
+          "resultsPerPage": 25
+        },
+        "items": [
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa0000live",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa0000live",
+            "contentDetails": {
+              "videoId": "aDa0000live",
+              "videoPublishedAt": "2026-10-03T18:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000013",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000013",
+            "contentDetails": {
+              "videoId": "aDa00000013",
+              "videoPublishedAt": "2026-10-04T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000012",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000012",
+            "contentDetails": {
+              "videoId": "aDa00000012",
+              "videoPublishedAt": "2026-09-27T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000011",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000011",
+            "contentDetails": {
+              "videoId": "aDa00000011",
+              "videoPublishedAt": "2026-09-20T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000010",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000010",
+            "contentDetails": {
+              "videoId": "aDa00000010",
+              "videoPublishedAt": "2026-09-13T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000009",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000009",
+            "contentDetails": {
+              "videoId": "aDa00000009",
+              "videoPublishedAt": "2026-09-06T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000008",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000008",
+            "contentDetails": {
+              "videoId": "aDa00000008",
+              "videoPublishedAt": "2026-08-30T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000007",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000007",
+            "contentDetails": {
+              "videoId": "aDa00000007",
+              "videoPublishedAt": "2026-08-23T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000006",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000006",
+            "contentDetails": {
+              "videoId": "aDa00000006",
+              "videoPublishedAt": "2026-08-16T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000005",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000005",
+            "contentDetails": {
+              "videoId": "aDa00000005",
+              "videoPublishedAt": "2026-08-09T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000004",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000004",
+            "contentDetails": {
+              "videoId": "aDa00000004",
+              "videoPublishedAt": "2026-08-02T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000003",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000003",
+            "contentDetails": {
+              "videoId": "aDa00000003",
+              "videoPublishedAt": "2026-07-26T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000002",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000002",
+            "contentDetails": {
+              "videoId": "aDa00000002",
+              "videoPublishedAt": "2026-07-19T16:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-aDa00000001",
+            "id": "UUaDaC0des5x7Qm1RkT9pLzw.aDa00000001",
+            "contentDetails": {
+              "videoId": "aDa00000001",
+              "videoPublishedAt": "2026-07-12T16:00:00Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/videos",
+      "query": {
+        "part": "snippet,statistics,contentDetails"
+      },
+      "body": {
+        "kind": "youtube#videoListResponse",
+        "etag": "fake-etag-videos",
+        "pageInfo": {
+          "totalResults": 14,
+          "resultsPerPage": 14
+        },
+        "items": [
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa0000live",
+            "id": "aDa0000live",
+            "snippet": {
+              "publishedAt": "2026-10-03T18:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "LIVE Q&A: your Notion questions",
+              "description": "",
+              "tags": ["notion", "live"],
+              "categoryId": "27",
+              "liveBroadcastContent": "upcoming",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "P0D",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "0",
+              "favoriteCount": "0",
+              "likeCount": "0",
+              "commentCount": "0"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000013",
+            "id": "aDa00000013",
+            "snippet": {
+              "publishedAt": "2026-10-04T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Notion database tutorial for beginners",
+              "description": "",
+              "tags": ["notion", "notion database", "tutorial"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT14M2S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "2140",
+              "favoriteCount": "0",
+              "likeCount": "180",
+              "commentCount": "31"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000012",
+            "id": "aDa00000012",
+            "snippet": {
+              "publishedAt": "2026-09-27T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Habit tracker template walkthrough",
+              "description": "",
+              "tags": ["habit tracker", "notion templates", "notion"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT9M41S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "18234",
+              "favoriteCount": "0",
+              "likeCount": "812",
+              "commentCount": "64"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000011",
+            "id": "aDa00000011",
+            "snippet": {
+              "publishedAt": "2026-09-20T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "No-code invoice generator with Google Sheets",
+              "description": "",
+              "tags": ["no-code", "google sheets", "freelancing"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT12M5S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "24310",
+              "favoriteCount": "0",
+              "likeCount": "1033",
+              "commentCount": "97"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000010",
+            "id": "aDa00000010",
+            "snippet": {
+              "publishedAt": "2026-09-13T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Study with me: exam season planner",
+              "description": "",
+              "tags": ["students", "study with me"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT58S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "9120",
+              "favoriteCount": "0",
+              "likeCount": "401",
+              "commentCount": "22"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000009",
+            "id": "aDa00000009",
+            "snippet": {
+              "publishedAt": "2026-09-06T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Build a client portal with Notion and Super",
+              "description": "",
+              "tags": ["notion", "freelancing", "no-code"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT17M33S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "31045",
+              "favoriteCount": "0",
+              "likeCount": "1402",
+              "commentCount": "158"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000008",
+            "id": "aDa00000008",
+            "snippet": {
+              "publishedAt": "2026-08-30T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Notion AI: is it worth it for students?",
+              "description": "",
+              "tags": ["notion", "notion ai", "students"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT11M2S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "42310",
+              "favoriteCount": "0",
+              "commentCount": "289"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000007",
+            "id": "aDa00000007",
+            "snippet": {
+              "publishedAt": "2026-08-23T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "How I plan my week (productivity routine)",
+              "description": "",
+              "tags": ["productivity", "weekly planning"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT8M19S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "15890",
+              "favoriteCount": "0",
+              "likeCount": "702",
+              "commentCount": "51"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000006",
+            "id": "aDa00000006",
+            "snippet": {
+              "publishedAt": "2026-08-16T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Zapier vs Make: which automation tool should you use?",
+              "description": "",
+              "tags": ["automation", "zapier", "make"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT15M47S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "27650",
+              "favoriteCount": "0",
+              "likeCount": "1120"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000005",
+            "id": "aDa00000005",
+            "snippet": {
+              "publishedAt": "2026-08-09T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "5 Notion templates every freelancer needs",
+              "description": "",
+              "tags": ["notion templates", "freelancing", "notion"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT10M12S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "58230",
+              "favoriteCount": "0",
+              "likeCount": "2604",
+              "commentCount": "233"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000004",
+            "id": "aDa00000004",
+            "snippet": {
+              "publishedAt": "2026-08-02T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Automate your budget with Notion formulas",
+              "description": "",
+              "tags": ["notion", "budget", "notion formulas", "personal finance"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT13M8S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "36120",
+              "favoriteCount": "0",
+              "likeCount": "1588",
+              "commentCount": "142"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000003",
+            "id": "aDa00000003",
+            "snippet": {
+              "publishedAt": "2026-07-26T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "My 2026 productivity system: Notion + Google Calendar",
+              "description": "",
+              "tags": ["notion", "productivity", "google calendar"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT21M30S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "47510",
+              "favoriteCount": "0",
+              "likeCount": "2210",
+              "commentCount": "190"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000002",
+            "id": "aDa00000002",
+            "snippet": {
+              "publishedAt": "2026-07-19T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Notion vs Obsidian for students (honest review)",
+              "description": "",
+              "tags": ["notion", "obsidian", "productivity", "students"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT16M44S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "39870",
+              "favoriteCount": "0",
+              "likeCount": "1745",
+              "commentCount": "302"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-aDa00000001",
+            "id": "aDa00000001",
+            "snippet": {
+              "publishedAt": "2026-07-12T16:00:00Z",
+              "channelId": "UCaDaC0des5x7Qm1RkT9pLzw",
+              "title": "Build a Notion habit tracker in 10 minutes",
+              "description": "",
+              "tags": ["notion", "habit tracker", "productivity", "notion templates"],
+              "categoryId": "27",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT10M3S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "52100",
+              "favoriteCount": "0",
+              "likeCount": "2380",
+              "commentCount": "176"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "metrics": "views,engagedViews,estimatedMinutesWatched,averageViewDuration,likes,comments,shares,subscribersGained,subscribersLost"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "engagedViews",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "estimatedMinutesWatched",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "averageViewDuration",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "likes",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "comments",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "shares",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersGained",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersLost",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ],
+        "rows": [[1843210, 1702334, 5123456, 167, 61234, 4321, 2345, 3120, 410]]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "country",
+        "metrics": "views"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "country",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ],
+        "rows": [
+          ["ES", 512345],
+          ["MX", 301234],
+          ["US", 254321],
+          ["AR", 160112],
+          ["CO", 120456],
+          ["CL", 80345],
+          ["ZZ", 70000],
+          ["PE", 61234],
+          ["GB", 40456],
+          ["DE", 30234]
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "ageGroup,gender",
+        "metrics": "viewerPercentage"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "ageGroup",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "gender",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "viewerPercentage",
+            "columnType": "METRIC",
+            "dataType": "FLOAT"
+          }
+        ],
+        "rows": [
+          ["age13-17", "female", 1.8],
+          ["age18-24", "female", 14.2],
+          ["age25-34", "female", 17.5],
+          ["age35-44", "female", 6.1],
+          ["age45-54", "female", 2.3],
+          ["age55-64", "female", 0.9],
+          ["age65-", "female", 0.4],
+          ["age13-17", "male", 2.1],
+          ["age18-24", "male", 16.9],
+          ["age25-34", "male", 21.4],
+          ["age35-44", "male", 8.7],
+          ["age45-54", "male", 3.6],
+          ["age55-64", "male", 1.4],
+          ["age65-", "male", 0.6],
+          ["age18-24", "user_specified", 1.2],
+          ["age25-34", "user_specified", 0.9]
+        ]
+      }
+    }
+  ]
+}
