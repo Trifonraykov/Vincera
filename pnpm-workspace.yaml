@@ -1,0 +1,17 @@
+# pnpm settings for the platform app (the repo root is a single package, not a monorepo).
+# The legacy dashboard/ keeps its own npm lockfile and is not part of this install.
+
+# Dependencies allowed to run install scripts. Everything else ships prebuilt binaries.
+onlyBuiltDependencies:
+  - esbuild
+
+ignoredBuiltDependencies:
+  - core-js
+  - protobufjs
+  - sharp
+  - unrs-resolver
+
+peerDependencyRules:
+  allowedVersions:
+    # Only vitest browser-mode mocking uses msw; we use msw/node directly.
+    "@vitest/mocker>msw": "3"

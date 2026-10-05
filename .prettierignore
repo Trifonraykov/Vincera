@@ -1,0 +1,25 @@
+# Legacy Vincera Bot (§19.1) — never reformatted
+vincera/
+dashboard/
+supabase/
+tests/*.py
+tests/conftest.py
+install.sh
+install.ps1
+pyproject.toml
+requirements.txt
+README.md
+CLAUDE.md
+AGENTS.md
+
+# Generated / tool output
+.next/
+out/
+node_modules/
+drizzle/
+playwright-report/
+test-results/
+coverage/
+.data/
+pnpm-lock.yaml
+next-env.d.ts

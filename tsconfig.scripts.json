@@ -1,0 +1,11 @@
+{
+  // Used by `tsx` for scripts/*: same settings as the app, but `server-only` resolves to the
+  // no-op module Next.js uses on the server, so scripts can import server modules (lib/env, lib/db).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "server-only": ["./node_modules/next/dist/compiled/server-only/empty.js"]
+    }
+  }
+}
