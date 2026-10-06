@@ -79,7 +79,18 @@ export type RoleSource = "onboarding" | "admin_emails" | "admin_cli" | "admin"
 export type MatchTrigger = "nightly" | "on_change" | "manual"
 
 /** Claude API uses (§7.3). */
-export type AiUse = "audience_summary" | "idea_brief" | "match_explanation" | "launch_kit"
+export type AiUse =
+  | "audience_summary"
+  | "idea_brief"
+  | "match_explanation"
+  | "launch_kit"
+  | "listing_hook"
+
+/** Where an imported listing came from (CLAUDE.md §19.45). */
+export type ListingSource = "app_store" | "web"
+
+/** Where a creator met a listing (CLAUDE.md §19.45). */
+export type ListingSurface = "feed" | "profile"
 
 /** Why a social connection stopped working (§7.1). */
 export type SocialExpiryReason = "refresh_failed" | "unauthorized" | "revoked"
@@ -227,6 +238,51 @@ export interface EventCatalog {
   "product.archived": { subject: "product"; properties: { from_status: ProductStatus } }
   /** Not in the §11 list: archived → draft (§19.24). */
   "product.restored": { subject: "product"; properties: NoProperties }
+
+  // Imported listings and the creator feed (CLAUDE.md §19.45)
+  /** One listing written by an App Store or web import (next to product.created / .updated). */
+  "product.imported": {
+    subject: "product"
+    properties: {
+      source: ListingSource
+      action: "created" | "updated" | "removed" | "restored"
+      image_count: number
+    }
+  }
+  "app_store.connected": {
+    subject: "builder_profile"
+    properties: { via: "developer_link" | "app_link" | "id"; app_count: number }
+  }
+  "app_store.verified": {
+    subject: "builder_profile"
+    properties: { method: "description_code" | "admin" }
+  }
+  "app_store.disconnected": { subject: "builder_profile"; properties: NoProperties }
+  "app_store.synced": {
+    subject: "builder_profile"
+    properties: {
+      trigger: "connected" | "manual" | "scheduled"
+      created: number
+      updated: number
+      removed: number
+    }
+  }
+  /** One feed page rendered for a creator (match rows on it also get match.shown). */
+  "feed.viewed": {
+    subject: "user"
+    properties: { items: number; matched: number; page: number }
+  }
+  /** A listing opened from the feed or a profile (matched ones also get match.clicked). */
+  "listing.opened": {
+    subject: "product"
+    properties: { surface: ListingSurface; rank: number | null; matched: boolean }
+  }
+  /** Saved without a match row (with one, match.saved is written instead). */
+  "listing.saved": { subject: "product"; properties: { surface: ListingSurface; rank: number | null } }
+  "listing.unsaved": {
+    subject: "product"
+    properties: { surface: ListingSurface; rank: number | null }
+  }
 
   // Matching (§8)
   /** Batch summary: one event per subject user per recompute. */
@@ -509,7 +565,7 @@ export interface EventCatalog {
 
   // AI (§7.3)
   "ai.generated": {
-    subject: "user" | "creator_profile" | "idea" | "match" | "launch"
+    subject: "user" | "creator_profile" | "idea" | "match" | "launch" | "product"
     properties: {
       use: AiUse
       prompt_version: string
@@ -526,7 +582,7 @@ export interface EventCatalog {
    * summary on /onboarding/creator/review (records what `ai.generated.accepted_by_user` cannot).
    */
   "ai.reviewed": {
-    subject: "user" | "creator_profile" | "idea" | "match" | "launch"
+    subject: "user" | "creator_profile" | "idea" | "match" | "launch" | "product"
     properties: { use: AiUse; prompt_version: string; accepted: boolean; edited: boolean }
   }
 }
@@ -566,6 +622,15 @@ export const EVENT_TYPES = [
   "product.published",
   "product.archived",
   "product.restored",
+  "product.imported",
+  "app_store.connected",
+  "app_store.verified",
+  "app_store.disconnected",
+  "app_store.synced",
+  "feed.viewed",
+  "listing.opened",
+  "listing.saved",
+  "listing.unsaved",
   "match.computed",
   "match.shown",
   "match.clicked",

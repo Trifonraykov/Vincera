@@ -189,9 +189,20 @@ export async function updateProduct(
     }
 
     const status: ProductStatus = publish ? "seeking" : current.status
+    // Imported listings (CLAUDE.md §19.45): once the builder changes the text, syncs keep it; a
+    // new description also drops the import's hook, so pages derive it from the new text.
+    const textEdited = changed.some(
+      (key) => key === "title" || key === "description" || key === "topics",
+    )
     await tx
       .update(products)
-      .set({ ...next, status, ...(publish ? { publishedAt: now() } : {}) })
+      .set({
+        ...next,
+        status,
+        ...(publish ? { publishedAt: now() } : {}),
+        ...(textEdited && current.source !== "manual" ? { sourceEditedAt: now() } : {}),
+        ...(changed.includes("description") ? { tagline: null } : {}),
+      })
       .where(eq(products.id, current.id))
 
     const subject = {

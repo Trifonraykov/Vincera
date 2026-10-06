@@ -29,6 +29,7 @@ export const ADMIN_AUDIT_ACTIONS = {
   "impersonation.started": "Started viewing as a user",
   "impersonation.stopped": "Stopped viewing as a user",
   "social_connection.verified": "Verified a manual social entry",
+  "app_store.verified": "Verified an App Store developer account",
   // Collabs and launches
   "collab.ended": "Ended a collab",
   "launch.approved": "Approved a launch",
@@ -57,6 +58,7 @@ export type AdminAuditAction = keyof typeof ADMIN_AUDIT_ACTIONS
 export const ADMIN_AUDIT_TARGET_TYPES = [
   "user",
   "social_connection",
+  "builder_profile",
   "impersonation_session",
   "collab",
   "launch",

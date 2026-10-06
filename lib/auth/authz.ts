@@ -145,6 +145,24 @@ export function canManageProduct(
   return canCreateProduct(user) && product.ownerUserId === user.id
 }
 
+/**
+ * Import listings from the App Store or a web page, connect, verify or refresh an App Store
+ * developer account (CLAUDE.md §19.45): the same people who may create products.
+ */
+export function canImportListings(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return canCreateProduct(user)
+}
+
+/** The creator feed (`/app/feed`, CLAUDE.md §19.45): active creators. */
+export function canBrowseFeed(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isActive(user) && hasRole(user, "creator")
+}
+
+/** Mark a builder's App Store developer account as theirs after checking it by hand: admins. */
+export function canVerifyAppStoreAccount(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isAdmin(user)
+}
+
 /** See a product: the owner and admins always; other active users once it is published. */
 export function canViewProduct(
   user: Pick<AuthzUser, "id" | "roles" | "status">,

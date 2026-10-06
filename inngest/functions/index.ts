@@ -5,6 +5,7 @@ import { agreementsFinalize } from "./agreements-finalize"
 import { embeddingsRefresh } from "./embeddings-refresh"
 import { gdprCleanup } from "./gdpr-cleanup"
 import { ledgerCheck } from "./ledger-check"
+import { listingsAppStoreSync } from "./listings-app-store-sync"
 import { ledgerPostPending } from "./ledger-post-pending"
 import { matchingNightly } from "./matching-nightly"
 import { matchingRecompute } from "./matching-recompute"
@@ -52,6 +53,8 @@ export const jobs: readonly Job[] = [
   // Phases 6–7: trust, matching v1 (registered by the W4 prep)
   gdprCleanup,
   matchingTrain,
+  // Imported listings (CLAUDE.md §19.45)
+  listingsAppStoreSync,
 ]
 
 /** Inngest functions for `serve()`. */

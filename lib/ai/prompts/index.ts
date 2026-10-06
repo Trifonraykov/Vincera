@@ -25,6 +25,7 @@ export const AI_USES = [
   "idea_brief",
   "match_explanation",
   "launch_kit",
+  "listing_hook",
 ] as const
 
 export type AiUse = (typeof AI_USES)[number]

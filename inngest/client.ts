@@ -39,6 +39,12 @@ export const jobEventSchemas = {
    */
   "social/youtube-retention.requested": z.object({}),
 
+  /**
+   * Daily App Store re-import (CLAUDE.md §19.45): every builder with a connected developer account
+   * not synced in the last 20 hours, one step each (job `listings-app-store-sync`).
+   */
+  "listings/app-store-daily.requested": z.object({}),
+
   // --- Phases 2–3 (declared by the W2 prep; contracts in CLAUDE.md §19.24) ----------------------
 
   /**

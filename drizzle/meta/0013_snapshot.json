@@ -1,5 +1,5 @@
 {
-  "id": "9ea49bd7-c5f5-44ba-b05e-af06b550b335",
+  "id": "aad4094b-b35c-4c62-b1b2-ce4e59c3b43e",
   "prevId": "0adff7e8-01ee-4a38-a609-cac32ef38da5",
   "version": "7",
   "dialect": "postgresql",
@@ -5530,6 +5530,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "tagline": {
+          "name": "tagline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "embedding": {
           "name": "embedding",
           "type": "vector(1024)",
@@ -5696,6 +5702,10 @@
         "products_source_url_http": {
           "name": "products_source_url_http",
           "value": "\"products\".\"source_url\" IS NULL OR \"products\".\"source_url\" ~* '^https?://[^[:space:]]+$'"
+        },
+        "products_tagline_length": {
+          "name": "products_tagline_length",
+          "value": "\"products\".\"tagline\" IS NULL OR (char_length(\"products\".\"tagline\") BETWEEN 1 AND 140)"
         },
         "products_media_is_array": {
           "name": "products_media_is_array",

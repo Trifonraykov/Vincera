@@ -137,6 +137,12 @@ export const products = withRLS(
       sourceRemovedAt: timestamptz("source_removed_at"),
       /** The builder edited the text: syncs keep their title, description and topics. */
       sourceEditedAt: timestamptz("source_edited_at"),
+      /**
+       * The feed's one-line hook (≤ 140 characters), written by an import (lib/listings/hook.ts).
+       * Null for typed listings and after the builder edits the description: pages then derive it
+       * from the description (`taglineOf`).
+       */
+      tagline: text("tagline"),
       embedding: embedding(),
       embeddingModel: embeddingModel(),
       ...embeddingTracking(),
@@ -158,6 +164,10 @@ export const products = withRLS(
       check(
         "products_source_url_http",
         sql`${t.sourceUrl} IS NULL OR ${t.sourceUrl} ~* '^https?://[^[:space:]]+$'`,
+      ),
+      check(
+        "products_tagline_length",
+        sql`${t.tagline} IS NULL OR (char_length(${t.tagline}) BETWEEN 1 AND 140)`,
       ),
       check("products_media_is_array", sql`jsonb_typeof(${t.media}) = 'array'`),
       check(
