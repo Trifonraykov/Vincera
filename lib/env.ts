@@ -41,8 +41,17 @@ export const FAKEABLE_SERVICES = [
   "embeddings",
   "jobs",
   "ratelimit",
+  "appstore",
+  "web",
 ] as const
 export type FakeableService = (typeof FAKEABLE_SERVICES)[number]
+
+/**
+ * Services that need no credentials (CLAUDE.md §19.45): Apple's public iTunes Lookup API and
+ * fetching the web pages builders import. They run live unless `FAKE_SERVICES` names them (or
+ * `all`), so e2e, CI and the sandbox (where both are unreachable) use recorded fixtures.
+ */
+export const KEYLESS_SERVICES = ["appstore", "web"] as const satisfies readonly FakeableService[]
 
 export const SOCIAL_PROVIDERS = ["youtube", "instagram", "tiktok", "github"] as const
 export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number]
@@ -336,6 +345,8 @@ const SERVICE_CREDENTIALS = {
   embeddings: ["VOYAGE_API_KEY"],
   jobs: ["INNGEST_EVENT_KEY", "INNGEST_SIGNING_KEY"],
   ratelimit: ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+  appstore: [],
+  web: [],
 } as const satisfies Record<Exclude<FakeableService, "social">, readonly EnvKey[]>
 
 const SOCIAL_CREDENTIALS = {

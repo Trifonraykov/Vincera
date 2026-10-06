@@ -10,6 +10,7 @@ import {
   primaryKey,
   text,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
 
@@ -27,6 +28,7 @@ import {
   withRLS,
 } from "./columns"
 import {
+  appStoreVerificationMethodEnum,
   availabilityEnum,
   dealPreferenceEnum,
   productFormatEnum,
@@ -242,9 +244,42 @@ export const builderProfiles = withRLS(
       embeddingModel: embeddingModel(),
       ...embeddingTracking(),
       verifiedAt: timestamptz("verified_at"),
+      /**
+       * The App Store developer account the builder claims (CLAUDE.md §19.45): Apple's artistId.
+       * A claim until `app_store_verified_at` is set; one account per builder for now.
+       */
+      appStoreDeveloperId: text("app_store_developer_id"),
+      appStoreDeveloperName: text("app_store_developer_name"),
+      /** The storefront the lookups use (ISO 3166-1 alpha-2, lowercase). */
+      appStoreCountry: text("app_store_country"),
+      appStoreVerifiedAt: timestamptz("app_store_verified_at"),
+      appStoreVerificationMethod: appStoreVerificationMethodEnum("app_store_verification_method"),
+      appStoreSyncedAt: timestamptz("app_store_synced_at"),
+      /** Short code of the last failed sync (`not_found`, `unavailable`); cleared by a success. */
+      appStoreSyncError: text("app_store_sync_error"),
       ...timestamps(),
     },
     (t) => [
+      check(
+        "builder_profiles_app_store_developer_id_format",
+        sql`${t.appStoreDeveloperId} IS NULL OR ${t.appStoreDeveloperId} ~ '^[0-9]{1,20}$'`,
+      ),
+      check(
+        "builder_profiles_app_store_country_format",
+        sql`(${t.appStoreDeveloperId} IS NULL) = (${t.appStoreCountry} IS NULL) AND (${t.appStoreCountry} IS NULL OR ${t.appStoreCountry} ~ '^[a-z]{2}$')`,
+      ),
+      check(
+        "builder_profiles_app_store_verified_has_account",
+        sql`${t.appStoreVerifiedAt} IS NULL OR ${t.appStoreDeveloperId} IS NOT NULL`,
+      ),
+      check(
+        "builder_profiles_app_store_verified_iff_method",
+        sql`(${t.appStoreVerifiedAt} IS NULL) = (${t.appStoreVerificationMethod} IS NULL)`,
+      ),
+      // A developer account is verified for at most one builder; unverified claims may repeat.
+      uniqueIndex("builder_profiles_app_store_verified_developer_idx")
+        .on(t.appStoreDeveloperId)
+        .where(sql`${t.appStoreVerifiedAt} IS NOT NULL`),
       foreignKey({
         name: "builder_profiles_handle_owner_fk",
         columns: [t.handle, t.userId],

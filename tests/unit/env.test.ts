@@ -7,6 +7,7 @@ import {
   devMailboxEnabled,
   EnvValidationError,
   FAKEABLE_SERVICES,
+  KEYLESS_SERVICES,
   isAdminEmail,
   isFake,
   isProduction,
@@ -299,7 +300,18 @@ describe("parseEnv: production", () => {
 describe("isFake", () => {
   it("uses fakes for every service without credentials", () => {
     const env = parseEnv(base)
-    for (const service of FAKEABLE_SERVICES) expect(isFake(service, env)).toBe(true)
+    const keyless: readonly string[] = KEYLESS_SERVICES
+    for (const service of FAKEABLE_SERVICES) {
+      expect(isFake(service, env)).toBe(!keyless.includes(service))
+    }
+  })
+
+  it("runs the keyless services (App Store lookup, web imports) live unless forced", () => {
+    expect(isFake("appstore", parseEnv(base))).toBe(false)
+    expect(isFake("web", parseEnv(base))).toBe(false)
+    const forced = parseEnv({ ...base, FAKE_SERVICES: "appstore,web" })
+    expect(isFake("appstore", forced)).toBe(true)
+    expect(isFake("web", forced)).toBe(true)
   })
 
   it("goes live when a service's credentials are all present", () => {

@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm"
-import { boolean, check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core"
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
 
 import {
   currency,
@@ -15,7 +25,14 @@ import {
   timestamptz,
   withRLS,
 } from "./columns"
-import { ideaStatusEnum, productFormatEnum, productStageEnum, productStatusEnum } from "./enums"
+import {
+  ideaStatusEnum,
+  productFormatEnum,
+  productSourceEnum,
+  productStageEnum,
+  productStatusEnum,
+} from "./enums"
+import type { ProductMediaItem, ProductSourceMeta } from "./types"
 import { builderProfiles, creatorProfiles } from "./identity"
 
 /**
@@ -103,6 +120,23 @@ export const products = withRLS(
       publishedAt: timestamptz("published_at"),
       /** Set exactly while status = archived. */
       archivedAt: timestamptz("archived_at"),
+      /** Where the listing came from (CLAUDE.md §19.45); `manual` = typed by the builder. */
+      source: productSourceEnum("source").notNull().default("manual"),
+      /** App Store trackId, or the normalised URL of a web import; null for manual rows. */
+      sourceId: text("source_id"),
+      /** The store page or the web page (http(s)). */
+      sourceUrl: text("source_url"),
+      sourceMeta: jsonb("source_meta").$type<ProductSourceMeta>(),
+      /** Images copied into our storage (never hotlinked). */
+      media: jsonb("media")
+        .$type<ProductMediaItem[]>()
+        .notNull()
+        .default(sql`'[]'::jsonb`),
+      sourceSyncedAt: timestamptz("source_synced_at"),
+      /** Set while the app is no longer in the App Store (kept, hidden from the feed). */
+      sourceRemovedAt: timestamptz("source_removed_at"),
+      /** The builder edited the text: syncs keep their title, description and topics. */
+      sourceEditedAt: timestamptz("source_edited_at"),
       embedding: embedding(),
       embeddingModel: embeddingModel(),
       ...embeddingTracking(),
@@ -110,6 +144,26 @@ export const products = withRLS(
     },
     (t) => [
       index("products_builder_profile_id_idx").on(t.builderProfileId),
+      uniqueIndex("products_builder_source_idx")
+        .on(t.builderProfileId, t.source, t.sourceId)
+        .where(sql`${t.source} <> 'manual'`),
+      check(
+        "products_source_id_iff_imported",
+        sql`(${t.source} = 'manual') = (${t.sourceId} IS NULL)`,
+      ),
+      check(
+        "products_app_store_source_id_format",
+        sql`${t.source} <> 'app_store' OR ${t.sourceId} ~ '^[0-9]{1,20}$'`,
+      ),
+      check(
+        "products_source_url_http",
+        sql`${t.sourceUrl} IS NULL OR ${t.sourceUrl} ~* '^https?://[^[:space:]]+$'`,
+      ),
+      check("products_media_is_array", sql`jsonb_typeof(${t.media}) = 'array'`),
+      check(
+        "products_source_meta_imported_only",
+        sql`${t.sourceMeta} IS NULL OR ${t.source} <> 'manual'`,
+      ),
       index("products_status_idx").on(t.status),
       index("products_status_published_at_idx").on(t.status, t.publishedAt.desc()),
       index("products_embedding_hnsw_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),

@@ -75,6 +75,21 @@ export type IdeaStatus = (typeof ideaStatusEnum.enumValues)[number]
 export const productStageEnum = pgEnum("product_stage", ["idea", "prototype", "beta", "live"])
 export type ProductStage = (typeof productStageEnum.enumValues)[number]
 
+/**
+ * Where a product listing came from (CLAUDE.md §19.45): typed by the builder (`manual`), imported
+ * from the App Store (`app_store`, keyed by the app's trackId) or from a web page (`web`, keyed by
+ * the normalised URL). Re-imports update the row with the same (builder, source, source_id).
+ */
+export const productSourceEnum = pgEnum("product_source", ["manual", "app_store", "web"])
+export type ProductSource = (typeof productSourceEnum.enumValues)[number]
+
+/** How a builder proved they own an App Store developer account (§19.45). */
+export const appStoreVerificationMethodEnum = pgEnum("app_store_verification_method", [
+  "description_code",
+  "admin",
+])
+export type AppStoreVerificationMethod = (typeof appStoreVerificationMethodEnum.enumValues)[number]
+
 export const productStatusEnum = pgEnum("product_status", [
   "draft",
   "seeking",

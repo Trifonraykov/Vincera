@@ -1,0 +1,87 @@
+{
+  "_comment": "The fake web for product link imports (CLAUDE.md §19.45): fake DNS answers per host and recorded responses per host + path (http and https alike). Images are generated PNGs. The hosts after the real pages exist to exercise the SSRF rules through the real safeFetch code.",
+  "hosts": {
+    "tasktide.example": ["93.184.215.31"],
+    "www.tasktide.example": ["93.184.215.31"],
+    "go.tasktide.example": ["93.184.215.35"],
+    "cdn.tasktide.example": ["93.184.215.32"],
+    "shop.templatehouse.example": ["93.184.215.33"],
+    "quietnotes.example": ["93.184.215.34"],
+    "intranet-dashboard.example": ["10.0.12.7"],
+    "mixed-answers.example": ["93.184.215.40", "127.0.0.1"],
+    "ipv6-private.example": ["fd00::5"],
+    "mapped-loopback.example": ["::ffff:127.0.0.1"],
+    "metadata-redirect.example": ["93.184.215.41"],
+    "private-redirect.example": ["93.184.215.46"],
+    "redirect-loop.example": ["93.184.215.42"],
+    "huge.example": ["93.184.215.43"],
+    "slow.example": ["93.184.215.44"],
+    "pdf.example": ["93.184.215.45"]
+  },
+  "routes": [
+    { "host": "tasktide.example", "path": "/", "file": "tasktide.html" },
+    { "host": "www.tasktide.example", "path": "/", "status": 301, "location": "https://tasktide.example/" },
+    { "host": "go.tasktide.example", "path": "/", "status": 302, "location": "https://www.tasktide.example/" },
+    {
+      "host": "tasktide.example",
+      "path": "/apple-touch-icon.png",
+      "image": { "width": 180, "height": 180, "style": "icon" }
+    },
+    {
+      "host": "tasktide.example",
+      "path": "/favicon.ico",
+      "contentType": "image/x-icon",
+      "text": "not a png"
+    },
+    {
+      "host": "cdn.tasktide.example",
+      "path": "/og/cover-1200x630.png",
+      "image": { "width": 800, "height": 420, "style": "banner" }
+    },
+    {
+      "host": "shop.templatehouse.example",
+      "path": "/notion/creator-content-calendar",
+      "file": "templatehouse.html"
+    },
+    {
+      "host": "shop.templatehouse.example",
+      "path": "/images/content-calendar-preview.png",
+      "image": { "width": 800, "height": 420, "style": "banner" }
+    },
+    {
+      "host": "shop.templatehouse.example",
+      "path": "/icon-192.png",
+      "image": { "width": 192, "height": 192, "style": "icon" }
+    },
+    { "host": "quietnotes.example", "path": "/", "file": "quietnotes.html" },
+    {
+      "host": "quietnotes.example",
+      "path": "/favicon.ico",
+      "contentType": "image/x-icon",
+      "text": "not a png"
+    },
+    { "host": "intranet-dashboard.example", "path": "/", "file": "quietnotes.html" },
+    { "host": "mixed-answers.example", "path": "/", "file": "quietnotes.html" },
+    {
+      "host": "metadata-redirect.example",
+      "path": "/",
+      "status": 302,
+      "location": "http://169.254.169.254/latest/meta-data/"
+    },
+    {
+      "host": "private-redirect.example",
+      "path": "/",
+      "status": 307,
+      "location": "https://intranet-dashboard.example/"
+    },
+    {
+      "host": "redirect-loop.example",
+      "path": "/",
+      "status": 302,
+      "location": "https://redirect-loop.example/"
+    },
+    { "host": "huge.example", "path": "/", "special": "huge" },
+    { "host": "slow.example", "path": "/", "special": "slow" },
+    { "host": "pdf.example", "path": "/", "contentType": "application/pdf", "text": "%PDF-1.7" }
+  ]
+}

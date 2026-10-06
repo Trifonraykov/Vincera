@@ -1,0 +1,586 @@
+{
+  "_comment": "Recorded-shape iTunes Lookup results for the fake App Store (CLAUDE.md \u00a719.45). Two developers with four apps each; images are generated PNGs served by the fake image CDN.",
+  "developers": [
+    {
+      "artist": {
+        "wrapperType": "artist",
+        "artistType": "Software Artist",
+        "artistName": "Pinecone Labs",
+        "artistLinkUrl": "https://apps.apple.com/us/developer/pinecone-labs/id1500000001?uo=4",
+        "artistId": 1500000001,
+        "primaryGenreName": "Productivity",
+        "primaryGenreId": 6007
+      },
+      "apps": [
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6450000101,
+          "trackName": "Focus Garden: Pomodoro Timer",
+          "trackCensoredName": "Focus Garden: Pomodoro Timer",
+          "bundleId": "com.pinecone-labs.focusgarden",
+          "artistId": 1500000001,
+          "artistName": "Pinecone Labs",
+          "artistViewUrl": "https://apps.apple.com/us/developer/pinecone-labs/id1500000001?uo=4",
+          "sellerName": "Pinecone Labs Ltd",
+          "sellerUrl": "https://pinecone.example",
+          "description": "Grow a calm little garden every time you focus.\n\nFocus Garden turns the Pomodoro technique into something you look forward to: start a 25-minute session, put your phone down, and a plant grows. Break the session and it wilts.\n\n\u2022 Custom focus and break lengths\n\u2022 Weekly focus reports and streaks\n\u2022 Home Screen and Lock Screen widgets\n\u2022 Works offline, no account needed\n\nMade by a two-person team who needed it for their own deep work.",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000101/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000101/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000101/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000101/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.0,
+          "formattedPrice": "Free",
+          "currency": "USD",
+          "averageUserRating": 4.7,
+          "averageUserRatingForCurrentVersion": 4.7,
+          "userRatingCount": 18342,
+          "userRatingCountForCurrentVersion": 18342,
+          "primaryGenreName": "Productivity",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Productivity",
+            "Education"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/focus-garden/id6450000101?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2023-02-14T08:00:00Z",
+          "currentVersionReleaseDate": "2026-09-21T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6450000102,
+          "trackName": "Habit Loop - Daily Tracker",
+          "trackCensoredName": "Habit Loop - Daily Tracker",
+          "bundleId": "com.pinecone-labs.habitloop",
+          "artistId": 1500000001,
+          "artistName": "Pinecone Labs",
+          "artistViewUrl": "https://apps.apple.com/us/developer/pinecone-labs/id1500000001?uo=4",
+          "sellerName": "Pinecone Labs Ltd",
+          "sellerUrl": "https://pinecone.example",
+          "description": "Build habits that stick with a tracker that stays out of your way.\n\nTap once to log a habit. Habit Loop shows your streaks, gently nudges you at the right time and celebrates small wins.\n\n\u2022 Unlimited habits and flexible schedules\n\u2022 Smart reminders that learn when you usually do things\n\u2022 iCloud sync across iPhone and iPad\n\u2022 Private by design: your data never leaves your devices",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000102/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000102/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000102/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000102/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 2.99,
+          "formattedPrice": "$2.99",
+          "currency": "USD",
+          "averageUserRating": 4.8,
+          "averageUserRatingForCurrentVersion": 4.8,
+          "userRatingCount": 5210,
+          "userRatingCountForCurrentVersion": 5210,
+          "primaryGenreName": "Health & Fitness",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Health & Fitness",
+            "Lifestyle"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/habit-loop/id6450000102?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2022-06-01T08:00:00Z",
+          "currentVersionReleaseDate": "2026-08-30T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6450000103,
+          "trackName": "Pocket Budget: Money Planner",
+          "trackCensoredName": "Pocket Budget: Money Planner",
+          "bundleId": "com.pinecone-labs.pocketbudget",
+          "artistId": 1500000001,
+          "artistName": "Pinecone Labs",
+          "artistViewUrl": "https://apps.apple.com/us/developer/pinecone-labs/id1500000001?uo=4",
+          "sellerName": "Pinecone Labs Ltd",
+          "sellerUrl": "https://pinecone.example",
+          "description": "See where your money goes in ten seconds a day.\n\nPocket Budget is envelope budgeting for people who hate spreadsheets. Add an expense with two taps, watch your envelopes fill up and empty, and get a calm weekly summary.\n\n\u2022 Envelope budgets with rollover\n\u2022 Shared budgets for couples and roommates\n\u2022 CSV export\n\u2022 No ads, ever",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000103/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000103/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000103/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000103/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.0,
+          "formattedPrice": "Free",
+          "currency": "USD",
+          "averageUserRating": 4.6,
+          "averageUserRatingForCurrentVersion": 4.6,
+          "userRatingCount": 9876,
+          "userRatingCountForCurrentVersion": 9876,
+          "primaryGenreName": "Finance",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Finance",
+            "Productivity"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/pocket-budget/id6450000103?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2021-11-10T08:00:00Z",
+          "currentVersionReleaseDate": "2026-09-02T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6450000104,
+          "trackName": "Sleep Sounds Lite",
+          "trackCensoredName": "Sleep Sounds Lite",
+          "bundleId": "com.pinecone-labs.sleepsoundslite",
+          "artistId": 1500000001,
+          "artistName": "Pinecone Labs",
+          "artistViewUrl": "https://apps.apple.com/us/developer/pinecone-labs/id1500000001?uo=4",
+          "sellerName": "Pinecone Labs Ltd",
+          "sellerUrl": "https://pinecone.example",
+          "description": "Fall asleep faster with rain, waves and soft noise.\n\nMix up to three sounds, set a fade-out timer and drift off. Sleep Sounds Lite is tiny, fast and works in airplane mode.\n\n\u2022 40 high-quality loops\n\u2022 Mixer with per-sound volume\n\u2022 Fade-out timer and alarm\n\u2022 Apple Watch remote",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000104/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000104/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6450000104/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/screen-3/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6450000104/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.99,
+          "formattedPrice": "$0.99",
+          "currency": "USD",
+          "averageUserRating": 4.5,
+          "averageUserRatingForCurrentVersion": 4.5,
+          "userRatingCount": 2304,
+          "userRatingCountForCurrentVersion": 2304,
+          "primaryGenreName": "Health & Fitness",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Health & Fitness",
+            "Music"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/sleep-sounds-lite/id6450000104?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2020-03-18T08:00:00Z",
+          "currentVersionReleaseDate": "2026-07-15T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        }
+      ]
+    },
+    {
+      "artist": {
+        "wrapperType": "artist",
+        "artistType": "Software Artist",
+        "artistName": "Tiny Forge Studio",
+        "artistLinkUrl": "https://apps.apple.com/us/developer/tiny-forge-studio/id1500000002?uo=4",
+        "artistId": 1500000002,
+        "primaryGenreName": "Food & Drink",
+        "primaryGenreId": 6007
+      },
+      "apps": [
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6460000201,
+          "trackName": "Recipe Box: Meal Planner",
+          "trackCensoredName": "Recipe Box: Meal Planner",
+          "bundleId": "com.tiny-forge-studio.recipeboxmealplanner",
+          "artistId": 1500000002,
+          "artistName": "Tiny Forge Studio",
+          "artistViewUrl": "https://apps.apple.com/us/developer/tiny-forge-studio/id1500000002?uo=4",
+          "sellerName": "Tiny Forge Studio S.L.",
+          "sellerUrl": "https://tinyforge.example",
+          "description": "Save recipes from anywhere and plan the week in minutes.\n\nPaste a link from any cooking site or creator and Recipe Box pulls out the ingredients and steps, without the life story. Drag recipes onto your week and get one tidy shopping list.\n\n\u2022 Import recipes from links, photos and text\n\u2022 Weekly meal plan with leftovers\n\u2022 Smart shopping list grouped by aisle\n\u2022 Cook mode keeps the screen on",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000201/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000201/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000201/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000201/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.0,
+          "formattedPrice": "Free",
+          "currency": "USD",
+          "averageUserRating": 4.8,
+          "averageUserRatingForCurrentVersion": 4.8,
+          "userRatingCount": 12650,
+          "userRatingCountForCurrentVersion": 12650,
+          "primaryGenreName": "Food & Drink",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Food & Drink",
+            "Lifestyle"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/recipe-box-meal-planner/id6460000201?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2022-01-20T08:00:00Z",
+          "currentVersionReleaseDate": "2026-09-28T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6460000202,
+          "trackName": "Plant Pal - Watering Reminder",
+          "trackCensoredName": "Plant Pal - Watering Reminder",
+          "bundleId": "com.tiny-forge-studio.plantpal",
+          "artistId": 1500000002,
+          "artistName": "Tiny Forge Studio",
+          "artistViewUrl": "https://apps.apple.com/us/developer/tiny-forge-studio/id1500000002?uo=4",
+          "sellerName": "Tiny Forge Studio S.L.",
+          "sellerUrl": "https://tinyforge.example",
+          "description": "Never forget to water a plant again.\n\nTake a photo, Plant Pal recognises the plant and builds a watering and feeding schedule for your home's light.\n\n\u2022 Plant identification from a photo\n\u2022 Watering, misting and repotting reminders\n\u2022 Light meter using your camera\n\u2022 Care guides for 3,000 plants",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000202/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000202/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000202/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000202/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 1.99,
+          "formattedPrice": "$1.99",
+          "currency": "USD",
+          "averageUserRating": 4.4,
+          "averageUserRatingForCurrentVersion": 4.4,
+          "userRatingCount": 3110,
+          "userRatingCountForCurrentVersion": 3110,
+          "primaryGenreName": "Lifestyle",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Lifestyle",
+            "Education"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/plant-pal/id6460000202?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2023-04-11T08:00:00Z",
+          "currentVersionReleaseDate": "2026-08-12T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6460000203,
+          "trackName": "Stretch Break: Desk Yoga",
+          "trackCensoredName": "Stretch Break: Desk Yoga",
+          "bundleId": "com.tiny-forge-studio.stretchbreak",
+          "artistId": 1500000002,
+          "artistName": "Tiny Forge Studio",
+          "artistViewUrl": "https://apps.apple.com/us/developer/tiny-forge-studio/id1500000002?uo=4",
+          "sellerName": "Tiny Forge Studio S.L.",
+          "sellerUrl": "https://tinyforge.example",
+          "description": "Five-minute stretches for people who sit all day.\n\nStretch Break reminds you to move and guides you through short desk-friendly routines with clear animations.\n\n\u2022 60 routines for neck, back and wrists\n\u2022 Gentle reminders during work hours\n\u2022 Apple Health integration\n\u2022 Routines for tired eyes, too",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000203/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000203/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000203/icon/512x512bb.png",
+          "screenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/screen-1/392x696bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/screen-2/392x696bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/screen-3/392x696bb.png",
+            "https://is4-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/screen-4/392x696bb.png"
+          ],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000203/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.0,
+          "formattedPrice": "Free",
+          "currency": "USD",
+          "averageUserRating": 4.6,
+          "averageUserRatingForCurrentVersion": 4.6,
+          "userRatingCount": 1870,
+          "userRatingCountForCurrentVersion": 1870,
+          "primaryGenreName": "Health & Fitness",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Health & Fitness",
+            "Medical"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/stretch-break/id6460000203?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2024-01-08T08:00:00Z",
+          "currentVersionReleaseDate": "2026-09-10T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        },
+        {
+          "isGameCenterEnabled": false,
+          "features": [
+            "iosUniversal"
+          ],
+          "supportedDevices": [
+            "iPhone15-iPhone15",
+            "iPadPro11M4-iPadPro11M4"
+          ],
+          "advisories": [],
+          "kind": "software",
+          "wrapperType": "software",
+          "trackId": 6460000204,
+          "trackName": "Word Sprint",
+          "trackCensoredName": "Word Sprint",
+          "bundleId": "com.tiny-forge-studio.wordsprint",
+          "artistId": 1500000002,
+          "artistName": "Tiny Forge Studio",
+          "artistViewUrl": "https://apps.apple.com/us/developer/tiny-forge-studio/id1500000002?uo=4",
+          "sellerName": "Tiny Forge Studio S.L.",
+          "sellerUrl": "https://tinyforge.example",
+          "description": "A fast, friendly word game for your coffee break.\n\nFind as many words as you can in 90 seconds. Daily puzzles, friendly leagues and no energy timers.\n\n\u2022 A new daily board every morning\n\u2022 Weekly leagues with friends\n\u2022 Zen mode without a timer\n\u2022 Works offline",
+          "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000204/icon/60x60bb.png",
+          "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000204/icon/100x100bb.png",
+          "artworkUrl512": "https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/fake/6460000204/icon/512x512bb.png",
+          "screenshotUrls": [],
+          "ipadScreenshotUrls": [
+            "https://is1-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000204/ipad-1/576x768bb.png",
+            "https://is2-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000204/ipad-2/576x768bb.png",
+            "https://is3-ssl.mzstatic.com/image/thumb/PurpleSource/v4/fake/6460000204/ipad-3/576x768bb.png"
+          ],
+          "appletvScreenshotUrls": [],
+          "price": 0.0,
+          "formattedPrice": "Free",
+          "currency": "USD",
+          "averageUserRating": 4.7,
+          "averageUserRatingForCurrentVersion": 4.7,
+          "userRatingCount": 22094,
+          "userRatingCountForCurrentVersion": 22094,
+          "primaryGenreName": "Games",
+          "primaryGenreId": 6007,
+          "genres": [
+            "Games",
+            "Word",
+            "Puzzle"
+          ],
+          "genreIds": [
+            "6007"
+          ],
+          "trackViewUrl": "https://apps.apple.com/us/app/word-sprint/id6460000204?uo=4",
+          "trackContentRating": "4+",
+          "contentAdvisoryRating": "4+",
+          "minimumOsVersion": "17.0",
+          "version": "2.4.1",
+          "releaseDate": "2021-09-01T08:00:00Z",
+          "currentVersionReleaseDate": "2026-09-25T07:00:00Z",
+          "releaseNotes": "Bug fixes and small improvements.",
+          "fileSizeBytes": "48211968",
+          "languageCodesISO2A": [
+            "EN",
+            "DE",
+            "ES",
+            "FR"
+          ],
+          "isVppDeviceBasedLicensingEnabled": true
+        }
+      ]
+    }
+  ]
+}

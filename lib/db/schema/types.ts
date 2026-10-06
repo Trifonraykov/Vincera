@@ -57,6 +57,57 @@ export type AgeGender = {
  */
 export type SnapshotRaw = JsonObject
 
+// --- Imported listings (CLAUDE.md §19.45) ------------------------------------------------------
+
+/**
+ * products.media: the listing's images, copied into our storage (never hotlinked). `key` is the
+ * storage key, `hash` the first 16 hex characters of sha256(source URL), so a re-sync skips images
+ * it already has. Pages show them through `/api/products/<id>/media/<hash>`.
+ */
+export type ProductMediaItem = {
+  kind: "icon" | "screenshot" | "image"
+  key: string
+  hash: string
+  contentType: string
+  width: number | null
+  height: number | null
+}
+
+/** products.source_meta for an App Store import: the lookup fields worth showing. */
+export type AppStoreSourceMeta = {
+  kind: "app_store"
+  trackId: string
+  artistId: string
+  artistName: string
+  sellerName: string | null
+  country: string
+  /** Apple's own label ("Free", "$4.99"). */
+  priceLabel: string | null
+  price: number | null
+  currency: string | null
+  rating: number | null
+  ratingCount: number | null
+  genre: string | null
+  genres: string[]
+  releaseDate: string | null
+  currentVersionReleaseDate: string | null
+}
+
+/** products.source_meta for a web import. */
+export type WebSourceMeta = {
+  kind: "web"
+  domain: string
+  siteName: string | null
+  /** The page after redirects (http(s) only). */
+  finalUrl: string
+  priceLabel: string | null
+  rating: number | null
+  ratingCount: number | null
+  category: string | null
+}
+
+export type ProductSourceMeta = AppStoreSourceMeta | WebSourceMeta
+
 // --- Matching (§8) -----------------------------------------------------------------------------
 
 export const MATCH_FEATURES = [
