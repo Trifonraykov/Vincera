@@ -1,12 +1,14 @@
 import "server-only"
 
+import { AsyncLocalStorage } from "node:async_hooks"
+
 import { eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 import { appRolesOf, type AuthUser } from "@/lib/auth/user"
 import type { DbOrTx } from "@/lib/db/client"
 import { builderProfiles, creatorProfiles } from "@/lib/db/schema"
-import { env } from "@/lib/env"
+import { env, isProduction } from "@/lib/env"
 import { countUnreadNotifications } from "@/lib/notifications/center"
 import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 import { countUnreadMessages } from "@/lib/threads/queries"
@@ -21,9 +23,32 @@ export function activeAppRole(user: AuthUser): AppRole | null {
   return roles.find((role) => role === user.activeRole) ?? roles[0] ?? null
 }
 
+const requestOrigin = new AsyncLocalStorage<string>()
+
+/**
+ * The origin the phone reached this server at, outside production only: a phone talking to the
+ * desktop app or `pnpm dev` through a tunnel cannot open `NEXT_PUBLIC_APP_URL` (localhost), so
+ * links and images point back at the address it used. Production always uses the configured URL.
+ */
+export function publicOriginOf(request: Request): string | null {
+  if (isProduction()) return null
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+  if (!host || !/^[A-Za-z0-9.-]+(:\d{1,5})?$/.test(host)) return null
+  const forwarded = request.headers.get("x-forwarded-proto")
+  const proto =
+    forwarded === "http" || forwarded === "https"
+      ? forwarded
+      : new URL(request.url).protocol.replace(":", "")
+  return `${proto === "http" ? "http" : "https"}://${host}`
+}
+
+export function withRequestOrigin<T>(origin: string | null, fn: () => Promise<T>): Promise<T> {
+  return origin ? requestOrigin.run(origin, fn) : fn()
+}
+
 /** The web app's absolute URL of a path (links the native app opens in Safari). */
 export function webUrl(path = "/"): string {
-  return new URL(path, env.NEXT_PUBLIC_APP_URL).toString()
+  return new URL(path, requestOrigin.getStore() ?? env.NEXT_PUBLIC_APP_URL).toString()
 }
 
 /** Web pages that show what a mobile change touched; the web's actions revalidate the same. */

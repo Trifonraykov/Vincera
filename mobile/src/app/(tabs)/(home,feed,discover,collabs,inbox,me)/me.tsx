@@ -6,7 +6,7 @@ import { Alert, StyleSheet, Text, View } from "react-native"
 
 import { api, errorMessage } from "@/lib/api"
 import { useAuth, useMe } from "@/lib/auth"
-import { API_URL } from "@/lib/config"
+import { getApiUrl } from "@/lib/config"
 import { selectionTick } from "@/lib/haptics"
 import { Padded, Row, Screen, Section, Segmented } from "@/ui/kit"
 import { SPACING, useTheme } from "@/ui/theme"
@@ -135,7 +135,7 @@ export default function MeScreen() {
       </Section>
 
       <Section
-        footer={`Vincera ${Constants.expoConfig?.version ?? ""} · ${API_URL.replace(/^https?:\/\//, "")}`}
+        footer={`Vincera ${Constants.expoConfig?.version ?? ""} · ${getApiUrl().replace(/^https?:\/\//, "")}`}
       >
         <Row
           icon="rectangle.portrait.and.arrow.right"

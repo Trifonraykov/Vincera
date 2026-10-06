@@ -17,6 +17,7 @@ import {
 } from "react"
 
 import { api, ApiError, setApiToken, setUnauthorizedHandler } from "./api"
+import { loadApiUrl } from "./config"
 import { clearToken, readToken, writeToken } from "./token-store"
 
 /**
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(() => void forget())
     let cancelled = false
     void (async () => {
+      await loadApiUrl()
       const token = await readToken().catch(() => null)
       if (!token) {
         if (!cancelled) setState({ status: "signedOut", me: null })

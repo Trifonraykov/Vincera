@@ -1,7 +1,7 @@
 import { apiErrorSchema, MOBILE_API_PREFIX } from "@shared/schemas"
 import type { z } from "zod"
 
-import { API_URL } from "./config"
+import { getApiUrl } from "./config"
 
 /**
  * The mobile API client. Every response is parsed with the same Zod schema the server validated
@@ -52,7 +52,7 @@ export async function api<S extends z.ZodType>(
 
   let response: Response
   try {
-    response = await fetch(`${API_URL}${MOBILE_API_PREFIX}${path}`, {
+    response = await fetch(`${getApiUrl()}${MOBILE_API_PREFIX}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

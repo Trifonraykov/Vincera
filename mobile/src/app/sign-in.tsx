@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 
 import { ApiError, errorMessage } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
-import { DEV_MAILBOX_URL } from "@/lib/config"
+import { devMailboxUrl, getApiUrl, saveApiUrl } from "@/lib/config"
 import { notifyError, notifySuccess } from "@/lib/haptics"
 import { Button, Field, Screen } from "@/ui/kit"
 import { SPACING, useTheme } from "@/ui/theme"
@@ -22,11 +22,19 @@ export default function SignInScreen() {
   const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ field?: "email" | "code"; message: string } | null>(null)
+  const [server, setServer] = useState(getApiUrl())
+  const [editingServer, setEditingServer] = useState(false)
+
+  async function applyServer() {
+    setServer(await saveApiUrl(server))
+    setEditingServer(false)
+  }
 
   async function sendCode() {
     setBusy(true)
     setError(null)
     try {
+      if (editingServer) await applyServer()
       await auth.requestCode(email.trim())
       notifySuccess()
       setStep("code")
@@ -104,6 +112,27 @@ export default function SignInScreen() {
                     {error.message}
                   </Text>
                 ) : null}
+                {editingServer ? (
+                  <Field
+                    label="Server"
+                    value={server}
+                    onChangeText={setServer}
+                    placeholder="https://your-server.example"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    textContentType="URL"
+                    returnKeyType="done"
+                    onSubmitEditing={() => void applyServer()}
+                    hint="The Vincera server this app talks to, e.g. the tunnel address of your desktop app."
+                  />
+                ) : (
+                  <Button
+                    title={`Server: ${server.replace(/^https?:\/\//, "")} · Change`}
+                    kind="plain"
+                    onPress={() => setEditingServer(true)}
+                  />
+                )}
                 <Button
                   title="Email me a code"
                   busy={busy}
@@ -147,14 +176,13 @@ export default function SignInScreen() {
                     setError(null)
                   }}
                 />
-                {__DEV__ ? (
-                  <Button
-                    title="Open the dev mailbox"
-                    kind="tinted"
-                    icon="envelope"
-                    onPress={() => void WebBrowser.openBrowserAsync(DEV_MAILBOX_URL)}
-                  />
-                ) : null}
+                {/* Test servers (the desktop app, `pnpm dev`) keep emails in a mailbox page. */}
+                <Button
+                  title="Open the test server's mailbox"
+                  kind="tinted"
+                  icon="envelope"
+                  onPress={() => void WebBrowser.openBrowserAsync(devMailboxUrl())}
+                />
               </>
             )}
           </View>

@@ -63,7 +63,15 @@ GitHub Actions (`.github/workflows/ios.yml`) runs these on macOS, then `expo pre
 
 To install the CI-built app on your own Simulator: download the `Vincera-simulator-app` artifact, unzip it, and run `xcrun simctl install booted Vincera.app` (with a Simulator open).
 
-## TestFlight (not set up yet)
+## TestFlight from your Mac (Xcode + your Apple developer account)
+
+1. In App Store Connect → My Apps → **+** → New App, create the app with bundle id `com.vincera.app` (or your own, then pass `VINCERA_BUNDLE_ID`). Make sure Xcode → Settings → Accounts is signed in to the same Apple account.
+2. From the repo: `cd mobile && APPLE_TEAM_ID=<your Team ID> ./scripts/testflight.sh` (Team ID: developer.apple.com/account → Membership details). Needs Node 22+ and CocoaPods (`brew install cocoapods`).
+3. The script generates the Xcode project, archives a Release build with automatic signing (`-allowProvisioningUpdates`) and uploads it. After Apple's processing it appears under TestFlight; add yourself as an internal tester and install it from the TestFlight app.
+
+**Server:** the app needs a Vincera server the phone can reach. The sign-in screen has a **Server** field (remembered on the phone), so one build works with any server. To use the desktop app: run it on the Mac, then `cloudflared tunnel --url http://localhost:47321` (`brew install cloudflared`) and type the `https://….trycloudflare.com` address into the Server field. Sign-in codes land in the desktop app's mailbox ("Open the test server's mailbox" on the code screen). Outside production the mobile API builds links and image URLs from the address the phone used, so tunnels work.
+
+## TestFlight from CI (not set up yet)
 
 Nothing here holds Apple credentials. To ship to TestFlight you need an Apple Developer Program membership and an app record in App Store Connect with the bundle id `com.vincera.app`.
 

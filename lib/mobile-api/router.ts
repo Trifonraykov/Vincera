@@ -14,6 +14,7 @@ import { LISTING_LIMITED_MESSAGE } from "@/lib/listings/limits"
 import { MESSAGE_MESSAGES } from "@/lib/messages/post"
 import { PROPOSAL_MESSAGES } from "@/lib/proposals/service"
 
+import { publicOriginOf, withRequestOrigin } from "./context"
 import { MOBILE_MESSAGES, MobileApiError } from "./errors"
 import { MOBILE_API_PREFIX, type ApiError } from "./schemas"
 import { bearerToken, findMobileSessionUser } from "./sessions"
@@ -261,7 +262,7 @@ export async function handleMobileRequest(
     const base = { request, params, input: input.data, query: query.data, db }
     const context =
       route.auth === "public" ? base : { ...base, ...(await authenticate(request, db, route.auth)) }
-    const result = await route.run(context)
+    const result = await withRequestOrigin(publicOriginOf(request), () => route.run(context))
 
     // Dates become ISO strings; the schema then checks the wire format and drops extra fields.
     const wire: unknown = JSON.parse(JSON.stringify(result ?? {}))
