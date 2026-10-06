@@ -47,9 +47,10 @@ export default function ListingScreen() {
 function ListingBody({ listing, rank }: { listing: FeedDetail; rank: number | null }) {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
+  const { width, height: screenHeight } = useWindowDimensions()
   const [expanded, setExpanded] = useState(false)
-  const shotHeight = 440
+  // About half the screen, so the name and the button stay in view.
+  const shotHeight = Math.min(400, Math.round(screenHeight * 0.48))
   const facts = [listing.tag, listing.priceLabel, listing.sourceLabel].filter(
     (fact): fact is string => !!fact,
   )

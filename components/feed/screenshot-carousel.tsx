@@ -33,7 +33,7 @@ export function ScreenshotCarousel({ listing }: { listing: ListingCard }) {
             className={
               wide
                 ? "h-56 w-auto max-w-[88%] shrink-0 snap-center rounded-3xl object-cover ring-1 ring-black/5 sm:h-72 dark:ring-white/10"
-                : "h-[26rem] w-auto shrink-0 snap-center rounded-3xl object-cover ring-1 ring-black/5 sm:h-[30rem] dark:ring-white/10"
+                : "h-[min(50vh,30rem)] w-auto shrink-0 snap-center rounded-3xl object-cover ring-1 ring-black/5 dark:ring-white/10"
             }
             style={{
               aspectRatio: shot.width && shot.height ? `${shot.width} / ${shot.height}` : undefined,
