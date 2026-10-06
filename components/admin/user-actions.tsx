@@ -24,6 +24,7 @@ import {
   unsuspendUserAction,
 } from "@/lib/admin/actions"
 import { IMPERSONATION_REASON_MAX } from "@/lib/admin/fields"
+import { adminVerifyAppStoreAction } from "@/lib/listings/actions"
 import { verifySocialConnection } from "@/lib/social/actions"
 
 import {
@@ -165,5 +166,18 @@ export function ViewAsButton({ userId, name }: { userId: string; name: string })
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Mark a builder's App Store developer account as checked by hand (CLAUDE.md §19.45). */
+export function VerifyAppStoreButton({ builderProfileId }: { builderProfileId: string }) {
+  return (
+    <ActionButton
+      run={() => adminVerifyAppStoreAction({ builderProfileId })}
+      label="Verify account"
+      icon={<BadgeCheck aria-hidden="true" />}
+      success="App Store account marked as verified."
+      variant="outline"
+    />
   )
 }

@@ -8,6 +8,7 @@ import {
   RevokeAdminButton,
   SuspendButton,
   UnsuspendButton,
+  VerifyAppStoreButton,
   VerifyConnectionButton,
   ViewAsButton,
 } from "@/components/admin/user-actions"
@@ -25,6 +26,7 @@ import {
 import { adminAuditActionLabel } from "@/lib/admin/audit"
 import { authorizePage, isImpersonating, requireAdmin } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
+import { loadImportPanel } from "@/lib/listings/queries"
 import { evidenceViewUrl } from "@/lib/social/manual"
 
 export const metadata: Metadata = { title: "User" }
@@ -55,6 +57,7 @@ export default async function AdminUserPage({ params }: Props) {
   const detail = await loadAdminUserDetail(db, id)
   if (!detail) notFound()
   const readOnly = await isImpersonating()
+  const imports = await loadImportPanel(db, id)
   const name = detail.name ?? detail.email ?? "this account"
   const audit = await listAuditLog(db, { targetType: "user", targetId: detail.id })
   const evidenceLinks = new Map<string, string | null>()
@@ -148,6 +151,29 @@ export default async function AdminUserPage({ params }: Props) {
           ]}
         />
       </Section>
+
+      {imports?.appStore ? (
+        <Section
+          title="App Store account"
+          description="Verify by hand only after checking the developer account belongs to this builder (for example, a reply from the account's support address)."
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <a
+              className="underline"
+              href={imports.appStore.developerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {imports.appStore.developerName ?? "Developer account"}
+            </a>
+            {imports.appStore.verified ? (
+              <StatusPill tone="good">verified</StatusPill>
+            ) : readOnly ? null : (
+              <VerifyAppStoreButton builderProfileId={imports.builderProfileId} />
+            )}
+          </div>
+        </Section>
+      ) : null}
 
       <Section
         title="Social connections"
