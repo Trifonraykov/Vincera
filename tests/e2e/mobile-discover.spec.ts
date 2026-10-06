@@ -30,11 +30,15 @@ test("a creator works through matches on a phone", async ({ page }) => {
   await signInSeeded(page, seededCreator(6))
   await page.goto("/app")
 
+  // Creators have the Feed in Discover's tab slot (CLAUDE.md §19.45); Discover is on Me.
   const tabs = page.getByRole("navigation", { name: "Main" })
-  const discoverTab = tabs.getByRole("link", { exact: true, name: "Discover" })
-  await discoverTab.click()
+  await expect(tabs.getByRole("link", { exact: true, name: "Feed" })).toBeVisible()
+  await tabs.getByRole("link", { exact: true, name: "Me" }).click()
+  await page
+    .getByRole("link", { name: /^Discover/ })
+    .first()
+    .click()
   await expect(page).toHaveURL(/\/app\/discover$/)
-  await expect(discoverTab).toHaveAttribute("aria-current", "page")
   await expect(page.locator("[data-app-bar]")).toContainText("Discover")
 
   const cards = matchCards(page, "Your matches")
