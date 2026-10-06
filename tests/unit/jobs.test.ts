@@ -27,6 +27,24 @@ describe("job registry", () => {
         "matching/recompute.requested",
       ]),
     )
+    // Every declared event has a job listening to it.
+    for (const name of JOB_EVENT_NAMES) expect(jobsFor(name).length, name).toBeGreaterThan(0)
+  })
+
+  it("registers the Phase 2–3 job ids and schedules of the W2 contract (CLAUDE.md §19.24)", () => {
+    const byId = new Map(jobs.map((job) => [job.id, job]))
+    expect(Object.fromEntries([...byId].map(([id, job]) => [id, job.event]))).toMatchObject({
+      "embeddings-refresh": "embeddings/refresh.requested",
+      "matching-recompute": "matching/recompute.requested",
+      "matching-target-changed": "matching/target-changed.requested",
+      "matching-nightly": "matching/nightly.requested",
+      "proposals-expire": "proposals/expire.requested",
+      "reminders-stalled": "reminders/stalled.requested",
+      "agreements-finalize": "agreements/finalize.requested",
+    })
+    expect(byId.get("matching-nightly")?.cron).toEqual({ schedule: "30 5 * * *", data: {} })
+    expect(byId.get("proposals-expire")?.cron).toEqual({ schedule: "5 * * * *", data: {} })
+    expect(byId.get("reminders-stalled")?.cron).toEqual({ schedule: "50 8 * * *", data: {} })
   })
 
   it("runs a handler inline with a validated payload and pass-through steps", async () => {

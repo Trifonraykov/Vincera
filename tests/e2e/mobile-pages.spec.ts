@@ -162,13 +162,21 @@ test("onboarding steps for both roles fit a phone, with the main action in reach
     await atEachWidth(page, path)
   }
 
-  // Both roles: the role switch on Me changes the tabs.
+  // Both roles: the role switch on Me changes the role-aware home (both roles share the final
+  // five tabs since Phases 2–3; §19.20).
+  await page.goto("/app")
+  const homeBefore = await page.locator("h1").first().textContent()
   await page.goto("/app/me")
   const tabs = page.getByRole("navigation", { name: "Main" })
-  const before = await tabs.getByRole("link").allTextContents()
-  await page.getByRole("button", { name: /^Use as / }).click()
-  await expect(tabs.getByRole("link")).not.toHaveText(before)
+  const useAs = page.getByRole("button", { name: /^Use as / })
+  const switchTo = (await useAs.textContent())?.trim() ?? ""
+  await useAs.click()
+  // The switched-to role is now active: its button is gone, the other role's is offered.
+  await expect(page.getByRole("button", { name: switchTo })).toHaveCount(0)
   await expect(tabs.getByRole("link").last()).toHaveText("Me")
+  await tabs.getByRole("link", { exact: true, name: "Home" }).click()
+  await expect(page).toHaveURL(/\/app$/)
+  await expect(page.locator("h1").first()).not.toHaveText(homeBefore ?? "")
 })
 
 test("audience charts, connection cards and a public profile with real data fit a phone", async ({

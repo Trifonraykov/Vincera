@@ -97,6 +97,13 @@ export default defineConfig({
       ADMIN_EMAILS: E2E_ADMIN_EMAIL,
       // The service worker registers under `next dev` too, as it does in CI's production build.
       NEXT_PUBLIC_ENABLE_SW: "1",
+      // `next dev` only: Turbopack snapshots its cache (and, with turbopackMemoryEviction "full",
+      // drops the in-memory copies) after the server has been busy this long and then idle this
+      // long. The defaults wait for a quiet period that a running suite never gives it, so the
+      // dev server grew past the sandbox's memory limit and was OOM-killed (CLAUDE.md §19.29).
+      // Undocumented Turbopack variables; ignored by `next start` and by versions without them.
+      TURBO_ENGINE_SNAPSHOT_MIN_ACTIVE_TIME_MILLIS: "3000",
+      TURBO_ENGINE_SNAPSHOT_IDLE_TIMEOUT_MILLIS: "500",
     },
   },
 })

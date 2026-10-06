@@ -7,8 +7,12 @@ import { z } from "zod"
 import { ActionError, defineAction } from "@/lib/actions/define-action"
 import { canEditCreatorProfile } from "@/lib/auth/authz"
 import { getDb, withTransaction } from "@/lib/db/client"
+import { requestProfileEmbeddingRefresh } from "@/lib/embeddings/request"
 import { enqueue } from "@/lib/jobs/enqueue"
-import { completeOnboardingStep } from "@/lib/onboarding/complete-step"
+import {
+  completeOnboardingStep,
+  requestMatchingAfterOnboarding,
+} from "@/lib/onboarding/complete-step"
 import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
 import { rateLimit, type RateLimitRule } from "@/lib/ratelimit"
 
@@ -22,7 +26,7 @@ import { isSocialOAuthAvailable } from "./availability"
 import { runInBackground } from "./background"
 import { SOCIAL_PROVIDER_META } from "./catalog"
 import { disconnectConnection } from "./connections"
-import { recomputeSizeTier, refreshAudienceSummary, refreshCreatorEmbedding } from "./derived"
+import { recomputeSizeTier, refreshAudienceSummary } from "./derived"
 import {
   createEvidenceUpload,
   deleteEvidenceObject,
@@ -74,12 +78,15 @@ async function ownsConnection(
   return connection !== null && canManageSocialConnection(user, connection)
 }
 
-/** Refresh the creator's summary and embedding after the response (never blocks, §7.3). */
+/**
+ * Refresh the creator's summary after the response (never blocks, §7.3), then ask for the profile
+ * embedding (the `embeddings-refresh` job, which includes the new summary).
+ */
 async function refreshCreatorInBackground(userId: string): Promise<void> {
   await runInBackground("creator_derived", async () => {
     const db = getDb()
     await refreshAudienceSummary(db, userId)
-    await refreshCreatorEmbedding(db, userId)
+    await requestProfileEmbeddingRefresh(userId, "creator", db)
     await revalidatePublicProfiles(db, userId)
   })
 }
@@ -218,7 +225,7 @@ export const confirmAudienceReview = defineAction({
   input: audienceSummaryFormSchema,
   authorize: (user) => canViewOwnAudience(user),
   run: async ({ input, user, db }) => {
-    const nextStep = await withTransaction(async (tx) => {
+    const advance = await withTransaction(async (tx) => {
       try {
         await reviewAudienceSummary(tx, { userId: user.id, form: input, source: "onboarding" })
       } catch (error) {
@@ -227,15 +234,16 @@ export const confirmAudienceReview = defineAction({
         }
         throw error
       }
-      const result = await completeOnboardingStep(tx, {
+      return completeOnboardingStep(tx, {
         userId: user.id,
         step: "creator.review",
         status: "done",
       })
-      return result.nextStep
     }, db)
+    await requestMatchingAfterOnboarding(user.id, advance)
+    const { nextStep } = advance
     await runInBackground("creator_embedding", async () => {
-      await refreshCreatorEmbedding(getDb(), user.id)
+      await requestProfileEmbeddingRefresh(user.id, "creator")
       await revalidatePublicProfiles(getDb(), user.id)
     })
     redirect(nextStep ?? "/app")
@@ -259,7 +267,7 @@ export const updateAudienceSummary = defineAction({
     }
     if (review.changed) {
       await runInBackground("creator_embedding", async () => {
-        await refreshCreatorEmbedding(getDb(), user.id)
+        await requestProfileEmbeddingRefresh(user.id, "creator")
         await revalidatePublicProfiles(getDb(), user.id)
       })
     }
@@ -301,7 +309,7 @@ export const regenerateAudienceSummary = defineAction({
         break
     }
     await runInBackground("creator_embedding", async () => {
-      await refreshCreatorEmbedding(getDb(), user.id)
+      await requestProfileEmbeddingRefresh(user.id, "creator")
       await revalidatePublicProfiles(getDb(), user.id)
     })
     revalidateSocialPages()

@@ -64,6 +64,13 @@
       "when": 1791219707745,
       "tag": "0008_supabase_data_api_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791236898340,
+      "tag": "0009_w2_supply_collab",
+      "breakpoints": true
     }
   ]
 }

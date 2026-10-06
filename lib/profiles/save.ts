@@ -4,11 +4,14 @@ import { eq } from "drizzle-orm"
 
 import { ActionError } from "@/lib/actions/errors"
 import { now } from "@/lib/clock"
-import { withTransaction, type DbOrTx, type Tx } from "@/lib/db/client"
+import { isTransaction, withTransaction, type DbOrTx, type Tx } from "@/lib/db/client"
 import { getPgError, PG_ERROR } from "@/lib/db/errors"
 import { builderProfiles, creatorProfiles, users } from "@/lib/db/schema"
 import { track } from "@/lib/events/track"
-import { completeOnboardingStep } from "@/lib/onboarding/complete-step"
+import {
+  completeOnboardingStep,
+  requestMatchingAfterOnboarding,
+} from "@/lib/onboarding/complete-step"
 
 import type { BuilderProfileForm, CreatorProfileForm, ProfileFormSource } from "./fields"
 import { claimHandle, HandleTakenError, releaseUnusedHandle } from "./handles"
@@ -107,7 +110,7 @@ export async function saveCreatorProfile(
   input: SaveInput<CreatorProfileForm>,
 ): Promise<ProfileSaveResult> {
   const { userId, form, source } = input
-  return withPlainUniqueErrors(() =>
+  const saved = await withPlainUniqueErrors(() =>
     withTransaction(async (tx) => {
       await lockUser(tx, userId)
       const [existing] = await tx
@@ -180,14 +183,18 @@ export async function saveCreatorProfile(
         }
       }
 
-      const { nextStep } = await completeOnboardingStep(tx, {
+      const advance = await completeOnboardingStep(tx, {
         userId,
         step: "creator.profile",
         status: "done",
       })
-      return { ...result, nextStep }
+      return { ...result, nextStep: advance.nextStep, advance }
     }, database),
   )
+  const { advance, ...rest } = saved
+  // Saving the profile can finish onboarding (a role added later): matching needs to know.
+  if (!isTransaction(database)) await requestMatchingAfterOnboarding(userId, advance)
+  return rest
 }
 
 /** Insert or update the user's builder profile from the profile form. */
@@ -196,7 +203,7 @@ export async function saveBuilderProfile(
   input: SaveInput<BuilderProfileForm>,
 ): Promise<ProfileSaveResult> {
   const { userId, form, source } = input
-  return withPlainUniqueErrors(() =>
+  const saved = await withPlainUniqueErrors(() =>
     withTransaction(async (tx) => {
       await lockUser(tx, userId)
       const [existing] = await tx
@@ -263,12 +270,16 @@ export async function saveBuilderProfile(
         }
       }
 
-      const { nextStep } = await completeOnboardingStep(tx, {
+      const advance = await completeOnboardingStep(tx, {
         userId,
         step: "builder.profile",
         status: "done",
       })
-      return { ...result, nextStep }
+      return { ...result, nextStep: advance.nextStep, advance }
     }, database),
   )
+  const { advance, ...rest } = saved
+  // Saving the profile can finish onboarding (a role added later): matching needs to know.
+  if (!isTransaction(database)) await requestMatchingAfterOnboarding(userId, advance)
+  return rest
 }

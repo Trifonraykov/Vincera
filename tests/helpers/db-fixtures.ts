@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto"
 
+import { eq } from "drizzle-orm"
+
 import type { DbOrTx } from "@/lib/db/client"
 import {
   builderProfiles,
@@ -9,6 +11,7 @@ import {
   handles,
   ideas,
   launches,
+  matches,
   orders,
   portfolioItems,
   products,
@@ -16,18 +19,30 @@ import {
   proposals,
   socialConnections,
   stripeAccounts,
+  threadReads,
+  threads,
   users,
+  type CollabStage,
+  type MatchFeatures,
+  type ProposalStatus,
+  type TargetType,
   type UserRole,
 } from "@/lib/db/schema"
 
 /**
  * Minimal row builders for integration tests. Each returns the inserted row; values are unique per
- * call so tests in one file never collide.
+ * call so tests in one file never collide. They insert rows directly (no domain logic, no events).
+ *
+ * Shared by every area (CLAUDE.md §19.24): Phase 2–3 builders add area-specific fixtures to
+ * `tests/integration/<area>/helpers.ts`, not here.
  */
 
 function suffix(): string {
   return randomBytes(4).toString("hex")
 }
+
+/** Timestamp for fixture columns that only need to be set (published_at, closed_at, ...). */
+const FIXTURE_TIME = new Date("2026-01-01T00:00:00Z")
 
 export async function insertUser(db: DbOrTx, overrides: Partial<typeof users.$inferInsert> = {}) {
   const [user] = await db
@@ -67,22 +82,205 @@ export async function insertBuilder(db: DbOrTx, handle = `builder_${suffix()}`) 
   return { user, profile }
 }
 
-export async function insertIdea(db: DbOrTx, creatorProfileId: string) {
+/** An idea; a draft unless `overrides` say otherwise (`published_at` is filled for open ones). */
+export async function insertIdea(
+  db: DbOrTx,
+  creatorProfileId: string,
+  overrides: Partial<typeof ideas.$inferInsert> = {},
+) {
+  const status = overrides.status ?? "draft"
   const [idea] = await db
     .insert(ideas)
-    .values({ creatorProfileId, title: "Budget tracker for students", format: "app" })
+    .values({
+      creatorProfileId,
+      title: "Budget tracker for students",
+      format: "app",
+      publishedAt: ["open", "in_collab", "launched"].includes(status) ? FIXTURE_TIME : null,
+      archivedAt: status === "archived" ? FIXTURE_TIME : null,
+      ...overrides,
+    })
     .returning()
   if (!idea) throw new Error("insertIdea: no row returned")
   return idea
 }
 
-export async function insertProduct(db: DbOrTx, builderProfileId: string) {
+/** A product; a draft unless `overrides` say otherwise (`published_at` is filled for seeking ones). */
+export async function insertProduct(
+  db: DbOrTx,
+  builderProfileId: string,
+  overrides: Partial<typeof products.$inferInsert> = {},
+) {
+  const status = overrides.status ?? "draft"
   const [product] = await db
     .insert(products)
-    .values({ builderProfileId, title: "Invoice generator", format: "tool" })
+    .values({
+      builderProfileId,
+      title: "Invoice generator",
+      format: "tool",
+      publishedAt: ["seeking", "in_collab", "launched"].includes(status) ? FIXTURE_TIME : null,
+      archivedAt: status === "archived" ? FIXTURE_TIME : null,
+      ...overrides,
+    })
     .returning()
   if (!product) throw new Error("insertProduct: no row returned")
   return product
+}
+
+const CLOSED_STATUSES: readonly ProposalStatus[] = ["accepted", "declined", "expired", "withdrawn"]
+
+export type ProposalFixtureInput = {
+  fromUserId: string
+  toUserId: string
+  ideaId?: string
+  productId?: string
+  status?: ProposalStatus
+  creatorSplitPct?: number
+  timelineWeeks?: number
+  scope?: string
+  /** Also create the proposal's thread with a `thread_reads` row per party (never read). */
+  withThread?: boolean
+}
+
+/**
+ * A proposal with its first revision (by the sender) as the current one, like a sent proposal.
+ * Closed statuses get `closed_at`. Returns the proposal (with `currentRevisionId` set), the
+ * revision and, with `withThread`, the thread id.
+ */
+export async function insertProposal(db: DbOrTx, input: ProposalFixtureInput) {
+  const status = input.status ?? "pending"
+  const [proposal] = await db
+    .insert(proposals)
+    .values({
+      fromUserId: input.fromUserId,
+      toUserId: input.toUserId,
+      ideaId: input.ideaId ?? null,
+      productId: input.productId ?? null,
+      status,
+      closedAt: CLOSED_STATUSES.includes(status) ? FIXTURE_TIME : null,
+    })
+    .returning()
+  if (!proposal) throw new Error("insertProposal: no proposal")
+  const creatorSplitPct = input.creatorSplitPct ?? 60
+  const [revision] = await db
+    .insert(proposalRevisions)
+    .values({
+      proposalId: proposal.id,
+      authorUserId: input.fromUserId,
+      revisionNumber: 1,
+      scope: input.scope ?? "MVP",
+      creatorSplitPct,
+      builderSplitPct: 100 - creatorSplitPct,
+      timelineWeeks: input.timelineWeeks ?? 4,
+    })
+    .returning()
+  if (!revision) throw new Error("insertProposal: no revision")
+  const [updated] = await db
+    .update(proposals)
+    .set({ currentRevisionId: revision.id })
+    .where(eq(proposals.id, proposal.id))
+    .returning()
+  if (!updated) throw new Error("insertProposal: no update")
+  let threadId: string | null = null
+  if (input.withThread) {
+    const [thread] = await db
+      .insert(threads)
+      .values({ kind: "proposal", proposalId: proposal.id })
+      .returning()
+    if (!thread) throw new Error("insertProposal: no thread")
+    threadId = thread.id
+    await db.insert(threadReads).values([
+      { threadId, userId: input.fromUserId, lastReadAt: null },
+      { threadId, userId: input.toUserId, lastReadAt: null },
+    ])
+  }
+  return { proposal: updated, revision, threadId }
+}
+
+/**
+ * A creator, a builder, an open idea, an accepted proposal (`creatorSplitPct`/rest, default 60/40)
+ * and a collab in `stage` (default `agreement`) with both members and its thread. An `ended`
+ * collab gets `ended_at` and `ended_reason = completed`.
+ */
+export async function insertCollab(
+  db: DbOrTx,
+  options: { stage?: CollabStage; creatorSplitPct?: number } = {},
+) {
+  const stage = options.stage ?? "agreement"
+  const creatorSplitPct = options.creatorSplitPct ?? 60
+  const creator = await insertCreator(db)
+  const builder = await insertBuilder(db)
+  const idea = await insertIdea(db, creator.profile.id, { status: "in_collab" })
+  const { proposal } = await insertProposal(db, {
+    fromUserId: builder.user.id,
+    toUserId: creator.user.id,
+    ideaId: idea.id,
+    status: "accepted",
+    creatorSplitPct,
+  })
+  const [collab] = await db
+    .insert(collabs)
+    .values({
+      proposalId: proposal.id,
+      ideaId: idea.id,
+      stage,
+      endedAt: stage === "ended" ? FIXTURE_TIME : null,
+      endedReason: stage === "ended" ? "completed" : null,
+    })
+    .returning()
+  if (!collab) throw new Error("insertCollab: no collab")
+  await db.insert(collabMembers).values([
+    { collabId: collab.id, userId: creator.user.id, role: "creator", splitPct: creatorSplitPct },
+    {
+      collabId: collab.id,
+      userId: builder.user.id,
+      role: "builder",
+      splitPct: 100 - creatorSplitPct,
+    },
+  ])
+  const [thread] = await db
+    .insert(threads)
+    .values({ kind: "collab", collabId: collab.id })
+    .returning()
+  if (!thread) throw new Error("insertCollab: no thread")
+  await db.insert(threadReads).values([
+    { threadId: thread.id, userId: creator.user.id, lastReadAt: null },
+    { threadId: thread.id, userId: builder.user.id, lastReadAt: null },
+  ])
+  return { creator, builder, idea, proposal, collab, threadId: thread.id }
+}
+
+/** Every §8 feature at `value` (0–1). */
+export function matchFeatures(value = 0.5): MatchFeatures {
+  return {
+    semantic: value,
+    topic_overlap: value,
+    audience_fit: value,
+    format_fit: value,
+    stage_fit: value,
+    price_fit: value,
+    reliability: value,
+  }
+}
+
+/** A `v0` match row for `subjectUserId` (score 0.5, every feature 0.5 unless overridden). */
+export async function insertMatch(
+  db: DbOrTx,
+  input: { subjectUserId: string; targetType: TargetType; targetId: string } & Partial<
+    typeof matches.$inferInsert
+  >,
+) {
+  const [match] = await db
+    .insert(matches)
+    .values({
+      score: 0.5,
+      features: matchFeatures(),
+      modelVersion: "v0",
+      computedAt: FIXTURE_TIME,
+      ...input,
+    })
+    .returning()
+  if (!match) throw new Error("insertMatch: no row returned")
+  return match
 }
 
 /**
@@ -92,25 +290,14 @@ export async function insertProduct(db: DbOrTx, builderProfileId: string) {
 export async function insertLiveLaunch(db: DbOrTx) {
   const creator = await insertCreator(db)
   const builder = await insertBuilder(db)
-  const idea = await insertIdea(db, creator.profile.id)
+  const idea = await insertIdea(db, creator.profile.id, { status: "launched" })
 
-  const [proposal] = await db
-    .insert(proposals)
-    .values({
-      fromUserId: builder.user.id,
-      toUserId: creator.user.id,
-      ideaId: idea.id,
-      status: "accepted",
-    })
-    .returning()
-  if (!proposal) throw new Error("insertLiveLaunch: no proposal")
-  await db.insert(proposalRevisions).values({
-    proposalId: proposal.id,
-    authorUserId: builder.user.id,
-    scope: "MVP",
+  const { proposal } = await insertProposal(db, {
+    fromUserId: builder.user.id,
+    toUserId: creator.user.id,
+    ideaId: idea.id,
+    status: "accepted",
     creatorSplitPct: 60,
-    builderSplitPct: 40,
-    timelineWeeks: 4,
   })
 
   const [collab] = await db

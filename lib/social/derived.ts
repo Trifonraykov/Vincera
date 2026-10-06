@@ -3,7 +3,6 @@ import "server-only"
 import { and, eq, inArray, isNull } from "drizzle-orm"
 
 import type { ClaudeDeps } from "@/lib/ai/claude"
-import { embed, EmbeddingError, type EmbedDeps } from "@/lib/ai/embed"
 import {
   generateAudienceSummary,
   hasAudienceData,
@@ -11,10 +10,8 @@ import {
 } from "@/lib/ai/prompts/audience-summary"
 import { now } from "@/lib/clock"
 import { withTransaction, type DbOrTx } from "@/lib/db/client"
-import { creatorProfiles, socialConnections, type SizeTier } from "@/lib/db/schema"
-import { env, isFake } from "@/lib/env"
+import { creatorProfiles, socialConnections } from "@/lib/db/schema"
 import { track } from "@/lib/events/track"
-import { reportError } from "@/lib/observability"
 
 import { latestSnapshotsFor } from "./queries"
 import { recentContentTitles } from "./raw"
@@ -23,12 +20,13 @@ import { CREATOR_SOCIAL_PROVIDERS } from "./types"
 
 /**
  * A creator's fields derived from their social data (§5, §7.1 sync flow): `size_tier`, the
- * AI `audience_summary` + `topics`, and the profile `embedding`. Recomputed after every sync, a
- * manual entry, a disconnect and an admin verification (CLAUDE.md §19.14).
+ * AI `audience_summary` + `topics`, and the text the profile `embedding` is made from. Recomputed
+ * after every sync, a manual entry, a disconnect and an admin verification (CLAUDE.md §19.14).
+ * The embedding itself is written by the `embeddings-refresh` job (lib/embeddings, §19.25):
+ * callers ask for it with `requestEmbeddingRefresh` after their change commits.
  *
  * The summary never blocks anything (§7.3): a failed generation keeps the existing summary, and a
  * summary the creator edited (`audience_summary_edited_at`) is kept until they regenerate it.
- * Embedding failures are reported and keep the old vector.
  */
 
 type CreatorProfileRow = typeof creatorProfiles.$inferSelect
@@ -253,62 +251,4 @@ export function creatorProfileEmbeddingText(
     profile.country ? `Country: ${profile.country}` : null,
   ]
   return lines.filter((line): line is string => line !== null).join("\n")
-}
-
-/** `embedding_model` value for vectors made now (re-embed when it changes). */
-export function currentEmbeddingModel(): string {
-  return isFake("embeddings") ? "fake:hashed-bow-1024" : `voyage:${env.VOYAGE_MODEL}`
-}
-
-export type EmbeddingOutcome = "updated" | "skipped" | "failed"
-
-/** Re-embed the creator profile. Never throws: a failure is reported and keeps the old vector. */
-export async function refreshCreatorEmbedding(
-  database: DbOrTx,
-  userId: string,
-  deps: EmbedDeps = {},
-): Promise<EmbeddingOutcome> {
-  const profile = await findCreatorProfile(database, userId)
-  if (!profile) return "skipped"
-  const text = creatorProfileEmbeddingText(profile)
-  if (!text.trim()) return "skipped"
-  try {
-    const [vector] = await embed([text], "document", deps)
-    if (!vector) return "failed"
-    await database
-      .update(creatorProfiles)
-      .set({ embedding: vector, embeddingModel: currentEmbeddingModel() })
-      .where(eq(creatorProfiles.id, profile.id))
-    return "updated"
-  } catch (error) {
-    if (!(error instanceof EmbeddingError)) throw error
-    reportError(error, { tags: { area: "social", step: "creator_embedding" } })
-    return "failed"
-  }
-}
-
-// --- All of it ---------------------------------------------------------------------------------
-
-export type DerivedRefresh = {
-  sizeTier: SizeTier | null
-  summary: SummaryOutcome
-  embedding: EmbeddingOutcome
-}
-
-/**
- * Size tier, then summary, then embedding (which includes the new summary). For callers that did
- * not already recompute the tier inside their own transaction.
- */
-export async function refreshCreatorDerived(
-  database: DbOrTx,
-  userId: string,
-  options: { actorUserId?: string | null; ai?: ClaudeDeps; embed?: EmbedDeps } = {},
-): Promise<DerivedRefresh> {
-  const tier = await withTransaction((tx) => recomputeSizeTier(tx, userId), database)
-  const summary = await refreshAudienceSummary(database, userId, {
-    actorUserId: options.actorUserId,
-    ai: options.ai,
-  })
-  const embedding = await refreshCreatorEmbedding(database, userId, options.embed)
-  return { sizeTier: tier.tier, summary: summary.outcome, embedding }
 }

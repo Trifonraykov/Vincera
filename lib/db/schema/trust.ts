@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { boolean, index, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, index, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core"
 
 import { createdAt, id, timestamps, timestamptz, withRLS } from "./columns"
 import { disputeKindEnum, disputeStatusEnum } from "./enums"
@@ -66,7 +66,12 @@ export const notifications = withRLS(
     },
     (t) => [
       index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt.desc()),
+      // The bell's unread count (§19.24): in-app rows the user has not read.
+      index("notifications_user_unread_idx")
+        .on(t.userId)
+        .where(sql`${t.readAt} IS NULL AND ${t.inApp}`),
       unique("notifications_user_dedupe_key").on(t.userId, t.dedupeKey),
+      check("notifications_payload_object", sql`jsonb_typeof(${t.payload}) = 'object'`),
     ],
   ),
 )

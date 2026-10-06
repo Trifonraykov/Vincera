@@ -39,17 +39,54 @@ export const jobEventSchemas = {
    */
   "social/youtube-retention.requested": z.object({}),
 
-  /** Re-embed one profile, idea or product after it changed. */
+  // --- Phases 2–3 (declared by the W2 prep; contracts in CLAUDE.md §19.24) ----------------------
+
+  /**
+   * Re-embed one profile, idea or product after it changed (job `embeddings-refresh`, debounced
+   * 10 min per entity), then ask matching to recompute. Send it with `requestEmbeddingRefresh()`
+   * (lib/embeddings/request.ts) after any committed change that matters for matching.
+   */
   "embeddings/refresh.requested": z.object({
     subjectType: z.enum(["creator_profile", "builder_profile", "idea", "product"]),
     subjectId: z.uuid(),
   }),
 
-  /** Recompute matches for one user (debounced per user), or everyone when userId is absent. */
+  /**
+   * Recompute one user's match list (job `matching-recompute`, debounced 10 min per user). Send it
+   * with `requestMatchingRecompute()` (lib/matching/request.ts).
+   */
   "matching/recompute.requested": z.object({
-    userId: z.uuid().optional(),
+    userId: z.uuid(),
     reason: z.enum(["profile_changed", "idea_changed", "product_changed", "nightly", "manual"]),
   }),
+
+  /**
+   * Re-score one target (a creator, builder, idea or product) for the users who may see it (job
+   * `matching-target-changed`, debounced 10 min per target). Send it with
+   * `requestTargetRescore()` (lib/matching/request.ts).
+   */
+  "matching/target-changed.requested": z.object({
+    targetType: z.enum(["creator", "builder", "idea", "product"]),
+    targetId: z.uuid(),
+  }),
+
+  /** Nightly fan-out (§8): recompute every eligible user's matches (job `matching-nightly`). */
+  "matching/nightly.requested": z.object({}),
+
+  /** Hourly (§13): expire open proposals past `expires_at` (job `proposals-expire`). */
+  "proposals/expire.requested": z.object({}),
+
+  /**
+   * Daily (§13): nudge collabs with no activity for 7 days and agreements unsigned after 3 days
+   * (job `reminders-stalled`).
+   */
+  "reminders/stalled.requested": z.object({}),
+
+  /**
+   * After the last signature (§12): render the signed PDF, store it, set `pdf_storage_key` and
+   * email it to both members (job `agreements-finalize`).
+   */
+  "agreements/finalize.requested": z.object({ agreementId: z.uuid() }),
 } as const satisfies Record<string, z.ZodObject>
 
 export type JobEventName = keyof typeof jobEventSchemas

@@ -136,8 +136,18 @@ export function Field({
 
 /** A native `<select>` (works with FormData and on every phone) styled like `Input`. */
 export function NativeSelect({ className, ...props }: ComponentProps<"select">) {
+  // React resets a form after its action runs, putting every field back to its default. An
+  // input picks up a changed `defaultValue`, but a <select> applies it only when it mounts, so
+  // after a refused submit (useFormAction passes the submitted value as the new default) the
+  // reset would fall back to the first default and drop the person's choice. Remounting on a
+  // changed default keeps it (CLAUDE.md §19.29).
+  const remountKey =
+    props.value === undefined && props.defaultValue !== undefined
+      ? String(props.defaultValue)
+      : undefined
   return (
     <select
+      key={remountKey}
       className={cn(
         "h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm dark:bg-input/30",
         "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",

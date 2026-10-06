@@ -71,11 +71,14 @@ test("the status bar keeps the chosen theme across tab taps and on every page", 
   await expect(page).toHaveURL(/\/app$/)
   await expect(page.getByRole("heading", { level: 1, name: "Creator home" })).toBeVisible()
   await expect.poll(() => themeColors(page)).toEqual([DARK, DARK])
-  await tabs.getByRole("link", { exact: true, name: "Profile" }).click()
-  await expect(page).toHaveURL(/\/app\/settings\/profile$/)
+  // The second tab, whichever page it is in this build (the bar follows the built pages).
+  const second = tabs.getByRole("link").nth(1)
+  await second.click()
+  await expect(second).toHaveAttribute("aria-current", "page")
   await expect.poll(() => themeColors(page)).toEqual([DARK, DARK])
 
   // Pages outside the app shell follow the choice too: sign-in and the public profile.
+  await page.goto("/app/settings/profile")
   const handle = await page.getByLabel("Handle").inputValue()
   await page.goto(`/c/${handle}`)
   await expect.poll(() => themeColors(page)).toEqual([DARK, DARK])

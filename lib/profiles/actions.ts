@@ -12,15 +12,18 @@ import {
   canManagePortfolioItem,
 } from "@/lib/auth/authz"
 import { getDb, type Db } from "@/lib/db/client"
+import {
+  requestEmbeddingRefreshAfterCommit,
+  requestProfileEmbeddingRefresh,
+} from "@/lib/embeddings/request"
 import { runInBackground } from "@/lib/jobs/background"
+import { requestMatchingForPerson } from "@/lib/matching/request"
 import { completeOnboardingStep } from "@/lib/onboarding/complete-step"
 import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
 import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { rateLimit, type RateLimitRule } from "@/lib/ratelimit"
-import { refreshCreatorEmbedding } from "@/lib/social/derived"
 import { publicProfilePaths, revalidatePublicProfiles } from "@/lib/social/revalidate"
 
-import { refreshBuilderEmbedding } from "./embedding"
 import {
   builderProfileFormSchema,
   creatorProfileFormSchema,
@@ -47,8 +50,8 @@ import { saveBuilderProfile, saveCreatorProfile, type ProfileSaveResult } from "
  * Server actions for profiles (§4, §12): the creator and builder profile forms (onboarding step
  * and Settings → Profile), the live handle check, portfolio items and their images, and
  * "Continue" on the portfolio step. Each authorizes with lib/auth/authz.ts. After the commit,
- * embeddings are refreshed in the background (§8 `semantic`) and public profile pages are
- * revalidated.
+ * the profile's embedding refresh is requested (`embeddings-refresh` job, §8 `semantic`, CLAUDE.md
+ * §19.25) and public profile pages are revalidated.
  */
 
 /** The live handle check runs as people type (debounced): 60 per user per minute. */
@@ -61,6 +64,12 @@ const sourceField = z.enum(PROFILE_FORM_SOURCES).default("settings")
 /** Columns whose change alters the embedding text (lib/social/derived.ts, ./embedding.ts). */
 const CREATOR_EMBEDDED = new Set(["niche", "bio", "topics", "languages", "country"])
 const BUILDER_EMBEDDED = new Set(["bio", "skills", "stack"])
+/**
+ * Fields that change who may be matched without changing the embedded text: a builder's
+ * availability decides whether creators see them at all (§8 "availability ≠ closed"), so a change
+ * asks matching directly instead of waiting for the nightly run (CLAUDE.md §19.30).
+ */
+const BUILDER_CANDIDACY = new Set(["availability"])
 
 const PROFILE_PAGES = ["/app/settings/profile", "/app/audience", "/app"] as const
 
@@ -73,10 +82,15 @@ async function afterProfileSave(
   userId: string,
   result: ProfileSaveResult,
   embedded: ReadonlySet<string>,
-  reembed: (db: Db, userId: string) => Promise<unknown>,
+  type: "creator_profile" | "builder_profile",
+  candidacy: ReadonlySet<string> = new Set(),
 ): Promise<void> {
-  if (result.created || result.fields.some((field) => embedded.has(field))) {
-    await runInBackground("profiles", "profile_embedding", () => reembed(db, userId))
+  const reembed = result.created || result.fields.some((field) => embedded.has(field))
+  if (reembed) {
+    await requestEmbeddingRefreshAfterCommit({ type, id: result.profileId })
+  } else if (result.fields.some((field) => candidacy.has(field))) {
+    // The embedding job would ask matching anyway; without a re-embed, ask it here.
+    await requestMatchingForPerson(userId, [type === "creator_profile" ? "creator" : "builder"])
   }
   if (result.created || result.fields.length > 0) {
     await revalidatePublicProfiles(db, userId)
@@ -93,7 +107,7 @@ export const saveCreatorProfileAction = defineAction({
   run: async ({ input, user, db }) => {
     const { from, ...form } = input
     const result = await saveCreatorProfile(db, { userId: user.id, form, source: from })
-    await afterProfileSave(db, user.id, result, CREATOR_EMBEDDED, refreshCreatorEmbedding)
+    await afterProfileSave(db, user.id, result, CREATOR_EMBEDDED, "creator_profile")
     if (from === "onboarding") redirect(result.nextStep ?? "/app")
     return { created: result.created, changed: result.fields.length > 0, handle: form.handle }
   },
@@ -107,7 +121,14 @@ export const saveBuilderProfileAction = defineAction({
   run: async ({ input, user, db }) => {
     const { from, ...form } = input
     const result = await saveBuilderProfile(db, { userId: user.id, form, source: from })
-    await afterProfileSave(db, user.id, result, BUILDER_EMBEDDED, refreshBuilderEmbedding)
+    await afterProfileSave(
+      db,
+      user.id,
+      result,
+      BUILDER_EMBEDDED,
+      "builder_profile",
+      BUILDER_CANDIDACY,
+    )
     if (from === "onboarding") redirect(result.nextStep ?? "/app")
     return { created: result.created, changed: result.fields.length > 0, handle: form.handle }
   },
@@ -144,7 +165,7 @@ async function afterPortfolioChange(
       deletePortfolioImage(db, removedImageKey),
     )
   }
-  await runInBackground("profiles", "builder_embedding", () => refreshBuilderEmbedding(db, userId))
+  await requestProfileEmbeddingRefresh(userId, "builder", db)
   await revalidatePublicProfiles(db, userId)
   revalidatePaths(PORTFOLIO_PAGES)
 }

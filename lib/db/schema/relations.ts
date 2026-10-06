@@ -131,12 +131,13 @@ export const matchingConfigRelations = relations(matchingConfig, ({ many }) => (
   matches: many(matches),
 }))
 
-export const matchesRelations = relations(matches, ({ one }) => ({
+export const matchesRelations = relations(matches, ({ one, many }) => ({
   subjectUser: one(users, { fields: [matches.subjectUserId], references: [users.id] }),
   config: one(matchingConfig, {
     fields: [matches.modelVersion],
     references: [matchingConfig.modelVersion],
   }),
+  proposals: many(proposals),
 }))
 
 export const savedItemsRelations = relations(savedItems, ({ one }) => ({
@@ -158,6 +159,7 @@ export const proposalsRelations = relations(proposals, ({ one, many }) => ({
   }),
   idea: one(ideas, { fields: [proposals.ideaId], references: [ideas.id] }),
   product: one(products, { fields: [proposals.productId], references: [products.id] }),
+  match: one(matches, { fields: [proposals.matchId], references: [matches.id] }),
   currentRevision: one(proposalRevisions, {
     fields: [proposals.currentRevisionId],
     references: [proposalRevisions.id],
@@ -209,7 +211,21 @@ export const agreementSignaturesRelations = relations(agreementSignatures, ({ on
 
 export const tasksRelations = relations(tasks, ({ one }) => ({
   collab: one(collabs, { fields: [tasks.collabId], references: [collabs.id] }),
-  assignee: one(users, { fields: [tasks.assigneeUserId], references: [users.id] }),
+  assignee: one(users, {
+    fields: [tasks.assigneeUserId],
+    references: [users.id],
+    relationName: "task_assignee",
+  }),
+  createdBy: one(users, {
+    fields: [tasks.createdByUserId],
+    references: [users.id],
+    relationName: "task_created_by",
+  }),
+  completedBy: one(users, {
+    fields: [tasks.completedByUserId],
+    references: [users.id],
+    relationName: "task_completed_by",
+  }),
 }))
 
 export const threadsRelations = relations(threads, ({ one, many }) => ({

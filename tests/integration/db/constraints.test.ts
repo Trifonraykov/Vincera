@@ -95,10 +95,12 @@ describe("proposals", () => {
       .values({ fromUserId: builder.user.id, toUserId: creator.user.id, ideaId: idea.id })
       .returning()
     if (!proposal) throw new Error("no proposal")
+    let revisionNumber = 0
     const revision = (creatorSplitPct: number, builderSplitPct: number) =>
       testDb.db.insert(proposalRevisions).values({
         proposalId: proposal.id,
         authorUserId: builder.user.id,
+        revisionNumber: ++revisionNumber,
         scope: "MVP",
         creatorSplitPct,
         builderSplitPct,

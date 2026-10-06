@@ -62,7 +62,8 @@ const testDb = setupTestDatabase()
 
 beforeEach(async () => {
   dataRoot.dir = await makeTempDataDir()
-  stubSocialEnv()
+  // Inline jobs (the embeddings refresh a sync asks for) use the app's database: this file's.
+  stubSocialEnv({ DATABASE_URL: testDb.url })
   setClockForTests(NOW)
   await testDb.db.transaction(async (tx) => {
     await allowGdprErasure(tx)
@@ -115,7 +116,7 @@ describe("syncConnection", () => {
       provider: "youtube",
       sizeTier: "micro",
       summary: "generated",
-      embedding: "updated",
+      embedding: "requested",
     })
     if (result.status !== "synced") return
 

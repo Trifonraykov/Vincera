@@ -5,6 +5,7 @@ import { uniqueEmail } from "./helpers/accounts"
 import { chooseRole, signUp } from "./helpers/auth"
 import { completeOnboardingInDb, withE2eDb } from "./helpers/db"
 import { fillCreatorProfile, uniqueHandle } from "./helpers/profiles"
+import { appNav, appTabs, isBuiltRoute } from "@/lib/nav"
 
 /**
  * The signed-in app as a phone app ("mobile" project: an iPhone 13 screen on Chromium): the bottom
@@ -18,6 +19,20 @@ async function horizontalOverflow(page: Page): Promise<number> {
     const root = document.scrollingElement ?? document.documentElement
     return root.scrollWidth - window.innerWidth
   })
+}
+
+/**
+ * The tab bar follows the pages built so far (lib/nav.ts `appTabs`): each phase that adds a page
+ * changes it, so the expectations come from the same function the shell uses. Headings of the
+ * pages a tab can open, where known.
+ */
+const TAB_HEADINGS: Record<string, string> = {
+  "/app/audience": "Audience",
+  "/app/ideas": "Ideas",
+  "/app/products": "Products",
+  "/app/settings/profile": "Profile",
+  "/app/settings/connections": "Connections",
+  "/app/settings/payouts": "Payouts",
 }
 
 test.use({ colorScheme: "dark" })
@@ -49,7 +64,8 @@ test("a creator moves around the app with the bottom tabs, the app bar and Me", 
   await expect(page.locator("html")).toHaveClass(/\bdark\b/)
   const tabs = page.getByRole("navigation", { name: "Main" })
   await expect(tabs).toBeVisible()
-  await expect(tabs.getByRole("link")).toHaveText(["Home", "Audience", "Profile", "Payouts", "Me"])
+  const creatorTabs = appTabs("creator")
+  await expect(tabs.getByRole("link")).toHaveText(creatorTabs.map((tab) => tab.title))
   await expect(tabs.getByRole("link", { exact: true, name: "Home" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -64,11 +80,11 @@ test("a creator moves around the app with the bottom tabs, the app bar and Me", 
 
   // Every tab opens a real page (no 404), the tab bar stays, and touch targets are big enough.
   const expected = [
-    { name: "Audience", url: /\/app\/audience$/, heading: "Audience" },
-    { name: "Profile", url: /\/app\/settings\/profile$/, heading: "Profile" },
-    { name: "Payouts", url: /\/app\/settings\/payouts$/, heading: "Payouts" },
-    { name: "Me", url: /\/app\/me$/, heading: "Mia Mobile" },
-    { name: "Home", url: /\/app$/, heading: "Creator home" },
+    ...creatorTabs
+      .filter((tab) => tab.id !== "home" && tab.id !== "me")
+      .map((tab) => ({ name: tab.title, path: tab.href, heading: TAB_HEADINGS[tab.href] })),
+    { name: "Me", path: "/app/me", heading: "Mia Mobile" },
+    { name: "Home", path: "/app", heading: "Creator home" },
   ]
   for (const tab of expected) {
     const link = tabs.getByRole("link", { exact: true, name: tab.name })
@@ -76,8 +92,12 @@ test("a creator moves around the app with the bottom tabs, the app bar and Me", 
     expect(box?.height).toBeGreaterThanOrEqual(44)
     expect(box?.width).toBeGreaterThanOrEqual(44)
     await link.click()
-    await expect(page).toHaveURL(tab.url)
-    await expect(page.getByRole("heading", { level: 1, name: tab.heading })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`${tab.path.replaceAll("/", "\\/")}$`))
+    await expect(
+      tab.heading
+        ? page.getByRole("heading", { level: 1, name: tab.heading })
+        : page.getByRole("heading", { level: 1 }),
+    ).toBeVisible()
     await expect(link).toHaveAttribute("aria-current", "page")
     await expect(page.getByText("Page not found")).toHaveCount(0)
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0)
@@ -90,7 +110,15 @@ test("a creator moves around the app with the bottom tabs, the app bar and Me", 
   const me = page.locator("main")
   // Pages of later phases: listed, marked "Soon", not links.
   const soonRows = me.locator("[data-coming-soon]")
-  for (const soon of ["Ideas", "Discover", "Proposals", "Collabs", "Messages", "Earnings"]) {
+  const later = [
+    ["Ideas", "/app/ideas"],
+    ["Discover", "/app/discover"],
+    ["Proposals", "/app/proposals"],
+    ["Collabs", "/app/collabs"],
+    ["Messages", "/app/messages"],
+    ["Earnings", "/app/earnings"],
+  ].filter(([, href]) => !isBuiltRoute(href ?? ""))
+  for (const [soon] of later) {
     await expect(soonRows.filter({ hasText: soon })).toContainText(["Soon"])
   }
   await expect(soonRows.getByRole("link")).toHaveCount(0)
@@ -124,7 +152,7 @@ test("a creator moves around the app with the bottom tabs, the app bar and Me", 
   )
 
   // The profile form's sticky Save bar sits above the tab bar, never under it.
-  await tabs.getByRole("link", { exact: true, name: "Profile" }).click()
+  await page.goto("/app/settings/profile")
   const save = page.getByRole("button", { name: "Save creator profile" })
   await expect(save).toBeVisible()
   const saveBox = await save.boundingBox()
@@ -159,14 +187,9 @@ test("a builder's tabs, and pages that don't exist yet keep the shell and a way 
   // The builder's tabs only lead to built pages.
   await page.goto("/app")
   const tabs = page.getByRole("navigation", { name: "Main" })
-  await expect(tabs.getByRole("link")).toHaveText([
-    "Home",
-    "Profile",
-    "Connections",
-    "Payouts",
-    "Me",
-  ])
-  for (const name of ["Profile", "Connections", "Payouts", "Me", "Home"]) {
+  const builderTabs = appTabs("builder").map((tab) => tab.title)
+  await expect(tabs.getByRole("link")).toHaveText(builderTabs)
+  for (const name of [...builderTabs.slice(1), "Home"]) {
     await tabs.getByRole("link", { name, exact: true }).click()
     await expect(tabs.getByRole("link", { name, exact: true })).toHaveAttribute(
       "aria-current",
@@ -190,13 +213,17 @@ test("a builder's tabs, and pages that don't exist yet keep the shell and a way 
 
   // A §12 page a later phase builds: "Coming soon" inside the shell, with the tabs and a back
   // button (to Me, which lists it).
-  const discover = await page.goto("/app/discover")
-  expect(discover?.status()).toBe(404)
-  await expect(page.getByRole("heading", { level: 1, name: "Discover" })).toBeVisible()
+  const planned = appNav("builder")
+    .flatMap((section) => section.items)
+    .find((item) => !isBuiltRoute(item.href))
+  if (!planned) throw new Error("every builder menu page is built; pick another planned route")
+  const soon = await page.goto(planned.href)
+  expect(soon?.status()).toBe(404)
+  await expect(page.getByRole("heading", { level: 1, name: planned.title })).toBeVisible()
   await expect(page.getByText("Coming soon", { exact: true })).toBeVisible()
   await expect(tabs).toBeVisible()
   const appBar = page.locator("[data-app-bar]")
-  await expect(appBar).toContainText("Discover")
+  await expect(appBar).toContainText(planned.title)
   await appBar.getByRole("link", { name: "Back" }).click()
   await expect(page).toHaveURL(/\/app\/me$/)
 

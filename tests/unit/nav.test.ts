@@ -148,21 +148,48 @@ describe("navigation", () => {
         expect(navHrefs(appNav(role))).toContain(tab.href)
       }
     }
-    // Phase 1: Discover, Collabs and Inbox are not built yet, so the role's next pages stand in.
-    expect(appTabs("creator").map((tab) => tab.title)).toEqual([
-      "Home",
-      "Audience",
-      "Profile",
-      "Payouts",
-      "Me",
-    ])
-    expect(appTabs("builder").map((tab) => tab.title)).toEqual([
-      "Home",
-      "Profile",
-      "Connections",
-      "Payouts",
-      "Me",
-    ])
+    // Discover, Collabs and Inbox take the middle slots once built; until then the role's next
+    // built pages stand in, in this order (Phase 2 supply added Ideas and Products).
+    const preference: Record<"creator" | "builder", [string, string][]> = {
+      creator: [
+        ["Discover", "/app/discover"],
+        ["Collabs", "/app/collabs"],
+        ["Inbox", "/app/messages"],
+        ["Audience", "/app/audience"],
+        ["Ideas", "/app/ideas"],
+        ["Proposals", "/app/proposals"],
+        ["Profile", "/app/settings/profile"],
+        ["Payouts", "/app/settings/payouts"],
+      ],
+      builder: [
+        ["Discover", "/app/discover"],
+        ["Collabs", "/app/collabs"],
+        ["Inbox", "/app/messages"],
+        ["Products", "/app/products"],
+        ["Proposals", "/app/proposals"],
+        ["Profile", "/app/settings/profile"],
+        ["Connections", "/app/settings/connections"],
+      ],
+    }
+    for (const role of ["creator", "builder"] as const) {
+      const middle = preference[role]
+        .filter(([, href]) => isBuiltRoute(href))
+        .map(([title]) => title)
+        .slice(0, MOBILE_TAB_COUNT - 2)
+      expect(appTabs(role).map((tab) => tab.title)).toEqual(["Home", ...middle, "Me"])
+    }
+    // Once Discover, Collabs and Inbox are built, both roles have the final five tabs.
+    if (["/app/discover", "/app/collabs", "/app/messages"].every(isBuiltRoute)) {
+      for (const role of ["creator", "builder"] as const) {
+        expect(appTabs(role).map((tab) => tab.title)).toEqual([
+          "Home",
+          "Discover",
+          "Collabs",
+          "Inbox",
+          "Me",
+        ])
+      }
+    }
   })
 
   it("reaches every §12 app destination on a phone, through a tab or the Me page", () => {
@@ -184,26 +211,37 @@ describe("navigation", () => {
         }
       }
     }
-    // The role's own pages: creators see Ideas, builders Products; both see the shared ones.
-    const creatorMe = mePageSections("creator").flatMap((section) => section.items)
-    const builderMe = mePageSections("builder").flatMap((section) => section.items)
-    expect(creatorMe.map((item) => item.title)).toEqual(
+    // The role's own pages: creators reach Ideas, builders Products (a tab or on Me); both reach
+    // the shared ones.
+    const onPhone = (role: "creator" | "builder") => [
+      ...appTabs(role).map((tab) => tab.title),
+      ...mePageSections(role).flatMap((section) => section.items.map((item) => item.title)),
+    ]
+    expect(onPhone("creator")).toEqual(
       expect.arrayContaining(["Ideas", "Discover", "Proposals", "Collabs", "Launches"]),
     )
-    expect(builderMe.map((item) => item.title)).toEqual(
-      expect.arrayContaining(["Products", "Discover", "Proposals", "Messages", "Earnings"]),
+    expect(onPhone("builder")).toEqual(
+      expect.arrayContaining(["Products", "Discover", "Proposals", "Notifications", "Earnings"]),
     )
+    const builderMe = mePageSections("builder").flatMap((section) => section.items)
     expect(builderMe.map((item) => item.href)).not.toContain("/app/audience")
   })
 
   it("lights up the tab a page belongs to, and Me for everything else in the app", () => {
     const tabs = appTabs("creator")
+    // The tab that owns a page when it is one of the tabs right now, else Me.
+    const owner = (href: string, title: string) =>
+      tabs.some((tab) => tab.href === href) ? title : "Me"
     expect(activeTab("/app", tabs)?.title).toBe("Home")
-    expect(activeTab("/app/audience", tabs)?.title).toBe("Audience")
-    expect(activeTab("/app/settings/payouts", tabs)?.title).toBe("Payouts")
+    expect(activeTab("/app/audience", tabs)?.title).toBe(owner("/app/audience", "Audience"))
+    expect(activeTab("/app/ideas/0190", tabs)?.title).toBe(owner("/app/ideas", "Ideas"))
+    expect(activeTab("/app/settings/payouts", tabs)?.title).toBe(
+      owner("/app/settings/payouts", "Payouts"),
+    )
     expect(activeTab("/app/settings/account", tabs)?.title).toBe("Me")
     expect(activeTab("/app/me", tabs)?.title).toBe("Me")
-    expect(activeTab("/app/collabs/0190/tasks", tabs)?.title).toBe("Me")
+    expect(activeTab("/app/collabs/0190/tasks", tabs)?.title).toBe(owner("/app/collabs", "Collabs"))
+    expect(activeTab("/app/discover/briefs", tabs)?.title).toBe(owner("/app/discover", "Discover"))
     expect(activeTab("/admin", tabs)).toBeNull()
     expect(activeTab("/application", tabs)).toBeNull()
   })
@@ -227,7 +265,7 @@ describe("navigation", () => {
     // Tabs and section roots have none.
     expect(shellBackHref("/app", tabs)).toBeNull()
     expect(shellBackHref(ME_PATH, tabs)).toBeNull()
-    expect(shellBackHref("/app/settings/profile", tabs)).toBeNull()
+    for (const tab of tabs) expect(shellBackHref(tab.href, tabs)).toBeNull()
     expect(shellBackHref("/admin", tabs)).toBeNull()
     expect(shellBackHref("/admin/users", tabs)).toBeNull()
     // Settings and the app's own sections are listed on Me.
@@ -235,23 +273,32 @@ describe("navigation", () => {
     expect(shellBackHref("/app/audience", tabs)).toBe(ME_PATH)
     // Nested pages go up; dynamic parents (ids) are assumed to exist, unbuilt menu pages skipped.
     expect(shellBackHref("/app/collabs/0190/tasks", tabs)).toBe("/app/collabs/0190")
-    expect(shellBackHref("/app/collabs/0190", tabs)).toBe(ME_PATH)
-    expect(shellBackHref("/app/discover/creators", tabs)).toBe(ME_PATH)
+    expect(shellBackHref("/app/collabs/0190", tabs)).toBe(
+      isBuiltRoute("/app/collabs") ? "/app/collabs" : ME_PATH,
+    )
+    expect(shellBackHref("/app/discover/creators", tabs)).toBe(
+      isBuiltRoute("/app/discover") ? "/app/discover" : ME_PATH,
+    )
     // The admin users list is not built yet, so the admin bar keeps its menu button there.
     expect(shellBackHref("/admin/users/0190", tabs)).toBeNull()
     expect(shellBackHref("/c/ada", tabs)).toBeNull()
   })
 
   it("names the menu item of a page a later phase builds, for the shell's coming-soon page", () => {
-    expect(plannedNavItem("/app/discover")?.title).toBe("Discover")
-    expect(plannedNavItem("/app/discover/briefs")?.title).toBe("Discover")
-    expect(plannedNavItem("/app/ideas/new")?.title).toBe("Ideas")
-    expect(plannedNavItem("/app/collabs/0190/agreement")?.title).toBe("Collabs")
+    // Discover is built (Phase 2): its pages are not "coming soon".
+    expect(plannedNavItem("/app/discover")).toBeNull()
+    expect(plannedNavItem("/app/discover/briefs")).toBeNull()
+    expect(plannedNavItem("/app/launches/0190/kit")?.title).toBe("Launches")
+    expect(plannedNavItem("/app/collabs/0190/agreement")?.title).toBe(
+      isBuiltRoute("/app/collabs") ? undefined : "Collabs",
+    )
     expect(plannedNavItem("/app/earnings/payouts")?.title).toBe("Earnings")
-    expect(plannedNavItem("/app/notifications")?.title).toBe("Notifications")
     expect(plannedNavItem("/admin/users")?.title).toBe("Users")
     // Built pages and unknown paths are not "coming soon".
     expect(plannedNavItem("/app")).toBeNull()
+    expect(plannedNavItem("/app/ideas/new")).toBeNull()
+    expect(plannedNavItem("/app/notifications")).toBeNull()
+    expect(plannedNavItem("/app/proposals/new")).toBeNull()
     expect(plannedNavItem("/app/settings/payouts")).toBeNull()
     expect(plannedNavItem("/app/settings/nope")).toBeNull()
     expect(plannedNavItem("/app/nope")).toBeNull()

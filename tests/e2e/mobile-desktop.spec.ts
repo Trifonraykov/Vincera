@@ -2,6 +2,7 @@ import { expect, test } from "./fixtures"
 import { uniqueEmail } from "./helpers/accounts"
 import { chooseRole, signUp } from "./helpers/auth"
 import { completeOnboardingInDb } from "./helpers/db"
+import { appNav, isBuiltRoute } from "@/lib/nav"
 
 /**
  * The phone shell must leave the desktop alone (runs in the desktop "chromium" project, next to
@@ -22,7 +23,16 @@ test("desktop keeps the sidebar; the phone tab bar and app bar stay hidden", asy
   await expect(page.getByRole("button", { name: "Toggle Sidebar" }).first()).toBeVisible()
   const sidebar = page.locator('[data-slot="sidebar"]')
   await expect(sidebar.getByRole("link", { name: "Audience" })).toBeVisible()
-  await expect(sidebar.getByRole("button", { name: "Discover (coming soon)" })).toBeDisabled()
+  // Built pages are links; a menu item whose page a later phase builds is a disabled "Soon" row.
+  const items = appNav("creator").flatMap((section) => section.items)
+  const built = items.find((item) => item.href !== "/app" && isBuiltRoute(item.href))
+  const planned = items.find((item) => !isBuiltRoute(item.href))
+  if (built) await expect(sidebar.getByRole("link", { name: built.title }).first()).toBeVisible()
+  if (planned) {
+    await expect(
+      sidebar.getByRole("button", { name: `${planned.title} (coming soon)` }),
+    ).toBeDisabled()
+  }
   await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden()
   await expect(page.locator("[data-app-bar]")).toBeHidden()
 

@@ -10,7 +10,11 @@ import { withTransaction } from "@/lib/db/client"
 import type { AppRole } from "@/lib/nav"
 import { addUserRoles } from "@/lib/users/roles"
 
-import { advanceOnboarding, completeOnboardingStep } from "./complete-step"
+import {
+  advanceOnboarding,
+  completeOnboardingStep,
+  requestMatchingAfterOnboarding,
+} from "./complete-step"
 import { ROLE_CHOICES, rolesForChoice } from "./role-choices"
 import { SKIPPABLE_ONBOARDING_STEPS } from "./steps"
 
@@ -32,7 +36,7 @@ export const chooseRoles = defineAction({
     const current = appRolesOf(user).find((role) => role === user.activeRole)
     const activeRole: AppRole = input.choice === "both" ? (current ?? "creator") : input.choice
 
-    const nextStep = await withTransaction(async (tx) => {
+    const advance = await withTransaction(async (tx) => {
       await addUserRoles(tx, {
         userId: user.id,
         roles,
@@ -40,9 +44,10 @@ export const chooseRoles = defineAction({
         actorUserId: user.id,
         activeRole,
       })
-      return (await advanceOnboarding(tx, user.id)).nextStep
+      return advanceOnboarding(tx, user.id)
     }, db)
-    redirect(nextStep ?? "/app")
+    await requestMatchingAfterOnboarding(user.id, advance)
+    redirect(advance.nextStep ?? "/app")
   },
 })
 

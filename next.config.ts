@@ -8,6 +8,15 @@ const nextConfig: NextConfig = {
   // (the tab bar's Home and More, the sidebar toggle, the theme switch), so it covered Home.
   // Compile and runtime errors are still shown (CLAUDE.md §19.19).
   devIndicators: false,
+  // The signed agreement PDF's fonts are read from disk at run time (lib/agreements/pdf.tsx), a
+  // path the file tracer cannot follow: list them for every function that renders the PDF (the
+  // Inngest endpoint; the agreement page, whose sign action finalizes inline when jobs are fake;
+  // the test-only job route). CLAUDE.md §19.30.
+  outputFileTracingIncludes: {
+    "/api/inngest": ["./lib/agreements/fonts/*.ttf"],
+    "/app/collabs/[id]/agreement": ["./lib/agreements/fonts/*.ttf"],
+    "/api/test/jobs/[name]": ["./lib/agreements/fonts/*.ttf"],
+  },
   experimental: {
     // `next dev` keeps every compiled route in memory until Turbopack's "auto" eviction sees memory
     // pressure, which it reads from the whole machine: inside a container or CI runner with a

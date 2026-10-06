@@ -17,7 +17,8 @@ import NotificationEmail from "@/lib/email/templates/notification"
 import { env } from "@/lib/env"
 import { track } from "@/lib/events/track"
 import { notify } from "@/lib/notifications/notify"
-import { advanceOnboarding } from "@/lib/onboarding/complete-step"
+import { runInBackground } from "@/lib/jobs/background"
+import { advanceOnboarding, requestMatchingAfterOnboarding } from "@/lib/onboarding/complete-step"
 import { isPayoutsReady } from "@/lib/payouts/readiness"
 import { absoluteUrl } from "@/lib/urls"
 
@@ -471,7 +472,13 @@ async function applyAccountChanges(
   if (becameReady) {
     // The payouts step may now be complete by facts alone; finishing onboarding here keeps
     // `onboarding_completed_at` close to when it really happened.
-    await advanceOnboarding(tx, updated.userId)
+    const advance = await advanceOnboarding(tx, updated.userId)
+    if (advance.completedNow) {
+      // After the response, so after the webhook's transaction commits (CLAUDE.md §19.30).
+      await runInBackground("matching", "after_onboarding", () =>
+        requestMatchingAfterOnboarding(updated.userId, advance),
+      )
+    }
     // Last, so the email goes out only once everything above succeeded (§19.11 notify).
     await notifyPayoutsReady(tx, updated)
   }

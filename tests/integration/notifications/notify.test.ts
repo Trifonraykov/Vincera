@@ -10,7 +10,7 @@ import { notificationPrefs, notifications, users } from "@/lib/db/schema"
 import * as emailSend from "@/lib/email/send"
 import { listOutbox } from "@/lib/email/outbox"
 import NotificationEmail from "@/lib/email/templates/notification"
-import { notify, NOTIFICATION_LINKS, NOTIFICATION_TYPES } from "@/lib/notifications/notify"
+import { notify } from "@/lib/notifications/notify"
 
 import { setupTestDatabase } from "../../helpers/db"
 import { insertSocialConnection, insertUser } from "../../helpers/db-fixtures"
@@ -112,7 +112,7 @@ describe("notify", () => {
       {
         userId: user.id,
         type: "payouts.ready",
-        payload: { stripe_account_id: "0190a000-0000-7000-8000-000000000001" },
+        payload: { stripe_account_id: "acct_test_0001" },
         email: { ...expiredEmail(), subject: "Your payouts are set up" },
       },
       testDb.db,
@@ -143,7 +143,7 @@ describe("notify", () => {
     const ready = {
       userId: user.id,
       type: "payouts.ready" as const,
-      payload: { stripe_account_id: "0190a000-0000-7000-8000-000000000001" },
+      payload: { stripe_account_id: "acct_test_0001" },
       email: { ...expiredEmail(), subject: "Your payouts are set up" },
       dedupeKey: "payouts.ready:acct_1",
     }
@@ -185,6 +185,30 @@ describe("notify", () => {
     expect(await rowsOf(user.id)).toHaveLength(1)
   })
 
+  it("sends a required email whatever the preference, and releases the key when it fails", async () => {
+    const { user, input } = await setup()
+    await testDb.db
+      .insert(notificationPrefs)
+      .values({ userId: user.id, type: "social.expired", email: false, inApp: true })
+    const required = {
+      ...input,
+      email: { ...expiredEmail(), required: true },
+      dedupeKey: "required:1",
+    }
+
+    // A failed send throws, and leaves neither the claim nor the in-app row behind...
+    vi.spyOn(emailSend, "sendEmail").mockRejectedValueOnce(new Error("Resend is down"))
+    await expect(notify(required, testDb.db)).rejects.toThrow("Resend is down")
+    expect(await rowsOf(user.id)).toHaveLength(0)
+    expect(await listOutbox()).toHaveLength(0)
+
+    // ...so the retry sends it (the email preference is off: a required email ignores it).
+    expect(await notify(required, testDb.db)).toMatchObject({ emailed: true, duplicate: false })
+    expect(await notify(required, testDb.db)).toMatchObject({ emailed: false, duplicate: true })
+    expect(await rowsOf(user.id)).toHaveLength(1)
+    expect(await listOutbox()).toHaveLength(1)
+  })
+
   it("skips the email for an account without an email address (anonymised)", async () => {
     const { user, input } = await setup()
     await testDb.db.update(users).set({ email: null }).where(eq(users.id, user.id))
@@ -200,14 +224,30 @@ describe("notify", () => {
         {
           userId: "0190a000-0000-7000-8000-00000000dead",
           type: "payouts.ready",
-          payload: { stripe_account_id: "0190a000-0000-7000-8000-000000000001" },
+          payload: { stripe_account_id: "acct_test_0001" },
         },
         testDb.db,
       ),
     ).rejects.toThrow("not found")
   })
 
-  it("links every notification type somewhere in the app", () => {
-    for (const type of NOTIFICATION_TYPES) expect(NOTIFICATION_LINKS[type]).toMatch(/^\/app\//)
+  it("refuses a payload that does not match its type's schema (lists must parse every row)", async () => {
+    const user = await insertUser(testDb.db)
+    await expect(
+      notify(
+        {
+          userId: user.id,
+          type: "payouts.ready",
+          // @ts-expect-error -- the payload of another type
+          payload: { connection_id: "0190a000-0000-7000-8000-000000000001", provider: "youtube" },
+        },
+        testDb.db,
+      ),
+    ).rejects.toThrow()
+    const rows = await testDb.db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, user.id))
+    expect(rows).toHaveLength(0)
   })
 })

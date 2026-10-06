@@ -4,12 +4,12 @@ import { and, eq, isNull } from "drizzle-orm"
 import { createElement } from "react"
 
 import type { ClaudeDeps } from "@/lib/ai/claude"
-import type { EmbedDeps } from "@/lib/ai/embed"
 import { now, runWithClock } from "@/lib/clock"
 import { getDb, withTransaction, type DbOrTx } from "@/lib/db/client"
 import { isPgError, PG_ERROR } from "@/lib/db/errors"
 import { audienceSnapshots, socialConnections, type SizeTier } from "@/lib/db/schema"
 import SocialExpiredEmail, { socialExpiredSubject } from "@/lib/email/templates/social-expired"
+import { requestProfileEmbeddingRefresh } from "@/lib/embeddings/request"
 import { env } from "@/lib/env"
 import type { SocialExpiryReason } from "@/lib/events/types"
 import { track } from "@/lib/events/track"
@@ -20,13 +20,7 @@ import { absoluteUrl } from "@/lib/urls"
 import { isSocialOAuthAvailable } from "./availability"
 import { SOCIAL_PROVIDER_META } from "./catalog"
 import { findConnection, tokenColumns, tokenSetOf, type SocialConnectionRow } from "./connections"
-import {
-  recomputeSizeTier,
-  refreshAudienceSummary,
-  refreshCreatorEmbedding,
-  type EmbeddingOutcome,
-  type SummaryOutcome,
-} from "./derived"
+import { recomputeSizeTier, refreshAudienceSummary, type SummaryOutcome } from "./derived"
 import {
   SocialProviderError,
   SocialRetryableError,
@@ -50,8 +44,8 @@ import {
  *
  *   refresh the tokens when needed (lib/social/tokens.ts) → fetch the profile (display data) and
  *   the audience → write an `audience_snapshot` → recompute `size_tier` → emit `social.synced`
- *   → for creator providers: regenerate `audience_summary` + topics (never blocks) and re-embed
- *   the creator profile.
+ *   → for creator providers: regenerate `audience_summary` + topics (never blocks) and request
+ *   the creator profile's re-embedding (the debounced `embeddings-refresh` job, §19.25).
  *
  * A token failure (`SocialTokenError`) sets `status = expired`, emits `social.expired` and
  * notifies the user (in-app + email). Rate limits and outages record `last_sync_error` and come
@@ -70,7 +64,6 @@ export type SyncOptions = {
   /** Replace the provider (tests). Defaults to `getProvider(connection.provider)`. */
   provider?: SocialProvider
   ai?: ClaudeDeps
-  embed?: EmbedDeps
 }
 
 export type SyncResult =
@@ -81,7 +74,8 @@ export type SyncResult =
       followers: number | null
       sizeTier: SizeTier | null
       summary: SummaryOutcome | "not_applicable"
-      embedding: EmbeddingOutcome | "not_applicable"
+      /** `requested`: the embeddings job was asked to re-embed the creator profile. */
+      embedding: "requested" | "not_applicable"
     }
   | {
       status: "skipped"
@@ -222,10 +216,11 @@ async function syncNow(
   // Creator audiences feed the profile's summary and embedding; GitHub (builders) does not.
   const isCreatorProvider = row.provider !== "github"
   let summary: SummaryOutcome | "not_applicable" = "not_applicable"
-  let embedding: EmbeddingOutcome | "not_applicable" = "not_applicable"
+  let embedding: "requested" | "not_applicable" = "not_applicable"
   if (isCreatorProvider) {
     summary = (await refreshAudienceSummary(database, row.userId, { ai: options.ai })).outcome
-    embedding = await refreshCreatorEmbedding(database, row.userId, options.embed)
+    await requestProfileEmbeddingRefresh(row.userId, "creator", database)
+    embedding = "requested"
   }
   await revalidatePublicProfiles(database, row.userId)
 

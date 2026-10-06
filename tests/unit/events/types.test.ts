@@ -62,7 +62,7 @@ describe("event catalog", () => {
   it("covers every event type required by §11, without duplicates", () => {
     for (const type of SPEC_EVENT_TYPES) expect(EVENT_TYPES).toContain(type)
     expect(new Set(EVENT_TYPES).size).toBe(EVENT_TYPES.length)
-    // Additions beyond §11 are deliberate and documented in CLAUDE.md §19.6 / §19.11.
+    // Additions beyond §11 are deliberate and documented in CLAUDE.md §19.6 / §19.11 / §19.24.
     expect(EVENT_TYPES.filter((t) => !SPEC_EVENT_TYPES.includes(t))).toEqual([
       "onboarding.step_completed",
       "creator_profile.created",
@@ -72,7 +72,14 @@ describe("event catalog", () => {
       "social.disconnected",
       "payouts.account_created",
       "payouts.account_updated",
+      "idea.updated",
+      "idea.restored",
+      "product.updated",
+      "product.restored",
+      "match.unsaved",
       "proposal.withdrawn",
+      "task.created",
+      "task.reopened",
       "ai.reviewed",
     ])
   })

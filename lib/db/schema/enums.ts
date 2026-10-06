@@ -112,6 +112,20 @@ export const collabStageEnum = pgEnum("collab_stage", [
 ])
 export type CollabStage = (typeof collabStageEnum.enumValues)[number]
 
+/**
+ * Why a collab ended (§5 `collabs.ended_reason`; values decided in CLAUDE.md §19.24): `completed`
+ * (ran its course after launch), `cancelled` (a member left before launch, the agreement's exit
+ * terms), `dispute` (ended by a resolved dispute), `admin` (ended by an admin). Matching's
+ * `reliability` counts `completed` up and `dispute` down.
+ */
+export const collabEndReasonEnum = pgEnum("collab_end_reason", [
+  "completed",
+  "cancelled",
+  "dispute",
+  "admin",
+])
+export type CollabEndReason = (typeof collabEndReasonEnum.enumValues)[number]
+
 export const collabRoleEnum = pgEnum("collab_role", ["creator", "builder"])
 export type CollabRole = (typeof collabRoleEnum.enumValues)[number]
 

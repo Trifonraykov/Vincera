@@ -14,7 +14,9 @@ import {
   users,
 } from "@/lib/db/schema"
 import { loadNotificationPrefs, saveNotificationPrefs } from "@/lib/notifications/prefs"
-import { builderProfileEmbeddingText, refreshBuilderEmbedding } from "@/lib/profiles/embedding"
+import { NOTIFICATION_TYPES } from "@/lib/notifications/types"
+import { refreshEmbedding } from "@/lib/embeddings/refresh"
+import { builderProfileEmbeddingText } from "@/lib/profiles/embedding"
 import type { BuilderProfileForm, CreatorProfileForm } from "@/lib/profiles/fields"
 import {
   claimHandle,
@@ -62,6 +64,7 @@ vi.mock("@/lib/db/client", async (importOriginal) => {
 })
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 
+const matchingRequest = await import("@/lib/matching/request")
 const {
   addPortfolioItemAction,
   deletePortfolioItemAction,
@@ -498,9 +501,15 @@ describe("portfolio", () => {
   })
 
   it("re-embeds the builder from skills, stack, bio and portfolio", async () => {
-    const { row } = await builderWithProfile()
+    const { row, profileId } = await builderWithProfile()
     await addPortfolioItem(testDb.db, { userId: row.id, form: item, source: "settings" })
-    expect(await refreshBuilderEmbedding(testDb.db, row.id)).toBe("updated")
+    const entity = { type: "builder_profile", id: profileId } as const
+    expect(await refreshEmbedding(testDb.db, entity)).toEqual({
+      outcome: "updated",
+      ownerUserId: row.id,
+    })
+    // The same text again: no API call, nothing written.
+    expect((await refreshEmbedding(testDb.db, entity)).outcome).toBe("unchanged")
     const [profile] = await testDb.db
       .select()
       .from(builderProfiles)
@@ -515,9 +524,7 @@ describe("portfolio", () => {
         portfolio: [{ title: "X", description: null, format: "tool", isShipped: false }],
       }),
     ).toBe("Skills: Web apps\nAbout: Hi\nBuilt: X (Tool, in progress)")
-    expect(await refreshBuilderEmbedding(testDb.db, (await newUser(["builder"])).row.id)).toBe(
-      "skipped",
-    )
+    expect((await refreshEmbedding(testDb.db, { ...entity, id: row.id })).outcome).toBe("not_found")
   })
 })
 
@@ -627,6 +634,24 @@ describe("server actions", () => {
     })
   })
 
+  it("asks matching directly when a builder's availability changes (no re-embed)", async () => {
+    const owner = await newUser(["builder"])
+    mocks.user = owner.auth
+    const base = {
+      from: "settings" as const,
+      displayName: "Octo",
+      handle: "octo_avail",
+      availability: "open" as const,
+      dealPreference: "either" as const,
+    }
+    expect((await saveBuilderProfileAction(base)).ok).toBe(true)
+    const spy = vi.spyOn(matchingRequest, "requestMatchingForPerson").mockResolvedValue(undefined)
+    expect((await saveBuilderProfileAction({ ...base, dealPreference: "split" })).ok).toBe(true)
+    expect(spy).not.toHaveBeenCalled()
+    expect((await saveBuilderProfileAction({ ...base, availability: "closed" })).ok).toBe(true)
+    expect(spy.mock.calls).toEqual([[owner.row.id, ["builder"]]])
+  })
+
   it("finishing the portfolio step needs a project or GitHub", async () => {
     const { row, auth } = await newUser(["builder"])
     mocks.user = auth
@@ -669,10 +694,9 @@ describe("account settings", () => {
 
   it("stores notification preferences per type (both on by default)", async () => {
     const { row } = await newUser(["creator"])
-    expect(await loadNotificationPrefs(testDb.db, row.id)).toEqual([
-      { type: "social.expired", email: true, inApp: true },
-      { type: "payouts.ready", email: true, inApp: true },
-    ])
+    const defaults = await loadNotificationPrefs(testDb.db, row.id)
+    expect(defaults.map((pref) => pref.type)).toEqual([...NOTIFICATION_TYPES])
+    expect(defaults.every((pref) => pref.email && pref.inApp)).toBe(true)
     await saveNotificationPrefs(testDb.db, row.id, [
       { type: "social.expired", email: false, inApp: true },
       { type: "payouts.ready", email: true, inApp: false },
@@ -681,10 +705,13 @@ describe("account settings", () => {
       { type: "social.expired", email: false, inApp: false },
       { type: "payouts.ready", email: true, inApp: false },
     ])
-    expect(await loadNotificationPrefs(testDb.db, row.id)).toEqual([
+    const saved = await loadNotificationPrefs(testDb.db, row.id)
+    expect(saved.slice(0, 2)).toEqual([
       { type: "social.expired", email: false, inApp: false },
       { type: "payouts.ready", email: true, inApp: false },
     ])
+    // Types without a row keep the defaults.
+    expect(saved.slice(2).every((pref) => pref.email && pref.inApp)).toBe(true)
     expect(
       await testDb.db
         .select()

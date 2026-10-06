@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { eq, sql } from "drizzle-orm"
 import { beforeAll, describe, expect, it } from "vitest"
 
@@ -22,6 +24,8 @@ import { insertLiveLaunch, insertOrder, insertUser } from "../../helpers/db-fixt
 
 const testDb = setupTestDatabase()
 const AO = PG_ERROR.appendOnlyViolation
+const AGREEMENT_BODY = "Collaboration agreement (test body)."
+const AGREEMENT_BODY_HASH = createHash("sha256").update(AGREEMENT_BODY, "utf8").digest("hex")
 
 async function insertSnapshot(socialConnectionId: string) {
   const [snapshot] = await testDb.db
@@ -71,7 +75,8 @@ describe("append-only tables", () => {
           term: "1y",
           exit: "30d",
         },
-        bodyHash: "a".repeat(64),
+        renderedBody: AGREEMENT_BODY,
+        bodyHash: AGREEMENT_BODY_HASH,
       })
       .returning()
     if (!event || !connection || !revision || !agreement) throw new Error("fixture setup failed")
@@ -83,6 +88,7 @@ describe("append-only tables", () => {
         signedAt: new Date("2026-01-02T00:00:00Z"),
         ip: "203.0.113.7",
         typedName: "Creator Name",
+        bodyHash: AGREEMENT_BODY_HASH,
       })
       .returning()
     const [link] = await db

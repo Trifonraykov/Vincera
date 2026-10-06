@@ -1,19 +1,13 @@
-import {
-  CircleCheck,
-  Compass,
-  FolderGit2,
-  Lightbulb,
-  Package,
-  Send,
-  UserPlus,
-  Users,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react"
+import { CircleCheck, FolderGit2, Send, UserPlus, Wallet, type LucideIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
+import { CollabsHomeSection } from "@/components/collabs/home-section"
+import { AudienceSnapshotSection } from "@/components/home/audience-snapshot"
+import { SupplySummarySection } from "@/components/home/supply-summary"
+import { TopMatchesSection } from "@/components/home/top-matches"
 import { toShellViewer } from "@/components/layout/viewer"
+import { ProposalsHomeSection } from "@/components/proposals/home-section"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -48,79 +42,32 @@ const TITLES: Record<AppRole, { title: string; description: string }> = {
 }
 
 /**
- * Cards per active role (§12: `/app` is role-aware). Setup cards come from the user's real state
- * (connections, portfolio, payouts); the rest describe the next phases' pages, and say "Coming
- * soon" instead of linking until those pages are built (`isBuiltRoute`).
+ * Setup still to do, from the user's real state (payouts; a builder's portfolio). The rest of the
+ * home page is the role's widgets (§12: `/app` is role-aware).
  */
-function homeCards(role: AppRole, snapshot: OnboardingSnapshot): HomeCard[] {
-  const payoutsCard: HomeCard | null =
-    snapshot.payouts === "ready"
-      ? null
-      : {
-          icon: Wallet,
-          title: snapshot.payouts === "pending" ? "Finish setting up payouts" : "Set up payouts",
-          description:
-            "Connect Stripe before you sign an agreement, so you get paid on every sale.",
-          action: { label: "Set up payouts", href: "/app/settings/payouts" },
-        }
-
-  const cards: (HomeCard | null)[] =
-    role === "creator"
-      ? [
-          snapshot.creatorConnectionCount === 0
-            ? {
-                icon: Users,
-                title: "Connect your audience",
-                description: "Link YouTube, Instagram or TikTok so builders can see who you reach.",
-                action: { label: "Connect an account", href: "/app/settings/connections" },
-              }
-            : {
-                icon: Users,
-                title: "Your audience",
-                description: "Follower counts, engagement and who watches, from your accounts.",
-                action: { label: "See your audience", href: "/app/audience" },
-              },
-          {
-            icon: Lightbulb,
-            title: "No ideas yet",
-            description: "Post what your audience keeps asking for. Builders pitch on open ideas.",
-            action: { label: "Post an idea", href: "/app/ideas/new" },
-          },
-          payoutsCard ?? {
-            icon: Compass,
-            title: "No matches yet",
-            description: "Once your profile is complete, ranked builder matches appear here.",
-            action: { label: "Discover builders", href: "/app/discover/builders" },
-          },
-        ]
-      : [
-          {
-            icon: Package,
-            title: "No products yet",
-            description: "List something you built or want to build that needs distribution.",
-            action: { label: "List a product", href: "/app/products/new" },
-          },
-          snapshot.portfolioItemCount === 0 && snapshot.githubConnectionCount === 0
-            ? {
-                icon: FolderGit2,
-                title: "Show your work",
-                description: "Connect GitHub or add projects, so creators can see what you build.",
-                action: { label: "Edit your portfolio", href: "/app/settings/profile" },
-              }
-            : {
-                icon: Lightbulb,
-                title: "Browse creator briefs",
-                description: "Ideas posted by creators, ranked by how well they fit your skills.",
-                action: { label: "See briefs", href: "/app/discover/briefs" },
-              },
-          payoutsCard ?? {
-            icon: Compass,
-            title: "Find creators",
-            description: "Creators whose audience fits what you build, ranked for you.",
-            action: { label: "Discover creators", href: "/app/discover/creators" },
-          },
-        ]
-  return cards.filter((card): card is HomeCard => card !== null)
+function setupCards(role: AppRole, snapshot: OnboardingSnapshot): HomeCard[] {
+  const cards: HomeCard[] = []
+  if (snapshot.payouts !== "ready") {
+    cards.push({
+      icon: Wallet,
+      title: snapshot.payouts === "pending" ? "Finish setting up payouts" : "Set up payouts",
+      description: "Connect Stripe before you sign an agreement, so you get paid on every sale.",
+      action: { label: "Set up payouts", href: "/app/settings/payouts" },
+    })
+  }
+  if (
+    role === "builder" &&
+    snapshot.portfolioItemCount === 0 &&
+    snapshot.githubConnectionCount === 0
+  ) {
+    cards.push({
+      icon: FolderGit2,
+      title: "Show your work",
+      description: "Connect GitHub or add projects, so creators can see what you build.",
+      action: { label: "Edit your portfolio", href: "/app/settings/profile" },
+    })
+  }
+  return cards
 }
 
 export default async function AppHomePage() {
@@ -138,7 +85,8 @@ export default async function AppHomePage() {
   const hasProfile =
     snapshot !== null &&
     (activeRole === "creator" ? snapshot.hasCreatorProfile : snapshot.hasBuilderProfile)
-  const cards = snapshot ? homeCards(activeRole, snapshot) : []
+  const cards = snapshot ? setupCards(activeRole, snapshot) : []
+  const db = getDb()
 
   return (
     <div className="space-y-8">
@@ -190,25 +138,43 @@ export default async function AppHomePage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
-          <EmptyState
-            key={card.title}
-            icon={card.icon}
-            title={card.title}
-            description={card.description}
-            action={
-              isBuiltRoute(card.action.href.split(/[?#]/, 1)[0] ?? "") ? (
-                <Button asChild size="sm">
-                  <Link href={card.action.href}>{card.action.label}</Link>
-                </Button>
-              ) : (
-                <Badge variant="secondary">Coming soon</Badge>
-              )
-            }
-          />
-        ))}
-      </div>
+      {cards.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {cards.map((card) => (
+            <EmptyState
+              key={card.title}
+              icon={card.icon}
+              title={card.title}
+              description={card.description}
+              action={
+                isBuiltRoute(card.action.href.split(/[?#]/, 1)[0] ?? "") ? (
+                  <Button asChild size="sm">
+                    <Link href={card.action.href}>{card.action.label}</Link>
+                  </Button>
+                ) : (
+                  <Badge variant="secondary">Coming soon</Badge>
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {/* Phase 3 sections (CLAUDE.md §19.24): each renders nothing when it has nothing to show. */}
+      <ProposalsHomeSection userId={user.id} role={activeRole} />
+      <CollabsHomeSection userId={user.id} role={activeRole} />
+
+      {hasProfile && activeRole === "creator" ? (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <AudienceSnapshotSection db={db} userId={user.id} />
+          <SupplySummarySection db={db} userId={user.id} kind="idea" />
+        </div>
+      ) : null}
+      {hasProfile && activeRole === "builder" ? (
+        <SupplySummarySection db={db} userId={user.id} kind="product" />
+      ) : null}
+
+      {hasProfile ? <TopMatchesSection db={db} userId={user.id} role={activeRole} /> : null}
     </div>
   )
 }

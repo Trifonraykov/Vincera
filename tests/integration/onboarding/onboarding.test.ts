@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 
 import type { AuthUser } from "@/lib/auth/user"
 import { setClockForTests } from "@/lib/clock"
@@ -8,7 +8,9 @@ import {
   advanceOnboarding,
   completeOnboardingStep,
   OnboardingStepError,
+  requestMatchingAfterOnboarding,
 } from "@/lib/onboarding/complete-step"
+import * as matchingRequest from "@/lib/matching/request"
 import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
 
@@ -25,7 +27,14 @@ import {
 const testDb = setupTestDatabase()
 const NOW = new Date("2026-10-05T12:00:00.000Z")
 
-beforeEach(() => setClockForTests(NOW))
+let matchingRequests: MockInstance<typeof matchingRequest.requestMatchingForPerson>
+beforeEach(() => {
+  setClockForTests(NOW)
+  // Finishing onboarding asks matching for the person (CLAUDE.md §19.30); recorded, not run.
+  matchingRequests = vi
+    .spyOn(matchingRequest, "requestMatchingForPerson")
+    .mockResolvedValue(undefined)
+})
 afterEach(() => setClockForTests(null))
 
 async function eventsOf(userId: string, type: string) {
@@ -157,6 +166,7 @@ describe("completeOnboardingStep", () => {
       recorded: true,
       nextStep: "/onboarding/creator/review",
       completedNow: false,
+      completedRoles: [],
     })
 
     const again = await completeOnboardingStep(testDb.db, {
@@ -214,7 +224,12 @@ describe("completeOnboardingStep", () => {
       step: "payouts",
       status: "skipped",
     })
-    expect(last).toEqual({ recorded: true, nextStep: null, completedNow: true })
+    expect(last).toEqual({
+      recorded: true,
+      nextStep: null,
+      completedNow: true,
+      completedRoles: ["creator"],
+    })
     expect((await userRow(user.id)).onboardingCompletedAt).toEqual(NOW)
 
     const completed = await eventsOf(user.id, "onboarding.completed")
@@ -231,13 +246,37 @@ describe("completeOnboardingStep", () => {
       step: "payouts",
       status: "done",
     })
-    expect(repeat).toEqual({ recorded: true, nextStep: null, completedNow: false })
+    expect(repeat).toEqual({
+      recorded: true,
+      nextStep: null,
+      completedNow: false,
+      completedRoles: [],
+    })
     expect(await advanceOnboarding(testDb.db, user.id)).toEqual({
       nextStep: null,
       completedNow: false,
+      completedRoles: [],
     })
     expect((await userRow(user.id)).onboardingCompletedAt).toEqual(NOW)
     expect(await eventsOf(user.id, "onboarding.completed")).toHaveLength(1)
+    // Matching was asked once, for the creator role, when onboarding finished.
+    expect(matchingRequests.mock.calls).toEqual([[user.id, ["creator"]]])
+  })
+
+  it("leaves the matching request to a caller that passes its own transaction", async () => {
+    const { user } = await insertCreator(testDb.db)
+    for (const step of ["creator.connect", "payouts"] as const) {
+      await completeOnboardingStep(testDb.db, { userId: user.id, step, status: "skipped" })
+    }
+    const advance = await testDb.db.transaction((tx) =>
+      completeOnboardingStep(tx, { userId: user.id, step: "creator.review", status: "done" }),
+    )
+    expect(advance).toMatchObject({ completedNow: true, completedRoles: ["creator"] })
+    // Inside the caller's transaction nothing is requested (it has not committed yet)...
+    expect(matchingRequests).not.toHaveBeenCalled()
+    // ...the caller asks after its commit.
+    await requestMatchingAfterOnboarding(user.id, advance)
+    expect(matchingRequests.mock.calls).toEqual([[user.id, ["creator"]]])
   })
 
   it("walks a finished user through the steps of a role added later", async () => {
@@ -253,6 +292,7 @@ describe("completeOnboardingStep", () => {
     expect(await advanceOnboarding(testDb.db, user.id)).toEqual({
       nextStep: "/onboarding/creator/profile",
       completedNow: false,
+      completedRoles: [],
     })
   })
 })

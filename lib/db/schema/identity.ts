@@ -17,8 +17,10 @@ import {
   createdAt,
   embedding,
   embeddingModel,
+  embeddingTracking,
   handleFormatCheck,
   id,
+  sha256HexCheck,
   textArray,
   timestamps,
   timestamptz,
@@ -187,6 +189,7 @@ export const creatorProfiles = withRLS(
       audienceSummaryEditedAt: timestamptz("audience_summary_edited_at"),
       embedding: embedding(),
       embeddingModel: embeddingModel(),
+      ...embeddingTracking(),
       verifiedAt: timestamptz("verified_at"),
       ...timestamps(),
     },
@@ -200,6 +203,7 @@ export const creatorProfiles = withRLS(
         .onDelete("no action"),
       check("creator_profiles_handle_format", handleFormatCheck(t.handle)),
       check("creator_profiles_country_format", sql`${t.country} ~ '^[A-Z]{2}$'`),
+      check("creator_profiles_embedding_text_hash_format", sha256HexCheck(t.embeddingTextHash)),
       index("creator_profiles_embedding_hnsw_idx").using(
         "hnsw",
         t.embedding.op("vector_cosine_ops"),
@@ -226,6 +230,7 @@ export const builderProfiles = withRLS(
       dealPreference: dealPreferenceEnum("deal_preference").notNull().default("either"),
       embedding: embedding(),
       embeddingModel: embeddingModel(),
+      ...embeddingTracking(),
       verifiedAt: timestamptz("verified_at"),
       ...timestamps(),
     },
@@ -238,6 +243,7 @@ export const builderProfiles = withRLS(
         .onUpdate("cascade")
         .onDelete("no action"),
       check("builder_profiles_handle_format", handleFormatCheck(t.handle)),
+      check("builder_profiles_embedding_text_hash_format", sha256HexCheck(t.embeddingTextHash)),
       index("builder_profiles_embedding_hnsw_idx").using(
         "hnsw",
         t.embedding.op("vector_cosine_ops"),

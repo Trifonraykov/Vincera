@@ -1,5 +1,6 @@
 import type {
   Availability,
+  CollabEndReason,
   CollabRole,
   CollabStage,
   DealPreference,
@@ -184,8 +185,12 @@ export interface EventCatalog {
     subject: "idea"
     properties: { format: ProductFormat; topics: string[]; target_price_cents: number | null }
   }
+  /** Not in the §11 list (like profile updates): edits feed embeddings and matching. */
+  "idea.updated": { subject: "idea"; properties: { fields: string[] } }
   "idea.published": { subject: "idea"; properties: NoProperties }
   "idea.archived": { subject: "idea"; properties: { from_status: IdeaStatus } }
+  /** Not in the §11 list: archived → draft (§19.24). */
+  "idea.restored": { subject: "idea"; properties: NoProperties }
   "product.created": {
     subject: "product"
     properties: {
@@ -195,8 +200,12 @@ export interface EventCatalog {
       target_price_cents: number | null
     }
   }
+  /** Not in the §11 list (like profile updates): edits feed embeddings and matching. */
+  "product.updated": { subject: "product"; properties: { fields: string[] } }
   "product.published": { subject: "product"; properties: NoProperties }
   "product.archived": { subject: "product"; properties: { from_status: ProductStatus } }
+  /** Not in the §11 list: archived → draft (§19.24). */
+  "product.restored": { subject: "product"; properties: NoProperties }
 
   // Matching (§8)
   /** Batch summary: one event per subject user per recompute. */
@@ -214,6 +223,8 @@ export interface EventCatalog {
   "match.shown": { subject: "match"; properties: MatchInteraction & { score: number } }
   "match.clicked": { subject: "match"; properties: MatchInteraction }
   "match.saved": { subject: "match"; properties: MatchInteraction }
+  /** Not in the §11 list: the saved state can be undone (§19.24). */
+  "match.unsaved": { subject: "match"; properties: MatchInteraction }
   "match.dismissed": { subject: "match"; properties: MatchInteraction }
 
   // Proposals
@@ -240,7 +251,10 @@ export interface EventCatalog {
     properties: { proposal_id: string; idea_id: string | null; product_id: string | null }
   }
   "collab.stage_changed": { subject: "collab"; properties: { from: CollabStage; to: CollabStage } }
-  "collab.ended": { subject: "collab"; properties: { from_stage: CollabStage } }
+  "collab.ended": {
+    subject: "collab"
+    properties: { from_stage: CollabStage; reason: CollabEndReason }
+  }
   "agreement.generated": {
     subject: "agreement"
     properties: { collab_id: string; template_version: string }
@@ -251,7 +265,11 @@ export interface EventCatalog {
     subject: "agreement"
     properties: { collab_id: string; template_version: string }
   }
+  /** Not in the §11 list: task activity counts toward a collab's `last_activity_at` (§19.24). */
+  "task.created": { subject: "task"; properties: { collab_id: string; assigned: boolean } }
   "task.completed": { subject: "task"; properties: { collab_id: string; on_time: boolean | null } }
+  /** Not in the §11 list: a done task ticked back to open. */
+  "task.reopened": { subject: "task"; properties: { collab_id: string } }
   /** Counts only, never the body (§11). */
   "message.sent": {
     subject: "thread"
@@ -362,15 +380,20 @@ export const EVENT_TYPES = [
   "payouts.account_created",
   "payouts.account_updated",
   "idea.created",
+  "idea.updated",
   "idea.published",
   "idea.archived",
+  "idea.restored",
   "product.created",
+  "product.updated",
   "product.published",
   "product.archived",
+  "product.restored",
   "match.computed",
   "match.shown",
   "match.clicked",
   "match.saved",
+  "match.unsaved",
   "match.dismissed",
   "proposal.sent",
   "proposal.countered",
@@ -384,7 +407,9 @@ export const EVENT_TYPES = [
   "agreement.generated",
   "agreement.signed",
   "agreement.completed",
+  "task.created",
   "task.completed",
+  "task.reopened",
   "message.sent",
   "launch.submitted",
   "launch.approved",

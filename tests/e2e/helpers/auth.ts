@@ -73,6 +73,9 @@ export async function chooseRole(page: Page, role: "creator" | "builder" | "both
   await page.locator("label").filter({ hasText: title }).click()
   await expect(page.getByRole("radio", { name: new RegExp(`^${title}`) })).toBeChecked()
   await page.getByRole("button", { name: "Continue" }).click()
+  // The action redirects to the next step once the roles are committed; callers that change the
+  // database next (completeOnboardingInDb) must not run before that.
+  await expect(page).not.toHaveURL(/\/onboarding\/role$/)
 }
 
 /** Sign out from the app shell's user menu (sidebar footer). */

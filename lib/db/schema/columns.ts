@@ -54,6 +54,31 @@ export const embedding = () => vector("embedding", { dimensions: EMBEDDING_DIMEN
 /** Name of the embedding model that produced `embedding`, so a provider switch can re-embed. */
 export const embeddingModel = () => text("embedding_model")
 
+/**
+ * Bookkeeping next to every `embedding` (CLAUDE.md §19.24): `embedding_text_hash` is the sha256
+ * (hex) of the text that was embedded, so the `embeddings/refresh` job can skip an unchanged text;
+ * `embedded_at` is when `embedding` was last written.
+ */
+export const embeddingTracking = () => ({
+  embeddingTextHash: text("embedding_text_hash"),
+  embeddedAt: timestamptz("embedded_at"),
+})
+
+/** `<column> IS NULL OR <column> ~ '^[0-9a-f]{64}$'` (a sha256 hex digest), for CHECK constraints. */
+export function sha256HexCheck(column: AnyPgColumn): SQL {
+  return sql`${column} IS NULL OR ${column} ~ '^[0-9a-f]{64}$'`
+}
+
+/** `<column> ~ '^[a-z]{3}$'` (a lowercase ISO 4217 code like Stripe's), for CHECK constraints. */
+export function currencyFormatCheck(column: AnyPgColumn): SQL {
+  return sql`${column} ~ '^[a-z]{3}$'`
+}
+
+/** `<column> ~ '[^[:space:]]'` (at least one non-whitespace character), for required text. */
+export function nonBlankCheck(column: AnyPgColumn): SQL {
+  return sql`${column} ~ '[^[:space:]]'`
+}
+
 /** `<column> ~ '^[a-z0-9_]{3,30}$'`, for CHECK constraints. */
 export function handleFormatCheck(column: AnyPgColumn): SQL {
   return sql`${column} ~ ${sql.raw(`'${HANDLE_PATTERN}'`)}`

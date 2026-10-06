@@ -1,74 +1,57 @@
 import type { Metadata } from "next"
 
+import { AgreementDocument } from "@/components/collabs/agreement-document"
+import { DraftNotice } from "@/components/shared/draft-notice"
+import {
+  PLACEHOLDER_CONTEXT_V1,
+  PLACEHOLDER_TERMS_V1,
+  renderAgreementV1,
+} from "@/lib/agreements/template-v1"
 import { env } from "@/lib/env"
 
-import { LegalPage } from "../../_components/legal-page"
+import { Container } from "../../_components/section"
 
-export const metadata: Metadata = { title: "Collaboration agreement" }
+export const metadata: Metadata = {
+  title: "Collaboration agreement",
+  description:
+    "The standard agreement every creator and builder sign before they start a collaboration.",
+}
 
-/** Public outline of the agreement template (§12, §18.2). The real template is versioned in code. */
+/**
+ * The public collaboration agreement (§12 `/legal/agreement`, §18.2): template v1 rendered with
+ * placeholder terms, exactly as members see it on their collab (lib/agreements/template-v1.tsx),
+ * with the "draft — pending legal review" notice.
+ */
 export default function AgreementPage() {
   const app = env.APP_NAME
+  const body = renderAgreementV1(PLACEHOLDER_TERMS_V1, PLACEHOLDER_CONTEXT_V1)
 
   return (
-    <LegalPage
-      title="Collaboration agreement"
-      intro={
-        <p>
-          Every collaboration on {app} is covered by a standard agreement that both members sign
-          before work starts. It is filled in with the terms you agreed in your proposal. This page
-          shows what the template covers.
-        </p>
-      }
-      sections={[
-        {
-          heading: "Parties",
-          body: <p>The creator and the builder, identified by their verified accounts.</p>,
-        },
-        {
-          heading: "Scope and timeline",
-          body: (
-            <p>What will be built and the expected timeline, taken from the accepted proposal.</p>
-          ),
-        },
-        {
-          heading: "Revenue split",
-          body: (
+    <Container className="max-w-3xl py-12 sm:py-16">
+      <article className="space-y-8">
+        <header className="space-y-4">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Collaboration agreement
+          </h1>
+          <DraftNotice />
+          <div className="space-y-3 text-pretty text-muted-foreground">
             <p>
-              Each member&apos;s percentage of the revenue left after taxes, payment processing fees
-              and the platform fee. The percentages always add up to 100.
+              Every collaboration on {app} is covered by this standard agreement, which both members
+              sign before work starts. When a proposal is accepted, the agreement is filled in with
+              its terms: the two members, their revenue split, what they will build and the
+              timeline. The parts in [brackets] below are examples.
             </p>
-          ),
-        },
-        {
-          heading: "Intellectual property",
-          body: (
             <p>
-              Who owns the product, the code and the brand during and after the collaboration. To be
-              completed after legal review.
+              Both members sign by typing their full name, and both need payouts set up first. We
+              record the time, IP address and browser of each signature together with the
+              agreement&apos;s fingerprint, and email both members the signed PDF.
             </p>
-          ),
-        },
-        {
-          heading: "Term and exit",
-          body: (
-            <p>
-              How long the agreement runs, how a member can leave, and what happens to the product
-              and future revenue if they do. To be completed after legal review.
-            </p>
-          ),
-        },
-        {
-          heading: "Signatures",
-          body: (
-            <p>
-              Both members sign by typing their full name. We record the time, IP address and
-              browser of each signature and store the signed PDF, which both members receive by
-              email.
-            </p>
-          ),
-        },
-      ]}
-    />
+          </div>
+        </header>
+        <div className="rounded-xl border bg-card p-4 shadow-xs sm:p-6">
+          <AgreementDocument body={body} showTitle={false} />
+        </div>
+      </article>
+    </Container>
   )
 }

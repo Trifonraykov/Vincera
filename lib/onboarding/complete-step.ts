@@ -4,10 +4,12 @@ import { and, eq, isNull, sql } from "drizzle-orm"
 
 import { ActionError } from "@/lib/actions/errors"
 import { appRolesOf } from "@/lib/auth/user"
+import type { AppRole } from "@/lib/nav"
 import { now } from "@/lib/clock"
-import { withTransaction, type DbOrTx } from "@/lib/db/client"
+import { isTransaction, withTransaction, type DbOrTx } from "@/lib/db/client"
 import { users } from "@/lib/db/schema"
 import { track } from "@/lib/events/track"
+import { requestMatchingForPerson } from "@/lib/matching/request"
 import { UserNotFoundError } from "@/lib/users/roles"
 
 import {
@@ -43,6 +45,22 @@ export type OnboardingAdvance = {
   nextStep: string | null
   /** True when this call set `onboarding_completed_at` (and emitted `onboarding.completed`). */
   completedNow: boolean
+  /** The app roles the user finished onboarding with; empty unless `completedNow`. */
+  completedRoles: AppRole[]
+}
+
+/**
+ * Matching only considers onboarded people (§19.27), so finishing onboarding asks for the
+ * person's lists and their place in others' (§8 "on demand when a profile … changes"). Call after
+ * the commit that set `onboarding_completed_at`. `completeOnboardingStep` and `advanceOnboarding`
+ * do it themselves when they own the transaction; callers that pass their own transaction call
+ * this after committing it (CLAUDE.md §19.30).
+ */
+export async function requestMatchingAfterOnboarding(
+  userId: string,
+  advance: Pick<OnboardingAdvance, "completedNow" | "completedRoles">,
+): Promise<void> {
+  if (advance.completedNow) await requestMatchingForPerson(userId, advance.completedRoles)
 }
 
 export type CompleteStepInput = {
@@ -75,7 +93,7 @@ export async function completeOnboardingStep(
     throw new OnboardingStepError("This step can't be skipped.")
   }
 
-  return withTransaction(async (tx) => {
+  const result = await withTransaction(async (tx) => {
     const [user] = await tx
       .select({ roles: users.roles, onboardingSteps: users.onboardingSteps })
       .from(users)
@@ -113,6 +131,8 @@ export async function completeOnboardingStep(
     const advance = await advanceOnboarding(tx, input.userId, input.actorUserId)
     return { ...advance, recorded }
   }, database)
+  if (!isTransaction(database)) await requestMatchingAfterOnboarding(input.userId, result)
+  return result
 }
 
 /**
@@ -120,21 +140,24 @@ export async function completeOnboardingStep(
  * added a role since), finishing onboarding when the path is complete. Call it after anything
  * that may complete a step: recording a step, adding roles, payouts becoming ready. The `/app`
  * gate calls it too (`./gate.ts`), so a path completed by facts alone (e.g. Stripe enabling
- * payouts) finishes on the user's next visit.
+ * payouts) finishes on the user's next visit. When it owns the transaction (no `tx` passed), it
+ * also asks matching for the newly onboarded person after the commit.
  */
 export async function advanceOnboarding(
   database: DbOrTx,
   userId: string,
   actorUserId?: string,
 ): Promise<OnboardingAdvance> {
-  return withTransaction(async (tx) => {
+  const advance = await withTransaction(async (tx) => {
     const snapshot = await loadOnboardingSnapshot(tx, userId)
     if (!snapshot) throw new UserNotFoundError()
     const nextStep = nextOnboardingStep(snapshot)
     const completedNow =
       nextStep === null ? await finishOnboarding(tx, userId, snapshot, actorUserId) : false
-    return { nextStep, completedNow }
+    return { nextStep, completedNow, completedRoles: completedNow ? appRolesOf(snapshot) : [] }
   }, database)
+  if (!isTransaction(database)) await requestMatchingAfterOnboarding(userId, advance)
+  return advance
 }
 
 /**

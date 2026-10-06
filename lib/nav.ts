@@ -338,8 +338,11 @@ export function shellBackHref(pathname: string, tabs: readonly MobileTab[]): str
  * them as "Soon" without a link, the tab bar and the home page skip them, and a URL typed by hand
  * gets the shell's "Coming soon" page (app/app/not-found.tsx). tests/unit/nav.test.ts compares this
  * list with the `page.tsx` files under app/, so a phase that adds a page must add it here.
+ *
+ * Phases 2–3 are built by parallel builders (CLAUDE.md §19.24): each adds its menu pages to its own
+ * list below when the page exists, and touches no other list.
  */
-const BUILT_ROUTES: ReadonlySet<string> = new Set([
+const PHASE_1_ROUTES = [
   "/",
   "/creators",
   "/builders",
@@ -357,6 +360,32 @@ const BUILT_ROUTES: ReadonlySet<string> = new Set([
   "/app/settings/notifications",
   "/app/settings/account",
   "/admin",
+]
+/** "supply" (Phase 2): add "/app/ideas" and "/app/products" with their pages. */
+const SUPPLY_ROUTES: string[] = ["/app/ideas", "/app/products"]
+/**
+ * "matching" (Phase 2): add "/app/discover", "/app/discover/creators", "/app/discover/builders"
+ * and "/app/discover/briefs" with their pages ("/app/discover/saved" is v1).
+ */
+const DISCOVER_ROUTES: string[] = [
+  "/app/discover",
+  "/app/discover/creators",
+  "/app/discover/builders",
+  "/app/discover/briefs",
+  // A v1 route (§12), built in Phase 2: menus keep it hidden, Discover's own tabs link to it.
+  "/app/discover/saved",
+]
+/** "proposals" (Phase 3): add "/app/proposals", "/app/messages" and "/app/notifications". */
+const PROPOSALS_ROUTES: string[] = ["/app/proposals", "/app/messages", "/app/notifications"]
+/** "collab" (Phase 3): add "/app/collabs". */
+const COLLAB_ROUTES: string[] = ["/app/collabs"]
+
+const BUILT_ROUTES: ReadonlySet<string> = new Set([
+  ...PHASE_1_ROUTES,
+  ...SUPPLY_ROUTES,
+  ...DISCOVER_ROUTES,
+  ...PROPOSALS_ROUTES,
+  ...COLLAB_ROUTES,
 ])
 
 /** Whether the page at `href` (a menu path, without query or hash) exists in this build. */

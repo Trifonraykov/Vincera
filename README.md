@@ -211,13 +211,19 @@ Outside production, every external service runs a fake implementation when its c
 
 **On a phone:** see [The phone app](#the-phone-app-pwa) below.
 
-**What works so far (Phase 1):** sign up, pick creator, builder or both, and walk onboarding: profile (handle, niche, languages / skills, stack, availability), connect YouTube, Instagram or TikTok (or enter numbers by hand), review the AI audience summary, GitHub and portfolio for builders, then Stripe payouts. Then `/app/audience`, Settings (profile, connections, payouts, notifications, account) and the public profiles at `/c/<handle>` and `/b/<handle>`. With fakes, every connection and the payouts onboarding work offline. Real provider apps need their credentials in `.env.local`; each provider's redirect URI is `<NEXT_PUBLIC_APP_URL>/api/oauth/<provider>/callback`. Background jobs (`social/sync`, the daily resync and YouTube retention) run in-process when Inngest is fake.
+**What works so far (Phases 1–3):**
+- **Phase 1:** sign up, pick creator, builder or both, and walk onboarding: profile (handle, niche, languages / skills, stack, availability), connect YouTube, Instagram or TikTok (or enter numbers by hand), review the AI audience summary, GitHub and portfolio for builders, then Stripe payouts. Then `/app/audience`, Settings (profile, connections, payouts, notifications, account) and the public profiles at `/c/<handle>` and `/b/<handle>`. Real provider apps need their credentials in `.env.local`; each provider's redirect URI is `<NEXT_PUBLIC_APP_URL>/api/oauth/<provider>/callback`.
+- **Phase 2:** creators post ideas (`/app/ideas`, with an AI brief drafted from pasted audience comments), builders list products (`/app/products`); both are embedded and matched (matching v0, `CLAUDE.md` §8). `/app/discover` shows ranked matches with a one-sentence explanation, Save and Dismiss; `/app` shows top matches per role.
+- **Phase 3:** proposals with counter-offers (`/app/proposals`), messages with attachments (`/app/messages`), notifications (`/app/notifications`, plus email), and collabs (`/app/collabs`): the v1 agreement (draft, pending legal review) signed by typing your name once both people have payouts set up, a PDF stored and emailed when both have signed, and tasks.
+- With fakes everything above works offline; background jobs run in-process when Inngest is fake.
+
+**Demo data:** `pnpm db:seed` (Docker runs it on every start; it only adds what is missing) creates 10 creators (`seed-creator-01@example.com` … `-10`) and 10 builders (`seed-builder-01@example.com` … `-10`) with profiles, connections, payouts, ideas, products, matches with explanations, and three collabs in three stages (01: `agreement`, signed by the creator only; 02: `ended`, cancelled before signing; 03: `building`, signed by both, with tasks and messages). Sign in as any of them with the fake mailbox above.
 
 ## The phone app (PWA)
 
 The platform is a mobile-first web app that installs like a native one (native apps are out of scope, `CLAUDE.md` §1); the patterns for building pages are in `CLAUDE.md` §19.20.
 
-- **On a phone**, the signed-in app has a bottom tab bar: Home, Discover, Collabs, Inbox and **Me**. Until Discover, Collabs and Inbox are built, the role's other pages stand in (creators: Audience, Profile, Payouts; builders: Profile, Connections, Payouts). Me lists everything else (your pages, settings, the role switch, your public profiles, appearance, sign out). A compact top bar shows the page title and a back button on nested pages. Forms keep their main button in a bar above the tabs. Desktop keeps the sidebar.
+- **On a phone**, the signed-in app has a bottom tab bar: Home, Discover, Collabs, Inbox and **Me**. Me lists everything else (your pages, settings, the role switch, your public profiles, appearance, sign out). A compact top bar shows the page title and a back button on nested pages. Forms keep their main button in a bar above the tabs. Desktop keeps the sidebar.
 - **Installed:** it opens full screen, straight into `/app`, with shortcuts on a long press. The installed iPhone app keeps its own sign-in, apart from Safari's: type the **sign-in code** from the email into the app instead of tapping the link.
 - **Offline:** a service worker (`public/sw.js`, production builds: Docker, `pnpm build && pnpm start`) shows an offline page when there is no connection and keeps the app's static files. It never stores pages or data, so nothing one person saw stays on a shared phone. To try it under `pnpm dev`, set `NEXT_PUBLIC_ENABLE_SW=1` (and back to unset afterwards: under `next dev` it would keep serving old code).
 - **Icons:** `public/icons/` and `app/favicon.ico` are generated from the logo mark by `pnpm pwa:icons` and committed.
@@ -248,7 +254,7 @@ Browsers install a web app, and run its service worker, only from a secure addre
 | `pnpm db:generate` | Generate a Drizzle migration from `lib/db/schema` (`--custom --name <name>` for hand-written SQL) |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL`, then the Supabase hardening (a no-op on plain Postgres) |
 | `pnpm db:reset` | Drop, re-create and migrate the `DATABASE_URL` database (never in production) |
-| `pnpm db:seed` | Seed demo data (placeholder until Phase 2) |
+| `pnpm db:seed` | Seed demo data, idempotent (steps in `lib/seed/`; refused when `APP_ENV=production`) |
 | `pnpm admin:grant <email>` | Give an existing user the admin role (audited) |
 | `pnpm supabase:start` / `supabase:stop` / `supabase:status` | Local Supabase database and Studio (Supabase CLI, project in `supabase-local/`) |
 | `pnpm stripe:listen` | Forward Stripe test webhooks, platform and Connect, to the local app (Stripe CLI) |
