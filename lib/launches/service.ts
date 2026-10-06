@@ -826,18 +826,22 @@ export async function adminRejectLaunch(
 
 // --- Pause, resume, end ---------------------------------------------------------------------
 
-/** A member or an admin pauses a live launch (the product page then says "unavailable"). */
+/**
+ * A member or an admin pauses a live launch (the product page then says "unavailable"). An admin
+ * may pause it because of a collab dispute (`dueToDispute`, Phase 6: `paused_by = dispute`).
+ */
 export async function pauseLaunch(
   database: DbOrTx,
   user: AuthzUser,
-  input: { launchId: string },
+  input: { launchId: string; dueToDispute?: boolean },
 ): Promise<{ status: LaunchStatus }> {
   const slug = await withTransaction(async (tx) => {
     const state = isAdmin(user)
       ? await lockForAdmin(tx, user, input.launchId)
       : await lockForMember(tx, user, input.launchId)
     if (!canPauseLaunch(user, state.access)) throw new ActionError(LAUNCH_ERRORS.notLive)
-    const by: LaunchPausedBy = state.access.memberUserIds.includes(user.id) ? "member" : "admin"
+    const isMember = state.access.memberUserIds.includes(user.id)
+    const by: LaunchPausedBy = isMember ? "member" : input.dueToDispute ? "dispute" : "admin"
     const at = now()
     await tx
       .update(launches)
@@ -853,8 +857,15 @@ export async function pauseLaunch(
       },
       tx,
     )
-    if (by === "admin") {
-      await audit(tx, user, "launch.paused", state.row.id, { status: "live" }, { status: "paused" })
+    if (by !== "member") {
+      await audit(
+        tx,
+        user,
+        "launch.paused",
+        state.row.id,
+        { status: "live" },
+        { status: "paused", paused_by: by },
+      )
     }
     for (const member of state.members) {
       if (member.userId === user.id) continue

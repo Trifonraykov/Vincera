@@ -62,6 +62,7 @@ export default defineConfig([
     // Legacy Vincera Bot (§19.1) — never linted or modified
     "vincera/**",
     "dashboard/**",
+    ".claude/**",
     "supabase/**",
     // Generated / tool output
     "drizzle/**",

@@ -553,3 +553,22 @@ describe("devMailboxEnabled", () => {
     ).toBe(false)
   })
 })
+
+describe("matching v1 flags (CLAUDE.md §19.38)", () => {
+  it("accepts v0 or a dated v1 version, and refuses anything else", () => {
+    expect(
+      parseEnv({ ...base, MATCHING_MODEL_VERSION: "v1-2026-11-02" }).MATCHING_MODEL_VERSION,
+    ).toBe("v1-2026-11-02")
+    expect(parseEnv({ ...base, MATCHING_MODEL_VERSION: "" }).MATCHING_MODEL_VERSION).toBeUndefined()
+    expect(problemsOf({ ...base, MATCHING_MODEL_VERSION: "latest" })).toEqual([
+      expect.stringMatching(/^MATCHING_MODEL_VERSION: /),
+    ])
+  })
+
+  it("allows forcing v1 outside production only", () => {
+    expect(parseEnv({ ...base, MATCHING_V1_FORCE: "true" }).MATCHING_V1_FORCE).toBe(true)
+    expect(problemsOf({ ...production, MATCHING_V1_FORCE: "true" })).toContainEqual(
+      expect.stringMatching(/^MATCHING_V1_FORCE: /),
+    )
+  })
+})

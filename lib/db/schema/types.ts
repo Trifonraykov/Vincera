@@ -76,6 +76,50 @@ export type MatchFeatures = Record<MatchFeature, number>
 /** matching_config.weights: one weight per feature. */
 export type MatchWeights = Record<MatchFeature, number>
 
+/** proposals.match_snapshot: the match a proposal was sent from, frozen at send time (§19.38). */
+export type MatchSnapshot = {
+  modelVersion: string
+  score: number
+  features: MatchFeatures
+  /** The match row's `computed_at`, ISO 8601. */
+  computedAt: string
+}
+
+/** The two v1 outcomes (§8): "proposal accepted" and "launch made ≥ 1 sale". */
+export const MATCHING_TARGETS = ["accepted", "sale"] as const
+export type MatchingTarget = (typeof MATCHING_TARGETS)[number]
+
+/**
+ * One fitted logistic regression over the §8 features (CLAUDE.md §19.38): the features are
+ * standardised with `means` / `stds` (a std of 0 makes the feature contribute nothing), then
+ * p = σ(intercept + Σ coefficient × standardised feature).
+ */
+export type LogisticModelParams = {
+  intercept: number
+  coefficients: Record<MatchFeature, number>
+  means: Record<MatchFeature, number>
+  stds: Record<MatchFeature, number>
+}
+
+/**
+ * matching_config.model for `kind = 'logistic'` (Phase 7 v1). The ranking score is the
+ * probability of `scoreTarget`; the other target's model is kept for evaluation (null when it
+ * had too few positives to fit).
+ */
+export type MatchingModel = {
+  kind: "logistic"
+  v: 1
+  scoreTarget: MatchingTarget
+  l2: number
+  targets: Record<MatchingTarget, LogisticModelParams | null>
+}
+
+/**
+ * matching_config.metrics: the evaluation the trainer stored (held-out AUC, log loss,
+ * calibration, sample sizes, the v0 comparison). Its exact shape belongs to lib/matching/v1.
+ */
+export type MatchingMetrics = JsonObject
+
 // --- Collaboration -----------------------------------------------------------------------------
 
 /** agreements.terms: snapshot of the deal the agreement text was rendered from. */

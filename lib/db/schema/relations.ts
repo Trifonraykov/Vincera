@@ -20,6 +20,7 @@ import {
   licenseKeys,
   linkClicks,
   orders,
+  refundRequests,
   refunds,
   trackedLinks,
 } from "./commerce"
@@ -34,10 +35,23 @@ import {
   users,
 } from "./identity"
 import { matches, matchingConfig, savedItems } from "./matching"
-import { ledgerEntries, payoutBatches, stripeAccounts, transferReversals, transfers } from "./money"
+import {
+  ledgerAdjustments,
+  ledgerEntries,
+  payoutBatches,
+  stripeAccounts,
+  transferReversals,
+  transfers,
+} from "./money"
 import { audienceSnapshots, socialConnections } from "./social"
 import { ideas, products } from "./supply"
-import { adminAuditLog, disputes, notificationPrefs, notifications } from "./trust"
+import {
+  adminAuditLog,
+  disputes,
+  impersonationSessions,
+  notificationPrefs,
+  notifications,
+} from "./trust"
 
 /** Relations for Drizzle's relational query API (`db.query.*`). */
 
@@ -304,6 +318,16 @@ export const refundsRelations = relations(refunds, ({ one, many }) => ({
   transferReversals: many(transferReversals),
 }))
 
+export const refundRequestsRelations = relations(refundRequests, ({ one }) => ({
+  order: one(orders, { fields: [refundRequests.orderId], references: [orders.id] }),
+  accessGrant: one(accessGrants, {
+    fields: [refundRequests.accessGrantId],
+    references: [accessGrants.id],
+  }),
+  refund: one(refunds, { fields: [refundRequests.refundId], references: [refunds.id] }),
+  decidedBy: one(users, { fields: [refundRequests.decidedByUserId], references: [users.id] }),
+}))
+
 export const chargebacksRelations = relations(chargebacks, ({ one, many }) => ({
   order: one(orders, { fields: [chargebacks.orderId], references: [orders.id] }),
   ledgerEntries: many(ledgerEntries),
@@ -348,11 +372,22 @@ export const ledgerEntriesRelations = relations(ledgerEntries, ({ one }) => ({
   }),
   user: one(users, { fields: [ledgerEntries.userId], references: [users.id] }),
   transfer: one(transfers, { fields: [ledgerEntries.transferId], references: [transfers.id] }),
+  adjustment: one(ledgerAdjustments, {
+    fields: [ledgerEntries.adjustmentId],
+    references: [ledgerAdjustments.id],
+  }),
+}))
+
+export const ledgerAdjustmentsRelations = relations(ledgerAdjustments, ({ one, many }) => ({
+  admin: one(users, { fields: [ledgerAdjustments.adminUserId], references: [users.id] }),
+  dispute: one(disputes, { fields: [ledgerAdjustments.disputeId], references: [disputes.id] }),
+  order: one(orders, { fields: [ledgerAdjustments.orderId], references: [orders.id] }),
+  entries: many(ledgerEntries),
 }))
 
 // --- Trust & ops -------------------------------------------------------------------------------
 
-export const disputesRelations = relations(disputes, ({ one }) => ({
+export const disputesRelations = relations(disputes, ({ one, many }) => ({
   collab: one(collabs, { fields: [disputes.collabId], references: [collabs.id] }),
   raisedBy: one(users, {
     fields: [disputes.raisedByUserId],
@@ -364,6 +399,12 @@ export const disputesRelations = relations(disputes, ({ one }) => ({
     references: [users.id],
     relationName: "dispute_resolved_by",
   }),
+  reviewer: one(users, {
+    fields: [disputes.inReviewByUserId],
+    references: [users.id],
+    relationName: "dispute_in_review_by",
+  }),
+  adjustments: many(ledgerAdjustments),
 }))
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
@@ -376,6 +417,19 @@ export const notificationPrefsRelations = relations(notificationPrefs, ({ one })
 
 export const adminAuditLogRelations = relations(adminAuditLog, ({ one }) => ({
   admin: one(users, { fields: [adminAuditLog.adminUserId], references: [users.id] }),
+}))
+
+export const impersonationSessionsRelations = relations(impersonationSessions, ({ one }) => ({
+  admin: one(users, {
+    fields: [impersonationSessions.adminUserId],
+    references: [users.id],
+    relationName: "impersonation_admin",
+  }),
+  target: one(users, {
+    fields: [impersonationSessions.targetUserId],
+    references: [users.id],
+    relationName: "impersonation_target",
+  }),
 }))
 
 export const eventsRelations = relations(events, ({ one }) => ({

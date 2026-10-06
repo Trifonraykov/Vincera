@@ -242,6 +242,14 @@ const envSchema = z.object({
   HOLD_DAYS: z.coerce.number().int().min(0).default(14),
   MIN_PAYOUT_CENTS: z.coerce.number().int().min(0).default(1000),
   AUTO_APPROVE_LAUNCHES: flag,
+  // Matching v1 (§8, Phase 7; CLAUDE.md §19.38): pin the model version that ranks (e.g. "v0" to
+  // roll back, or "v1-2026-11-02"); unset = the `matching_config` row marked active. A v1 version
+  // ranks only once ≥ 50 launches went live, unless MATCHING_V1_FORCE (never in production).
+  MATCHING_MODEL_VERSION: z
+    .string()
+    .regex(/^(v0|v1-\d{4}-\d{2}-\d{2}(-\d{1,3})?)$/, "must be v0 or v1-<YYYY-MM-DD>[-n]")
+    .optional(),
+  MATCHING_V1_FORCE: flag,
 
   // Development & tests (§19.3, §19.4)
   FAKE_SERVICES: fakeServices,
@@ -417,6 +425,9 @@ export function parseEnv(source: EnvSource = process.env): Env {
     }
     if (strict && data.DEV_MAILBOX) {
       report("DEV_MAILBOX", "the dev mailbox is not allowed in production")
+    }
+    if (strict && data.MATCHING_V1_FORCE) {
+      report("MATCHING_V1_FORCE", "forcing matching v1 is not allowed in production (§8)")
     }
     // DATABASE_URL + DATABASE_SSL + DATABASE_CA_CERT together (e.g. a CA next to sslmode=disable,
     // an unreadable CA file). Production also refuses a database off this machine that is not

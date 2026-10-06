@@ -17,6 +17,7 @@ import {
   Package,
   Rocket,
   Scale,
+  ScrollText,
   Send,
   Settings,
   Sparkles,
@@ -28,7 +29,9 @@ import {
 
 /**
  * Navigation: the single source of truth for every menu (§12 routes, exactly).
- * Items marked `v1` belong to Phase 7 and are hidden unless `includeV1` is set.
+ * Items marked `v1` belong to Phase 7: they show once their page is built (`isBuiltRoute`), or
+ * always with `includeV1` (tests and the "coming soon" lookups). The W4 gate switched them on
+ * (CLAUDE.md §19.43): every v1 page exists now.
  */
 
 /** The role the app is currently acting as (`users.active_role`). */
@@ -43,7 +46,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 export type NavLink = {
   title: string
   href: string
-  /** Phase 7 route; hidden unless v1 is enabled. */
+  /** Phase 7 route; hidden until its page is built, unless `includeV1` is set. */
   v1?: boolean
 }
 
@@ -386,6 +389,25 @@ const COLLAB_ROUTES: string[] = ["/app/collabs"]
 const LAUNCH_ROUTES: string[] = ["/app/launches", "/admin/launches"]
 /** "payouts" (Phase 5, §19.35): the earnings overview and the payouts history. */
 const EARNINGS_ROUTES: string[] = ["/app/earnings", "/app/earnings/payouts"]
+/**
+ * Phases 6–7 (CLAUDE.md §19.38): each builder adds its menu pages to its own list when the page
+ * exists, and touches no other list.
+ * - "admin" (Phase 6): "/admin/users", "/admin/collabs", "/admin/disputes", "/admin/payouts",
+ *   "/admin/audit" ("/admin/launches" is already built, in LAUNCH_ROUTES).
+ * - "trust" (Phase 6): no menu page of its own (Settings → Account and the collab pages exist).
+ * - "analytics" (Phase 7, v1): "/launches" and "/admin/events" (`/app/collabs/[id]/analytics`,
+ *   `/app/launches/[id]/links` and `/access/[token]/refund` are reached from their parents).
+ * - "matching-v1" (Phase 7, v1): "/admin/matching".
+ */
+const ADMIN_ROUTES: string[] = [
+  "/admin/users",
+  "/admin/collabs",
+  "/admin/disputes",
+  "/admin/payouts",
+  "/admin/audit",
+]
+const ANALYTICS_ROUTES: string[] = ["/launches", "/admin/events"]
+const MATCHING_V1_ROUTES: string[] = ["/admin/matching"]
 
 const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...PHASE_1_ROUTES,
@@ -395,6 +417,9 @@ const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...COLLAB_ROUTES,
   ...LAUNCH_ROUTES,
   ...EARNINGS_ROUTES,
+  ...ADMIN_ROUTES,
+  ...ANALYTICS_ROUTES,
+  ...MATCHING_V1_ROUTES,
 ])
 
 /** Whether the page at `href` (a menu path, without query or hash) exists in this build. */
@@ -414,6 +439,8 @@ const ADMIN_SECTIONS: NavSection[] = [
       { title: "Launches", href: "/admin/launches", icon: ListChecks },
       { title: "Disputes", href: "/admin/disputes", icon: Scale },
       { title: "Payouts", href: "/admin/payouts", icon: Banknote },
+      // Beyond §12 (§14 "every admin action is written to admin_audit_log"; CLAUDE.md §19.38).
+      { title: "Audit log", href: "/admin/audit", icon: ScrollText },
     ],
   },
   {
@@ -429,15 +456,20 @@ export function adminNav(options: NavOptions = {}): NavSection[] {
   return filterSections(ADMIN_SECTIONS, options)
 }
 
-/** Marketing links visible with the given options (drops v1 routes by default). */
+/** Marketing links visible with the given options (drops unbuilt v1 routes by default). */
 export function marketingNav(options: NavOptions = {}): NavLink[] {
-  return MARKETING_NAV.filter((link) => options.includeV1 || !link.v1)
+  return MARKETING_NAV.filter((link) => isVisibleLink(link, options))
 }
 
 // --- Helpers --------------------------------------------------------------------------------
 
-function filterSections(sections: NavSection[], { includeV1 = false }: NavOptions): NavSection[] {
-  const visible = <T extends NavLink>(link: T) => includeV1 || !link.v1
+/** A v1 link shows once its page exists (§19.43), or always with `includeV1`. */
+function isVisibleLink(link: NavLink, { includeV1 = false }: NavOptions): boolean {
+  return includeV1 || !link.v1 || isBuiltRoute(link.href)
+}
+
+function filterSections(sections: NavSection[], options: NavOptions): NavSection[] {
+  const visible = <T extends NavLink>(link: T) => isVisibleLink(link, options)
   return sections
     .map((section) => ({
       ...section,

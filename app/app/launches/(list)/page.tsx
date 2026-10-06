@@ -105,12 +105,24 @@ function LaunchRow({ item }: { item: LaunchListItem }) {
         <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </Link>
       {live ? (
-        <div className="border-t px-4 py-2">
+        <div className="flex flex-wrap gap-x-4 border-t px-4 py-2">
           <Link
             href={`/app/launches/${item.id}/kit`}
             className="inline-flex min-h-11 items-center text-sm font-medium underline-offset-4 hover:underline sm:min-h-8"
           >
             Launch kit
+          </Link>
+          <Link
+            href={`/app/launches/${item.id}/links`}
+            className="inline-flex min-h-11 items-center text-sm font-medium underline-offset-4 hover:underline sm:min-h-8"
+          >
+            Tracked links
+          </Link>
+          <Link
+            href={`/app/collabs/${item.collabId}/analytics`}
+            className="inline-flex min-h-11 items-center text-sm font-medium underline-offset-4 hover:underline sm:min-h-8"
+          >
+            Analytics
           </Link>
         </div>
       ) : null}

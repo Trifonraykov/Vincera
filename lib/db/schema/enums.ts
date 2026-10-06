@@ -249,3 +249,41 @@ export type DisputeKind = (typeof disputeKindEnum.enumValues)[number]
 
 export const disputeStatusEnum = pgEnum("dispute_status", ["open", "in_review", "resolved"])
 export type DisputeStatus = (typeof disputeStatusEnum.enumValues)[number]
+
+/**
+ * How an admin settled a collab dispute (CLAUDE.md §19.38): `no_action` (closed without changes),
+ * `adjusted` (an audited ledger adjustment moved money), `collab_ended` (the collab was ended,
+ * reason `dispute`), `other` (see the resolution note).
+ */
+export const disputeOutcomeEnum = pgEnum("dispute_outcome", [
+  "no_action",
+  "adjusted",
+  "collab_ended",
+  "other",
+])
+export type DisputeOutcome = (typeof disputeOutcomeEnum.enumValues)[number]
+
+// Phase 7 (v1): buyer refund requests at /access/[token]/refund (CLAUDE.md §19.38)
+export const refundRequestStatusEnum = pgEnum("refund_request_status", [
+  "pending",
+  "approved",
+  "declined",
+])
+export type RefundRequestStatus = (typeof refundRequestStatusEnum.enumValues)[number]
+
+/** Why the buyer asks for their money back (a choice on the form; the free text is optional). */
+export const refundRequestReasonEnum = pgEnum("refund_request_reason", [
+  "not_as_described",
+  "not_working",
+  "not_received",
+  "accidental",
+  "other",
+])
+export type RefundRequestReason = (typeof refundRequestReasonEnum.enumValues)[number]
+
+/**
+ * How a `matching_config` row scores (§8; CLAUDE.md §19.38): `weighted` = Σ weight × feature (v0),
+ * `logistic` = the v1 model in `matching_config.model` (Phase 7).
+ */
+export const matchingModelKindEnum = pgEnum("matching_model_kind", ["weighted", "logistic"])
+export type MatchingModelKind = (typeof matchingModelKindEnum.enumValues)[number]

@@ -27,7 +27,7 @@ import {
 import { users } from "./identity"
 import { matches } from "./matching"
 import { ideas, products } from "./supply"
-import type { AgreementTerms, MessageAttachment } from "./types"
+import type { AgreementTerms, MatchSnapshot, MessageAttachment } from "./types"
 
 /**
  * Collaboration (§5): proposals → collabs → agreements, tasks, threads.
@@ -70,6 +70,12 @@ export const proposals = withRLS(
         .$defaultFn(() => new Date(now().getTime() + PROPOSAL_TTL_DAYS * DAY_MS)),
       /** The match the sender proposed from, if any (links matching to outcomes, §8 v1). */
       matchId: uuid("match_id").references(() => matches.id, { onDelete: "set null" }),
+      /**
+       * The match as it was when the proposal was sent (model version, score, features), so v1's
+       * training rows use pre-outcome features: `matches` rows are rewritten by every recompute
+       * (Phase 7; CLAUDE.md §19.38). Null without a match.
+       */
+      matchSnapshot: jsonb("match_snapshot").$type<MatchSnapshot>(),
       /** First answer by the recipient (counter, accept or decline); null until then. */
       respondedAt: timestamptz("responded_at"),
       /** When the proposal reached a final status; set exactly for closed statuses. */
@@ -94,6 +100,10 @@ export const proposals = withRLS(
         .where(sql`${t.status} IN ('pending', 'countered')`),
       check("proposals_exactly_one_target", sql`num_nonnulls(${t.ideaId}, ${t.productId}) = 1`),
       check("proposals_not_to_self", sql`${t.fromUserId} <> ${t.toUserId}`),
+      check(
+        "proposals_match_snapshot_object",
+        sql`${t.matchSnapshot} IS NULL OR jsonb_typeof(${t.matchSnapshot}) = 'object'`,
+      ),
       check(
         "proposals_closed_iff_final",
         sql`(${t.status} IN ('accepted', 'declined', 'expired', 'withdrawn')) = (${t.closedAt} IS NOT NULL)`,

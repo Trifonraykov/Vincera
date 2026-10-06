@@ -16,6 +16,21 @@ export type NotificationText = { title: string; detail: string | null; tone: Not
 const quoted = (title: string) => `“${title}”`
 const formatAmount = (cents: number, currency: string) => formatMoney(cents, currency)
 
+/** What a dispute is about, for one line of text. */
+const DISPUTE_KIND_TEXT = {
+  split: "the split",
+  non_delivery: "delivery",
+  exit: "leaving the collab",
+  other: "the collab",
+} as const
+
+const DISPUTE_OUTCOME_TEXT = {
+  no_action: "Closed without changes.",
+  adjusted: "Our team adjusted the earnings.",
+  collab_ended: "The collab was ended.",
+  other: "See the collab for details.",
+} as const
+
 export function describeNotification(notification: ParsedNotification): NotificationText {
   switch (notification.type) {
     case "social.expired": {
@@ -179,6 +194,42 @@ export function describeNotification(notification: ParsedNotification): Notifica
     case "admin.chargeback_opened":
       return {
         title: "A chargeback was opened",
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} on ${quoted(notification.payload.launch_title)}`,
+        tone: "money",
+      }
+    case "dispute.opened":
+      return {
+        title: `${notification.payload.raised_by_name} raised a dispute`,
+        detail: `About ${DISPUTE_KIND_TEXT[notification.payload.kind]} in ${quoted(notification.payload.collab_title)}. Our team will look into it.`,
+        tone: "collab",
+      }
+    case "dispute.in_review":
+      return {
+        title: "Our team is looking into a dispute",
+        detail: quoted(notification.payload.collab_title),
+        tone: "collab",
+      }
+    case "dispute.resolved":
+      return {
+        title: `A dispute in ${quoted(notification.payload.collab_title)} is resolved`,
+        detail: DISPUTE_OUTCOME_TEXT[notification.payload.outcome],
+        tone: "collab",
+      }
+    case "admin.dispute_opened":
+      return {
+        title: "A collab dispute was raised",
+        detail: `About ${DISPUTE_KIND_TEXT[notification.payload.kind]} in ${quoted(notification.payload.collab_title)}`,
+        tone: "collab",
+      }
+    case "refund.requested":
+      return {
+        title: `A buyer asked for a refund of ${quoted(notification.payload.launch_title)}`,
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)}. Our team decides and lets you know.`,
+        tone: "money",
+      }
+    case "admin.refund_requested":
+      return {
+        title: "A buyer asked for a refund",
         detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} on ${quoted(notification.payload.launch_title)}`,
         tone: "money",
       }

@@ -34,6 +34,7 @@ export function CollabHeader({
     tasks: "Tasks",
     messages: "Messages",
     launch: "Launch",
+    analytics: "Analytics",
   }
   return (
     <div className="space-y-4">

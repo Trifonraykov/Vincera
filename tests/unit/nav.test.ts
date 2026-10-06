@@ -79,6 +79,8 @@ const SPEC_ROUTES = new Set([
   "/admin/launches",
   "/admin/disputes",
   "/admin/payouts",
+  // Beyond §12: the audit log page (§14; CLAUDE.md §19.38).
+  "/admin/audit",
   "/admin/events",
   "/admin/matching",
 ])
@@ -98,7 +100,7 @@ describe("navigation", () => {
     for (const href of all) expect(SPEC_ROUTES).toContain(href)
   })
 
-  it("hides v1 routes unless enabled", () => {
+  it("shows v1 routes once their page is built (§19.43), and always with includeV1", () => {
     const visible = [
       ...navHrefs(appNav("creator")),
       ...navHrefs(appNav("builder")),
@@ -106,8 +108,9 @@ describe("navigation", () => {
       ...marketingNav().map((l) => l.href),
     ]
     for (const route of V1_ROUTES) {
-      expect(visible).not.toContain(route)
       expect(all).toContain(route)
+      if (isBuiltRoute(route)) expect(visible).toContain(route)
+      else expect(visible).not.toContain(route)
     }
   })
 
@@ -279,8 +282,10 @@ describe("navigation", () => {
     expect(shellBackHref("/app/discover/creators", tabs)).toBe(
       isBuiltRoute("/app/discover") ? "/app/discover" : ME_PATH,
     )
-    // The admin users list is not built yet, so the admin bar keeps its menu button there.
-    expect(shellBackHref("/admin/users/0190", tabs)).toBeNull()
+    // An admin detail page goes back to its list once that list is built (Phase 6).
+    expect(shellBackHref("/admin/users/0190", tabs)).toBe(
+      isBuiltRoute("/admin/users") ? "/admin/users" : null,
+    )
     expect(shellBackHref("/c/ada", tabs)).toBeNull()
   })
 
@@ -297,7 +302,9 @@ describe("navigation", () => {
     expect(plannedNavItem("/app/earnings/payouts")?.title).toBe(
       isBuiltRoute("/app/earnings") ? undefined : "Earnings",
     )
-    expect(plannedNavItem("/admin/users")?.title).toBe("Users")
+    expect(plannedNavItem("/admin/users")?.title).toBe(
+      isBuiltRoute("/admin/users") ? undefined : "Users",
+    )
     // Built pages and unknown paths are not "coming soon".
     expect(plannedNavItem("/app")).toBeNull()
     expect(plannedNavItem("/app/ideas/new")).toBeNull()

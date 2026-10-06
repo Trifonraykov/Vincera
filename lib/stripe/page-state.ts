@@ -1,5 +1,6 @@
 import "server-only"
 
+import { isMutationBlockedByImpersonation } from "@/lib/auth/impersonation"
 import { getDb } from "@/lib/db/client"
 import { reportError } from "@/lib/observability"
 import { isPayoutsReady } from "@/lib/payouts/readiness"
@@ -38,7 +39,11 @@ export async function loadPayoutsPageState(
       refreshFailed: false,
     }
   }
-  if (!options.returned && isPayoutsReady(stored)) {
+  // No Stripe re-fetch (it writes) during an admin's read-only "view as" (CLAUDE.md §19.38).
+  if (
+    (!options.returned && isPayoutsReady(stored)) ||
+    (await isMutationBlockedByImpersonation({ id: userId }))
+  ) {
     return { account: stored, defaultCountry: null, refreshFailed: false }
   }
   try {

@@ -36,6 +36,7 @@ export function AppShell({
   defaultSidebarOpen = true,
   unreadNotifications = 0,
   unreadMessages = 0,
+  banner,
   ...props
 }: ShellProps & { children: ReactNode }) {
   const isApp = props.variant === "app" && props.user !== null
@@ -66,6 +67,7 @@ export function AppShell({
             </div>
           </header>
           <AppBar variant={props.variant} tabs={tabs} appName={props.appName} trailing={bell} />
+          {banner ? <div className="sticky top-[var(--sticky-top,0px)] z-20">{banner}</div> : null}
           <div className="mx-auto w-full max-w-6xl flex-1 pt-6 px-safe-4 pb-[calc(1.5rem+var(--sticky-bottom,0px))] sm:px-safe-6 lg:pt-8 lg:pb-8">
             {children}
             {isApp ? <InstallPrompt /> : null}

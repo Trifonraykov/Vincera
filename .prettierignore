@@ -23,3 +23,6 @@ coverage/
 .data/
 pnpm-lock.yaml
 next-env.d.ts
+
+# Agent worktrees (local only)
+.claude/

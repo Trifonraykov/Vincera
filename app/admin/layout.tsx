@@ -2,10 +2,11 @@ import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import type { ReactNode } from "react"
 
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { AppShell } from "@/components/layout/app-shell"
 import { toShellViewer } from "@/components/layout/viewer"
 import { signOutAction } from "@/lib/auth/actions"
-import { requireAdmin } from "@/lib/auth/session"
+import { getViewer, requireAdmin } from "@/lib/auth/session"
 import { env } from "@/lib/env"
 
 export const metadata: Metadata = {
@@ -19,6 +20,8 @@ export const metadata: Metadata = {
  */
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const viewer = toShellViewer(await requireAdmin())
+  // Admin pages stay usable (read-only) during "view as"; the banner says so (§19.38).
+  const { impersonation } = await getViewer()
   const sidebarState = (await cookies()).get("sidebar_state")?.value
 
   return (
@@ -31,6 +34,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       isAdmin={viewer.isAdmin}
       signOut={signOutAction}
       defaultSidebarOpen={sidebarState !== "false"}
+      banner={impersonation ? <ImpersonationBanner impersonation={impersonation} /> : undefined}
     >
       {children}
     </AppShell>

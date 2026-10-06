@@ -3,6 +3,10 @@ import "server-only"
 import { unstable_rethrow } from "next/navigation"
 import { z } from "zod"
 
+import {
+  IMPERSONATION_READ_ONLY_MESSAGE,
+  isMutationBlockedByImpersonation,
+} from "@/lib/auth/impersonation"
 import { requireUser } from "@/lib/auth/session"
 import type { AuthUser } from "@/lib/auth/user"
 import { getDb, type Db } from "@/lib/db/client"
@@ -18,7 +22,8 @@ export { ACTION_MESSAGES, type ActionResult, type FieldErrors } from "./result"
  * Server action recipe (§4), in one place:
  *
  * 1. parse the input with Zod (field errors come back to the form);
- * 2. `requireUser()` (signed-out → /sign-in, suspended → error page);
+ * 2. `requireUser()` (signed-out → /sign-in, suspended → error page); during an admin's read-only
+ *    "view as" every action is refused here, before `authorize` (CLAUDE.md §19.38);
  * 3. `authorize(user, input)` with a rule from lib/auth/authz.ts;
  * 4./5. `run()` does the work. Transactions and events stay explicit in `run`, because only the
  *    action knows which writes belong together:
@@ -90,6 +95,9 @@ export function defineAction<Schema extends z.ZodType, T>(
 
     try {
       const user = await requireUser()
+      if (await isMutationBlockedByImpersonation(user)) {
+        return { ok: false, error: IMPERSONATION_READ_ONLY_MESSAGE }
+      }
       const input = parsed.data
       if (!(await definition.authorize(user, input))) {
         return { ok: false, error: ACTION_MESSAGES.forbidden }

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { canManageOwnAccount } from "@/lib/auth/authz"
+import { impersonationRefusalResponse } from "@/lib/auth/impersonation"
 import { requireUser } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
 import { reportError } from "@/lib/observability"
@@ -17,6 +18,9 @@ import { PAYOUTS_PAGES, type PayoutsPage } from "./paths"
  */
 export async function handlePayoutsRefresh(from: PayoutsPage): Promise<Response> {
   const user = await requireUser()
+  // Read-only "view as" (CLAUDE.md §19.38): a new Stripe link is a change.
+  const refused = await impersonationRefusalResponse(user)
+  if (refused) return refused
   const page = PAYOUTS_PAGES[from]
   const back = (query = "") => redirectResponse(absoluteUrl(`${page.page}${query}`))
   if (!canManageOwnAccount(user)) return back()

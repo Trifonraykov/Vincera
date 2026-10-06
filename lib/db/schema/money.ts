@@ -32,6 +32,7 @@ import {
 } from "./enums"
 import { chargebacks, orders, refunds } from "./commerce"
 import { users } from "./identity"
+import { disputes } from "./trust"
 import type { JsonObject } from "./types"
 
 /** Money (§5, §9). Nothing here is ever cascaded: deletes are RESTRICTed. */
@@ -204,6 +205,40 @@ export const transferReversals = withRLS(
 )
 
 /**
+ * An admin's ledger adjustment (Phase 6; CLAUDE.md §19.38): the reason and context of a set of
+ * `adjustment` entries (`ledger_entries.adjustment_id`) that sum to zero, e.g. −€5 from one
+ * member and +€5 to the other, or +€5 to a member paid by the platform (user null). Written with
+ * its entries, its `admin_audit_log` row and its event in one transaction. Append-only.
+ */
+export const ledgerAdjustments = withRLS(
+  pgTable(
+    "ledger_adjustments",
+    {
+      id: id(),
+      adminUserId: uuid("admin_user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "restrict" }),
+      /** The collab dispute this settles, if any. */
+      disputeId: uuid("dispute_id").references(() => disputes.id, { onDelete: "restrict" }),
+      /** The order it corrects, if any (its entries then carry the same `order_id`). */
+      orderId: uuid("order_id").references(() => orders.id, { onDelete: "restrict" }),
+      /** Why (≤ 500 characters); never shown to buyers. */
+      reason: text("reason").notNull(),
+      createdAt: createdAt(),
+    },
+    (t) => [
+      index("ledger_adjustments_admin_user_id_idx").on(t.adminUserId),
+      index("ledger_adjustments_dispute_id_idx").on(t.disputeId),
+      index("ledger_adjustments_order_id_idx").on(t.orderId),
+      check(
+        "ledger_adjustments_reason",
+        sql`${nonBlankCheck(t.reason)} AND char_length(${t.reason}) <= 500`,
+      ),
+    ],
+  ),
+)
+
+/**
  * Append-only ledger (§5, §9): every component of every sale and refund. `user_id` null = platform.
  * DB triggers block UPDATE and DELETE, except setting `transfer_id` once (NULL → value) when the
  * payout job pays the entry out. Corrections are new (negative/adjustment) entries.
@@ -227,10 +262,19 @@ export const ledgerEntries = withRLS(
       /** paid_at + HOLD_DAYS; the payout job only pays entries available by then. */
       availableAt: timestamptz("available_at").notNull(),
       transferId: uuid("transfer_id").references(() => transfers.id, { onDelete: "restrict" }),
+      /** An admin adjustment's entries (Phase 6; account `adjustment`, no refund or chargeback). */
+      adjustmentId: uuid("adjustment_id").references(() => ledgerAdjustments.id, {
+        onDelete: "restrict",
+      }),
       createdAt: createdAt(),
     },
     (t) => [
       index("ledger_entries_user_id_available_at_idx").on(t.userId, t.availableAt),
+      index("ledger_entries_adjustment_id_idx").on(t.adjustmentId),
+      check(
+        "ledger_entries_adjustment_account",
+        sql`${t.adjustmentId} IS NULL OR (${t.account} = 'adjustment' AND ${t.refundId} IS NULL AND ${t.chargebackId} IS NULL)`,
+      ),
       index("ledger_entries_order_id_idx").on(t.orderId),
       index("ledger_entries_refund_id_idx").on(t.refundId),
       index("ledger_entries_chargeback_id_idx").on(t.chargebackId),

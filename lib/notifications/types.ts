@@ -37,6 +37,15 @@ const launchPayload = z.object({ collab_id: id, launch_id: id, launch_title: tit
 const money = { amount_cents: z.int().min(0), currency: z.string().regex(/^[a-z]{3}$/) }
 /** An order of a launch (sales, refunds, chargebacks). */
 const orderPayload = launchPayload.extend({ order_id: id, ...money })
+/** A collab dispute (Phase 6; CLAUDE.md §19.38). */
+const disputePayload = z.object({
+  dispute_id: id,
+  collab_id: id,
+  collab_title: title,
+  kind: z.enum(["split", "non_delivery", "exit", "other"]),
+})
+/** A buyer's refund request (Phase 7; CLAUDE.md §19.38). */
+const refundRequestPayload = orderPayload.extend({ refund_request_id: id })
 
 export const NOTIFICATION_PAYLOAD_SCHEMAS = {
   // --- Phase 1 ---------------------------------------------------------------------------------
@@ -109,6 +118,24 @@ export const NOTIFICATION_PAYLOAD_SCHEMAS = {
   "order.disputed": orderPayload,
   /** To admins when a chargeback opens (§9 "notify admin"). Email: dispute-opened.tsx. */
   "admin.chargeback_opened": orderPayload.extend({ chargeback_id: id }),
+
+  // --- Phase 6: collab disputes (sent by lib/disputes, trust; admin moves; CLAUDE.md §19.38) ---
+  /** To the other member when a member raises a dispute. Email: notification.tsx. */
+  "dispute.opened": disputePayload.extend({ raised_by_name: name }),
+  /** To both members when an admin starts looking into it (sent by the admin area). */
+  "dispute.in_review": disputePayload,
+  /** To both members when an admin resolves it (sent by the admin area). */
+  "dispute.resolved": disputePayload.extend({
+    outcome: z.enum(["no_action", "adjusted", "collab_ended", "other"]),
+  }),
+  /** To every active admin when a dispute is raised. Email: notification.tsx. */
+  "admin.dispute_opened": disputePayload,
+
+  // --- Phase 7: buyer refund requests (sent by lib/refund-requests, analytics; §19.38) --------
+  /** To both members when a buyer asks for a refund. Email: notification.tsx. */
+  "refund.requested": refundRequestPayload,
+  /** To every active admin, who decides it. Email: notification.tsx. */
+  "admin.refund_requested": refundRequestPayload,
 } as const satisfies Record<string, z.ZodObject>
 
 type PayloadSchemas = typeof NOTIFICATION_PAYLOAD_SCHEMAS
@@ -146,6 +173,12 @@ export const NOTIFICATION_TYPES = [
   "order.refunded",
   "order.disputed",
   "admin.chargeback_opened",
+  "dispute.opened",
+  "dispute.in_review",
+  "dispute.resolved",
+  "admin.dispute_opened",
+  "refund.requested",
+  "admin.refund_requested",
 ] as const satisfies readonly NotificationType[]
 
 // Compile-time check that NOTIFICATION_TYPES lists every catalog entry.
@@ -183,6 +216,8 @@ export function requiredEmailReason(type: NotificationType): string | null {
 export const ADMIN_NOTIFICATION_TYPES = [
   "admin.launch_review_requested",
   "admin.chargeback_opened",
+  "admin.dispute_opened",
+  "admin.refund_requested",
 ] as const satisfies readonly NotificationType[]
 
 export function isAdminNotificationType(type: NotificationType): boolean {
@@ -217,6 +252,12 @@ export const NOTIFICATION_TYPE_LABELS = {
   "order.refunded": "An order is refunded",
   "order.disputed": "A buyer opens a chargeback",
   "admin.chargeback_opened": "A chargeback is opened (admin)",
+  "dispute.opened": "Your collaborator raises a dispute",
+  "dispute.in_review": "Our team looks into a dispute",
+  "dispute.resolved": "A dispute is resolved",
+  "admin.dispute_opened": "A collab dispute is raised (admin)",
+  "refund.requested": "A buyer asks for a refund",
+  "admin.refund_requested": "A buyer asks for a refund (admin)",
 } as const satisfies Record<NotificationType, string>
 
 /** Sections of the settings page, in order; every type is in exactly one. */
@@ -242,6 +283,9 @@ export const NOTIFICATION_GROUPS = [
       "agreement.reminder",
       "collab.stalled",
       "task.assigned",
+      "dispute.opened",
+      "dispute.in_review",
+      "dispute.resolved",
     ],
   },
   {
@@ -256,9 +300,24 @@ export const NOTIFICATION_GROUPS = [
   },
   {
     label: "Money",
-    types: ["sale.made", "payout.sent", "payout.failed", "order.refunded", "order.disputed"],
+    types: [
+      "sale.made",
+      "payout.sent",
+      "payout.failed",
+      "order.refunded",
+      "order.disputed",
+      "refund.requested",
+    ],
   },
-  { label: "Admin", types: ["admin.launch_review_requested", "admin.chargeback_opened"] },
+  {
+    label: "Admin",
+    types: [
+      "admin.launch_review_requested",
+      "admin.chargeback_opened",
+      "admin.dispute_opened",
+      "admin.refund_requested",
+    ],
+  },
 ] as const satisfies readonly { label: string; types: readonly NotificationType[] }[]
 
 /** Where a notification of each type leads in the app. */
@@ -291,6 +350,13 @@ export const NOTIFICATION_LINKS: {
   "order.refunded": () => "/app/earnings",
   "order.disputed": () => "/app/earnings",
   "admin.chargeback_opened": () => "/admin/payouts",
+  // Members see a collab's disputes on its overview page (CLAUDE.md §19.38).
+  "dispute.opened": (p) => `/app/collabs/${p.collab_id}#disputes`,
+  "dispute.in_review": (p) => `/app/collabs/${p.collab_id}#disputes`,
+  "dispute.resolved": (p) => `/app/collabs/${p.collab_id}#disputes`,
+  "admin.dispute_opened": (p) => `/admin/disputes/${p.dispute_id}`,
+  "refund.requested": () => "/app/earnings",
+  "admin.refund_requested": () => "/admin/payouts#refund-requests",
 }
 
 /** A stored notification whose type is known and whose payload parses. */

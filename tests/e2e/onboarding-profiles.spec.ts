@@ -183,12 +183,14 @@ test.describe("onboarding profiles and settings", () => {
     await page.reload()
     await expect(expiredEmail).not.toBeChecked()
 
-    // Settings → Account: email read-only, GDPR actions announced but disabled, rename.
+    // Settings → Account: email read-only, the GDPR tools (Phase 6, §19.40), rename.
     await page.goto("/app/settings/account")
     await expect(page.getByRole("main").getByText(email.toLowerCase())).toBeVisible()
-    await expect(page.getByRole("button", { name: "Export my data" })).toBeDisabled()
-    await expect(page.getByRole("button", { name: "Delete account" })).toBeDisabled()
-    await expect(page.getByText(/Coming with the data-protection tools/).first()).toBeVisible()
+    await expect(page.getByRole("link", { name: "Export my data" })).toHaveAttribute(
+      "href",
+      "/app/settings/account/export",
+    )
+    await expect(page.getByRole("button", { name: "Delete account" })).toBeEnabled()
     await expect(page.getByRole("link", { name: "Become a builder too" })).toHaveAttribute(
       "href",
       "/onboarding/role",

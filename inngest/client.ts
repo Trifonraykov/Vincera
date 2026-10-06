@@ -132,6 +132,27 @@ export const jobEventSchemas = {
 
   /** Daily (§13 `ledger/check`): reconciliation; a mismatch is reported to Sentry. */
   "ledger/check.requested": z.object({}),
+
+  // --- Phases 6–7 (declared by the W4 prep; contracts in CLAUDE.md §19.38) ----------------------
+
+  /**
+   * After an account deletion commits (trust, §14): delete the user's private files from storage
+   * (portfolio images, evidence screenshots, message attachments they sent, uploads) and revoke
+   * social tokens it still could (job `gdpr-cleanup`). The keys are collected inside the deleting
+   * transaction, because the rows that point at them are gone afterwards. Event id
+   * `gdpr-cleanup:<userId>`.
+   */
+  "gdpr/cleanup.requested": z.object({
+    userId: z.uuid(),
+    storageKeys: z.array(z.string().min(1).max(512)).max(5000),
+  }),
+
+  /**
+   * Train a matching v1 model on the stored feature vectors (matching-v1, §8 v1; job
+   * `matching-train`). The new `matching_config` row is stored inactive. `requestedByUserId` is
+   * the admin who pressed "Train" on /admin/matching (null from the CLI).
+   */
+  "matching/train.requested": z.object({ requestedByUserId: z.uuid().nullable() }),
 } as const satisfies Record<string, z.ZodObject>
 
 export type JobEventName = keyof typeof jobEventSchemas

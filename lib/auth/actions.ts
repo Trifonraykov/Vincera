@@ -10,6 +10,7 @@ import { reportError } from "@/lib/observability"
 
 import { signIn, signOut } from "./auth"
 import { configuredOAuthProviders, EMAIL_PROVIDER_ID, OAUTH_PROVIDER_IDS } from "./config"
+import { IMPERSONATION_COOKIE } from "./impersonation-cookie"
 import type { MagicLinkState } from "./magic-link-state"
 import { isAuthRateLimited } from "./rate-limit"
 import {
@@ -148,7 +149,11 @@ export async function signInWithProvider(formData: FormData): Promise<void> {
   await signIn(parsed.data.provider, { redirectTo: safeCallbackUrl(parsed.data.callbackUrl) })
 }
 
-/** Sign out (the shell's user menu): deletes the database session and clears the cookie. */
+/**
+ * Sign out (the shell's user menu): deletes the database session and clears the cookie, and an
+ * admin's "view as" cookie with it (CLAUDE.md §19.38; the open session row then simply expires).
+ */
 export async function signOutAction(): Promise<void> {
+  ;(await cookies()).delete(IMPERSONATION_COOKIE)
   await signOut({ redirectTo: AUTH_ROUTES.afterSignOut })
 }

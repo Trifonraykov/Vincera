@@ -28,6 +28,7 @@
     "supabase:status": "pnpm dlx supabase@2.119.0 status --workdir supabase-local",
     "stripe:listen": "stripe listen --forward-to localhost:3000/api/webhooks/stripe --forward-connect-to localhost:3000/api/webhooks/stripe",
     "ledger:check": "tsx --tsconfig tsconfig.scripts.json scripts/ledger-check.ts",
+    "matching:train": "tsx --tsconfig tsconfig.scripts.json scripts/matching-train.ts",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "email:dev": "email dev --dir lib/email/templates --port 3001",
     "pwa:icons": "tsx --tsconfig tsconfig.scripts.json scripts/pwa-icons.ts"

@@ -6,6 +6,7 @@ import { now } from "@/lib/clock"
 import type { DbOrTx } from "@/lib/db/client"
 import {
   chargebacks,
+  ledgerAdjustments,
   ledgerEntries,
   orders,
   refunds,
@@ -30,6 +31,7 @@ import type { LedgerCheckMismatch, LedgerCheckReport } from "./types"
  *   entries were released); no transfer or reversal is still `pending` after a day;
  * - every posted refund: Σ its entries = −amount while succeeded, 0 once it failed or was
  *   canceled (and nothing before it is posted); every lost, posted chargeback: −amount;
+ * - every admin ledger adjustment (Phase 6): Σ its entries = 0;
  * - with `compareWithStripe`, both directions:
  *   - every transfer Stripe knows (`created`, `reversed`, `partially_reversed`) matches Stripe's
  *     amount, amount reversed and destination, and is the only one in its `transfer_group`;
@@ -188,6 +190,28 @@ export async function checkLedger(
         actualCents: actual,
       })
     }
+  }
+
+  // --- Admin adjustments (Phase 6, CLAUDE.md §19.38): every one sums to zero ----------------------
+  const adjustmentRows = await db
+    .select({
+      id: ledgerAdjustments.id,
+      orderId: ledgerAdjustments.orderId,
+      actual: sql<string>`coalesce(sum(${ledgerEntries.amountCents}), 0)`,
+    })
+    .from(ledgerAdjustments)
+    .leftJoin(ledgerEntries, eq(ledgerEntries.adjustmentId, ledgerAdjustments.id))
+    .groupBy(ledgerAdjustments.id)
+    .having(sql`coalesce(sum(${ledgerEntries.amountCents}), 0) <> 0`)
+    .orderBy(asc(ledgerAdjustments.id))
+  for (const adjustment of adjustmentRows) {
+    mismatches.push({
+      kind: "adjustment_sum",
+      adjustmentId: adjustment.id,
+      ...(adjustment.orderId ? { orderId: adjustment.orderId } : {}),
+      expectedCents: 0,
+      actualCents: Number(adjustment.actual),
+    })
   }
 
   // --- Transfers ------------------------------------------------------------------------------
@@ -438,6 +462,7 @@ export function formatLedgerReport(report: LedgerCheckReport): string {
       m.orderId && `order ${m.orderId}`,
       m.refundId && `refund ${m.refundId}`,
       m.chargebackId && `chargeback ${m.chargebackId}`,
+      m.adjustmentId && `adjustment ${m.adjustmentId}`,
       m.transferId && `transfer ${m.transferId}`,
       m.reversalId && `reversal ${m.reversalId}`,
       m.stripeId && `Stripe ${m.stripeId}`,

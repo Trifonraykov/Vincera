@@ -5,7 +5,7 @@
  * keeps most of that memory: a whole run (~60 tests) outgrew a 13.4 GB container and the dev
  * server was OOM-killed, failing every later test. Restoring a warm persistent cache
  * (`.next/dev`) made it worse. So without `CI`, a whole-suite run is split into `E2E_DEV_SHARDS`
- * (default 12) Playwright shards run one after another; before each, `.next/dev` is removed, and
+ * (default 16) Playwright shards run one after another; before each, `.next/dev` is removed, and
  * each shard starts its own dev server (and re-seeds the e2e database in its global setup).
  *
  * With `CI=1` (build + start), `E2E_DEV_SHARDS=1`, spec files, `-g`/`--grep` or an explicit
@@ -17,7 +17,7 @@ import { rmSync } from "node:fs"
 import path from "node:path"
 
 const args = process.argv.slice(2)
-const shardCount = Number(process.env.E2E_DEV_SHARDS ?? "12")
+const shardCount = Number(process.env.E2E_DEV_SHARDS ?? "16")
 // Spec files, a grep or an explicit shard: the caller picked the tests, so run them as asked.
 const narrowed = args.some(
   (arg) =>

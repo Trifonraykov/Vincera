@@ -4,8 +4,11 @@ import {
   MATCH_FEATURES,
   type MatchFeature,
   type MatchFeatures,
+  type MatchingModel,
   type MatchWeights,
 } from "@/lib/db/schema/types"
+
+import { scoreWithModel } from "./v1/model"
 
 /**
  * The §8 score: Σ weight × feature, with the weights of the active `matching_config` row (v0:
@@ -61,6 +64,19 @@ export function scoreFeatures(features: MatchFeatures, weights: MatchWeights): n
   }
   if (weightSum <= 0) return 0
   return roundScore(Math.min(1, Math.max(0, total / weightSum)))
+}
+
+/**
+ * What ranks a match (CLAUDE.md §19.38): v0's weighted sum, or a v1 logistic model's probability.
+ * `weights` are always there: explanations name the top two contributions with them (§8).
+ */
+export type RankingModel = { weights: MatchWeights; model: MatchingModel | null }
+
+/** The ranking score of a feature vector under a model version, in 0–1. */
+export function scoreMatch(features: MatchFeatures, ranking: RankingModel): number {
+  return ranking.model
+    ? scoreWithModel(ranking.model, features)
+    : scoreFeatures(features, ranking.weights)
 }
 
 function clampFeature(value: number): number {

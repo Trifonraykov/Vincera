@@ -14,9 +14,15 @@ import {
 } from "drizzle-orm/pg-core"
 
 import { id, timestamps, timestamptz, withRLS } from "./columns"
-import { matchStatusEnum, targetTypeEnum } from "./enums"
+import { matchingModelKindEnum, matchStatusEnum, targetTypeEnum } from "./enums"
 import { users } from "./identity"
-import { MATCH_FEATURES, type MatchFeatures, type MatchWeights } from "./types"
+import {
+  MATCH_FEATURES,
+  type MatchFeatures,
+  type MatchingMetrics,
+  type MatchingModel,
+  type MatchWeights,
+} from "./types"
 
 /**
  * CHECK body: `features` is an object with exactly the §8 feature names, each a number in 0–1.
@@ -33,15 +39,32 @@ function featureVectorCheck(features: AnyPgColumn) {
 
 /** Matching (§5, §8). */
 
-/** Scoring weights per model version (§8). At most one row is active. */
+/**
+ * Scoring model per version (§8). At most one row is active. v0 is `weighted` (Σ weight ×
+ * feature); Phase 7's v1 rows (`v1-<YYYY-MM-DD>`) are `logistic`, with the fitted model in
+ * `model` and the held-out evaluation in `metrics` (CLAUDE.md §19.38). `weights` stays required
+ * for every kind: explanations name the top two contributions (§8), and a logistic row stores
+ * the non-negative weights the trainer derived for that.
+ */
 export const matchingConfig = withRLS(
   pgTable(
     "matching_config",
     {
       id: id(),
       modelVersion: text("model_version").notNull().unique(),
+      kind: matchingModelKindEnum("kind").notNull().default("weighted"),
       weights: jsonb("weights").$type<MatchWeights>().notNull(),
+      /** The fitted v1 model (`kind = 'logistic'` only). */
+      model: jsonb("model").$type<MatchingModel>(),
+      /** Held-out evaluation written by the trainer (lib/matching/v1). */
+      metrics: jsonb("metrics").$type<MatchingMetrics>(),
+      trainedAt: timestamptz("trained_at"),
       active: boolean("active").notNull().default(false),
+      /** Last activation (audited in admin_audit_log); kept when the row is deactivated again. */
+      activatedAt: timestamptz("activated_at"),
+      activatedByUserId: uuid("activated_by_user_id").references(() => users.id, {
+        onDelete: "restrict",
+      }),
       notes: text("notes"),
       ...timestamps(),
     },
@@ -49,6 +72,19 @@ export const matchingConfig = withRLS(
       uniqueIndex("matching_config_single_active_idx")
         .on(t.active)
         .where(sql`${t.active}`),
+      index("matching_config_activated_by_user_id_idx").on(t.activatedByUserId),
+      check(
+        "matching_config_logistic_has_model",
+        sql`(${t.kind} = 'logistic') = (${t.model} IS NOT NULL)`,
+      ),
+      check(
+        "matching_config_json_objects",
+        sql`jsonb_typeof(${t.weights}) = 'object' AND (${t.model} IS NULL OR jsonb_typeof(${t.model}) = 'object') AND (${t.metrics} IS NULL OR jsonb_typeof(${t.metrics}) = 'object')`,
+      ),
+      check(
+        "matching_config_trained_when_logistic",
+        sql`${t.kind} <> 'logistic' OR ${t.trainedAt} IS NOT NULL`,
+      ),
     ],
   ),
 )

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 import type { ActionResult } from "@/lib/actions/result"
 import type { AppRole } from "@/lib/nav"
 
@@ -31,6 +33,11 @@ export type ShellProps = ShellActions & {
   unreadMessages?: number
   /** Desktop sidebar open state, from the `sidebar_state` cookie. */
   defaultSidebarOpen?: boolean
+  /**
+   * Shown under the top bars on every page, sticky (CLAUDE.md §19.38: the read-only "view as"
+   * banner, `components/admin/impersonation-banner.tsx`).
+   */
+  banner?: ReactNode
   /** Show Phase 7 (v1) routes. */
   includeV1?: boolean
 }

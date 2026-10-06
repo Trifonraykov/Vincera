@@ -30,6 +30,8 @@ import {
   launchStatusEnum,
   orderAttributionEnum,
   orderStatusEnum,
+  refundRequestReasonEnum,
+  refundRequestStatusEnum,
   refundStatusEnum,
 } from "./enums"
 import { collabs } from "./collab"
@@ -94,6 +96,10 @@ export const launches = withRLS(
     (t) => [
       index("launches_status_idx").on(t.status),
       index("launches_reviewed_by_user_id_idx").on(t.reviewedByUserId),
+      // The public /launches directory (Phase 7): live launches, newest first.
+      index("launches_live_directory_idx")
+        .on(t.wentLiveAt.desc())
+        .where(sql`${t.status} = 'live'`),
       check("launches_slug_format", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
       check("launches_slug_length", sql`char_length(${t.slug}) BETWEEN 3 AND 80`),
       check("launches_title_not_blank", nonBlankCheck(t.title)),
@@ -429,6 +435,71 @@ export const refunds = withRLS(
       index("refunds_requested_by_user_id_idx").on(t.requestedByUserId),
       check("refunds_amount_positive", sql`${t.amountCents} > 0`),
       check("refunds_currency_format", currencyFormatCheck(t.currency)),
+    ],
+  ),
+)
+
+/**
+ * A buyer's refund request from `/access/[token]/refund` (Phase 7, v1; CLAUDE.md §19.38). Buyers
+ * have no account: the access token proves the purchase. One request per order, ever; an admin
+ * approves it (which starts the refund through `requestRefund`, `refund_id`) or declines it.
+ */
+export const refundRequests = withRLS(
+  pgTable(
+    "refund_requests",
+    {
+      id: id(),
+      orderId: uuid("order_id")
+        .notNull()
+        .unique()
+        .references(() => orders.id, { onDelete: "restrict" }),
+      /** The access grant whose token was used to ask. */
+      accessGrantId: uuid("access_grant_id")
+        .notNull()
+        .references(() => accessGrants.id, { onDelete: "restrict" }),
+      reason: refundRequestReasonEnum("reason").notNull(),
+      /** Optional words from the buyer (≤ 1,000 characters); shown to admins and members only. */
+      message: text("message"),
+      /** What is left to refund when the request was made (integer cents, the order's currency). */
+      amountCents: integer("amount_cents").notNull(),
+      currency: currency(),
+      status: refundRequestStatusEnum("status").notNull().default("pending"),
+      decidedByUserId: uuid("decided_by_user_id").references(() => users.id, {
+        onDelete: "restrict",
+      }),
+      decidedAt: timestamptz("decided_at"),
+      /** The admin's note (≤ 500 characters); the buyer's email quotes it when declined. */
+      decisionNote: text("decision_note"),
+      /** The refund an approval started. */
+      refundId: uuid("refund_id")
+        .unique()
+        .references(() => refunds.id, { onDelete: "restrict" }),
+      ...timestamps(),
+    },
+    (t) => [
+      index("refund_requests_status_created_at_idx").on(t.status, t.createdAt),
+      index("refund_requests_access_grant_id_idx").on(t.accessGrantId),
+      index("refund_requests_decided_by_user_id_idx").on(t.decidedByUserId),
+      check("refund_requests_amount_positive", sql`${t.amountCents} > 0`),
+      check("refund_requests_currency_format", currencyFormatCheck(t.currency)),
+      check(
+        "refund_requests_message",
+        sql`${t.message} IS NULL OR (${nonBlankCheck(t.message)} AND char_length(${t.message}) <= 1000)`,
+      ),
+      check(
+        "refund_requests_decision_note",
+        sql`${t.decisionNote} IS NULL OR (${nonBlankCheck(t.decisionNote)} AND char_length(${t.decisionNote}) <= 500)`,
+      ),
+      // Decided exactly when not pending.
+      check(
+        "refund_requests_decided_columns",
+        sql`(${t.status} = 'pending') = (${t.decidedAt} IS NULL) AND (${t.decidedAt} IS NULL) = (${t.decidedByUserId} IS NULL)`,
+      ),
+      // An approval always started a refund (approve = requestRefund, then this row).
+      check(
+        "refund_requests_refund_iff_approved",
+        sql`(${t.status} = 'approved') = (${t.refundId} IS NOT NULL)`,
+      ),
     ],
   ),
 )

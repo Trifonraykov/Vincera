@@ -66,9 +66,19 @@ export const users = withRLS(
         .$type<OnboardingStepsRecord>()
         .notNull()
         .default(sql`'{}'::jsonb`),
+      /**
+       * When the account was deleted at the user's request (§14; CLAUDE.md §19.38). The row stays
+       * (ledger, orders, events and collabs reference it) but is anonymised: no email, name or
+       * avatar, status `suspended` so every "active users only" rule leaves it out.
+       */
+      deletedAt: timestamptz("deleted_at"),
       ...timestamps(),
     },
     (t) => [
+      check(
+        "users_deleted_anonymised",
+        sql`${t.deletedAt} IS NULL OR (${t.email} IS NULL AND ${t.name} IS NULL AND ${t.image} IS NULL AND ${t.status} = 'suspended' AND NOT ('admin' = ANY(${t.roles})))`,
+      ),
       check("users_roles_valid", sql`${t.roles} <@ ARRAY['creator', 'builder', 'admin']::text[]`),
       check("users_onboarding_steps_object", sql`jsonb_typeof(${t.onboardingSteps}) = 'object'`),
       check(

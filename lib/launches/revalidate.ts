@@ -14,6 +14,8 @@ export function launchPagePath(slug: string): string {
 export function revalidateLaunchPage(slug: string): void {
   try {
     revalidatePath(launchPagePath(slug))
+    // The public directory lists live launches (Phase 7, CLAUDE.md §19.38).
+    revalidatePath("/launches")
   } catch {
     // Not inside a Next.js request: the page's own revalidate applies.
   }

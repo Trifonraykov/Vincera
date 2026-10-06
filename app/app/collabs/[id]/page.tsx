@@ -15,9 +15,10 @@ import { z } from "zod"
 
 import { CollabHeader } from "@/components/collabs/collab-header"
 import { MemberList } from "@/components/collabs/member-list"
+import { DisputesCard } from "@/components/disputes/disputes-card"
 import { Button } from "@/components/ui/button"
 import { loadActiveAgreement } from "@/lib/agreements/queries"
-import { canViewCollab, canWorkInCollab } from "@/lib/auth/authz"
+import { canRaiseDispute, canViewCollab, canWorkInCollab } from "@/lib/auth/authz"
 import { requireOnboardedUser } from "@/lib/auth/session"
 import { now } from "@/lib/clock"
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/lib/collabs/display"
 import { countOpenTasks, loadCollabSummary, loadPayoutsReadiness } from "@/lib/collabs/queries"
 import { getDb } from "@/lib/db/client"
+import { listCollabDisputes } from "@/lib/disputes/service"
 import { formatExact, formatRelative } from "@/lib/proposals/display"
 import { formatTimeline } from "@/lib/proposals/fields"
 import { cn } from "@/lib/utils"
@@ -50,11 +52,19 @@ export default async function CollabPage({ params }: Props) {
   const collab = await loadCollabSummary(db, id)
   if (!collab || !canViewCollab(user, collab)) notFound()
 
-  const [agreement, readiness, taskCounts] = await Promise.all([
+  const [agreement, readiness, taskCounts, disputes] = await Promise.all([
     loadActiveAgreement(db, collab.id),
     loadPayoutsReadiness(db, collab.memberUserIds),
     countOpenTasks(db, collab.id),
+    listCollabDisputes(db, collab.id),
   ])
+  // Disputes (CLAUDE.md §19.38): members raise one at a time; members and admins see them.
+  const canRaise = canRaiseDispute(user, {
+    ...collab,
+    hasUnresolvedDisputeByUser: disputes.some(
+      (dispute) => dispute.raisedByUserId === user.id && dispute.status !== "resolved",
+    ),
+  })
   const canWork = canWorkInCollab(user, collab)
   const isMember = collab.memberUserIds.includes(user.id)
   const signed = new Set(agreement?.signatures.map((signature) => signature.userId) ?? [])
@@ -256,6 +266,15 @@ export default async function CollabPage({ params }: Props) {
           {formatRelative(collab.lastActivityAt, at)}
         </p>
       </section>
+
+      <DisputesCard
+        collabId={collab.id}
+        disputes={disputes}
+        viewerId={user.id}
+        memberNames={new Map(collab.members.map((member) => [member.userId, member.name]))}
+        canRaise={canRaise}
+        isMember={isMember}
+      />
     </div>
   )
 }

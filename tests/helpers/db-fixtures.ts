@@ -4,11 +4,14 @@ import { eq } from "drizzle-orm"
 
 import type { DbOrTx } from "@/lib/db/client"
 import {
+  accessGrants,
   builderProfiles,
   collabMembers,
   collabs,
   creatorProfiles,
+  disputes,
   handles,
+  impersonationSessions,
   ideas,
   launches,
   ledgerEntries,
@@ -18,6 +21,7 @@ import {
   portfolioItems,
   products,
   proposalRevisions,
+  refundRequests,
   proposals,
   socialConnections,
   stripeAccounts,
@@ -484,4 +488,77 @@ export async function insertPortfolioItem(
     .returning()
   if (!item) throw new Error("insertPortfolioItem: no row returned")
   return item
+}
+
+// --- Phases 6–7 (W4 prep, CLAUDE.md §19.38) ----------------------------------------------------
+
+/** An access grant for an order (a valid 43-character token). */
+export async function insertAccessGrant(
+  db: DbOrTx,
+  orderId: string,
+  overrides: Partial<typeof accessGrants.$inferInsert> = {},
+) {
+  const [grant] = await db
+    .insert(accessGrants)
+    .values({ orderId, token: randomBytes(32).toString("base64url"), ...overrides })
+    .returning()
+  if (!grant) throw new Error("insertAccessGrant: no row returned")
+  return grant
+}
+
+/** A collab dispute (default: `open`, kind `split`). */
+export async function insertDispute(
+  db: DbOrTx,
+  collabId: string,
+  raisedByUserId: string,
+  overrides: Partial<typeof disputes.$inferInsert> = {},
+) {
+  const [dispute] = await db
+    .insert(disputes)
+    .values({
+      collabId,
+      raisedByUserId,
+      kind: "split",
+      description: "The split no longer reflects the work.",
+      ...overrides,
+    })
+    .returning()
+  if (!dispute) throw new Error("insertDispute: no row returned")
+  return dispute
+}
+
+/** A buyer's refund request (default: `pending`, reason `not_working`, 1900 cents). */
+export async function insertRefundRequest(
+  db: DbOrTx,
+  input: { orderId: string; accessGrantId: string },
+  overrides: Partial<typeof refundRequests.$inferInsert> = {},
+) {
+  const [request] = await db
+    .insert(refundRequests)
+    .values({ ...input, reason: "not_working", amountCents: 1900, ...overrides })
+    .returning()
+  if (!request) throw new Error("insertRefundRequest: no row returned")
+  return request
+}
+
+/** An open "view as" session lasting an hour from `startedAt`. */
+export async function insertImpersonationSession(
+  db: DbOrTx,
+  input: { adminUserId: string; targetUserId: string; startedAt?: Date },
+  overrides: Partial<typeof impersonationSessions.$inferInsert> = {},
+) {
+  const startedAt = input.startedAt ?? FIXTURE_TIME
+  const [session] = await db
+    .insert(impersonationSessions)
+    .values({
+      adminUserId: input.adminUserId,
+      targetUserId: input.targetUserId,
+      reason: "Support request",
+      startedAt,
+      expiresAt: new Date(startedAt.getTime() + 60 * 60 * 1000),
+      ...overrides,
+    })
+    .returning()
+  if (!session) throw new Error("insertImpersonationSession: no row returned")
+  return session
 }

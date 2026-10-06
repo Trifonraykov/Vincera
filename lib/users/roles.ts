@@ -91,9 +91,9 @@ export async function setActiveRole(
 
 export type GrantAdminInput = {
   userId: string
-  source: Extract<RoleSource, "admin_emails" | "admin_cli">
+  source: Extract<RoleSource, "admin_emails" | "admin_cli" | "admin">
   /**
-   * The admin performing the grant. Bootstrap grants (ADMIN_EMAILS, `pnpm admin:grant`) have no
+   * The admin performing the grant (required with `source: "admin"`, /admin/users). Bootstrap grants (ADMIN_EMAILS, `pnpm admin:grant`) have no
    * acting admin, so the audit row names the user themselves; `after.source` says how.
    */
   grantedByUserId?: string
@@ -124,6 +124,55 @@ export async function grantAdminRole(database: DbOrTx, input: GrantAdminInput): 
       targetId: input.userId,
       before: { roles: previousRoles },
       after: { roles: change.roles, role: "admin", source: input.source },
+    })
+    return true
+  }, database)
+}
+
+/**
+ * Remove the admin role (/admin/users, Phase 6; CLAUDE.md §19.38): `user.role_removed` and the
+ * audit row `user.role_revoked` in one transaction. An `active_role` of `admin` moves to the
+ * user's first app role, or null. Returns false when the user was not an admin (no-op). The
+ * caller authorizes (`canRevokeAdmin`: never yourself).
+ */
+export async function revokeAdminRole(
+  database: DbOrTx,
+  input: { userId: string; revokedByUserId: string },
+): Promise<boolean> {
+  return withTransaction(async (tx) => {
+    const [current] = await tx
+      .select({ roles: users.roles, activeRole: users.activeRole })
+      .from(users)
+      .where(eq(users.id, input.userId))
+      .for("update")
+    if (!current) throw new UserNotFoundError()
+    if (!current.roles.includes("admin")) return false
+
+    const roles = current.roles.filter((role) => role !== "admin")
+    const activeRole =
+      current.activeRole === "admin" || current.activeRole === null
+        ? (roles[0] ?? null)
+        : current.activeRole
+    await tx.update(users).set({ roles, activeRole }).where(eq(users.id, input.userId))
+    await trackMany(
+      [
+        {
+          type: "user.role_removed" as const,
+          actorUserId: input.revokedByUserId,
+          subjectType: "user" as const,
+          subjectId: input.userId,
+          properties: { role: "admin" as const },
+        },
+      ],
+      tx,
+    )
+    await tx.insert(adminAuditLog).values({
+      adminUserId: input.revokedByUserId,
+      action: "user.role_revoked",
+      targetType: "user",
+      targetId: input.userId,
+      before: { roles: current.roles, active_role: current.activeRole },
+      after: { roles, active_role: activeRole, role: "admin" },
     })
     return true
   }, database)

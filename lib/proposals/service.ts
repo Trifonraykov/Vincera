@@ -17,6 +17,7 @@ import { sendAgreementReadyNotices } from "@/lib/agreements/generate"
 import { createCollabFromProposal } from "@/lib/collabs/create"
 import { withTransaction, type DbOrTx, type Tx } from "@/lib/db/client"
 import { isPgError, PG_ERROR } from "@/lib/db/errors"
+import type { MatchSnapshot } from "@/lib/db/schema/types"
 import {
   matches,
   PROPOSAL_TTL_DAYS,
@@ -145,7 +146,7 @@ async function linkableMatchId(
   tx: Tx,
   senderId: string,
   input: Pick<SendProposalInput, "matchId" | "recipientId" | "target">,
-): Promise<string | null> {
+): Promise<{ id: string; snapshot: MatchSnapshot } | null> {
   if (!input.matchId) return null
   const [match] = await tx
     .select({
@@ -153,6 +154,10 @@ async function linkableMatchId(
       subjectUserId: matches.subjectUserId,
       targetType: matches.targetType,
       targetId: matches.targetId,
+      modelVersion: matches.modelVersion,
+      score: matches.score,
+      features: matches.features,
+      computedAt: matches.computedAt,
     })
     .from(matches)
     .where(eq(matches.id, input.matchId))
@@ -162,7 +167,18 @@ async function linkableMatchId(
       ? match.targetId === input.target.id
       : (match.targetType === "creator" || match.targetType === "builder") &&
         match.targetId === input.recipientId
-  return fits ? match.id : null
+  if (!fits) return null
+  // Frozen at send time (CLAUDE.md §19.38): matching v1 trains on these pre-outcome features,
+  // since every recompute rewrites the match row.
+  return {
+    id: match.id,
+    snapshot: {
+      modelVersion: match.modelVersion,
+      score: match.score,
+      features: match.features,
+      computedAt: match.computedAt.toISOString(),
+    },
+  }
 }
 
 /**
@@ -196,7 +212,8 @@ export async function sendProposal(
         sender,
         await loadSendContext(tx, input, { lockForShare: true }),
       )
-      const matchId = await linkableMatchId(tx, sender.id, input)
+      const linked = await linkableMatchId(tx, sender.id, input)
+      const matchId = linked?.id ?? null
       const sentAt = now()
       const [proposal] = await tx
         .insert(proposals)
@@ -207,6 +224,7 @@ export async function sendProposal(
           productId: target.kind === "product" ? target.id : null,
           status: "pending",
           matchId,
+          matchSnapshot: linked?.snapshot ?? null,
           expiresAt: expiresFrom(sentAt),
         })
         .returning({ id: proposals.id, expiresAt: proposals.expiresAt })

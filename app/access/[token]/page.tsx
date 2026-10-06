@@ -172,9 +172,12 @@ export default async function AccessPage({ params }: Props) {
         </Alert>
       ) : null}
 
-      <p className="text-sm text-muted-foreground">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
         <Link href={`/p/${view.slug}`} className="underline underline-offset-4">
           View the product page
+        </Link>
+        <Link href={`/access/${token}/refund`} className="underline underline-offset-4">
+          Ask for a refund
         </Link>
       </p>
     </div>

@@ -27,10 +27,17 @@ import { cn } from "@/lib/utils"
 export const metadata: Metadata = { title: "Launches" }
 
 const TABS = [
-  { id: "review", label: "To review", status: "admin_review" },
-  { id: "live", label: "Live", status: "live" },
-  { id: "paused", label: "Paused", status: "paused" },
-] as const satisfies readonly { id: string; label: string; status: LaunchStatus }[]
+  { id: "review", label: "To review", statuses: ["admin_review"] },
+  { id: "live", label: "Live", statuses: ["live"] },
+  { id: "paused", label: "Paused", statuses: ["paused"] },
+  { id: "setup", label: "In setup", statuses: ["draft", "pending_approval"] },
+  { id: "ended", label: "Ended", statuses: ["ended"] },
+  {
+    id: "all",
+    label: "All",
+    statuses: ["admin_review", "live", "paused", "pending_approval", "draft", "ended"],
+  },
+] as const satisfies readonly { id: string; label: string; statuses: readonly LaunchStatus[] }[]
 type TabId = (typeof TABS)[number]["id"]
 
 type Props = { searchParams: Promise<{ tab?: string | string[] }> }
@@ -39,7 +46,7 @@ type Props = { searchParams: Promise<{ tab?: string | string[] }> }
  * Admin launches (§12 `/admin/launches`, CLAUDE.md §19.32): the review queue of launches both
  * members approved (oldest first): approve → live, or send back to draft with a note the members
  * read. Live and paused launches can be paused, resumed or ended. Every action is written to
- * `admin_audit_log`.
+ * `admin_audit_log`. Phase 6 added the other tabs (in setup, ended, all), so every launch is here.
  */
 export default async function AdminLaunchesPage({ searchParams }: Props) {
   const user = await requireAdmin()
@@ -47,7 +54,14 @@ export default async function AdminLaunchesPage({ searchParams }: Props) {
   const raw = (await searchParams).tab
   const tabId: TabId = TABS.some((tab) => tab.id === raw) ? (raw as TabId) : "review"
   const tab = TABS.find((entry) => entry.id === tabId) ?? TABS[0]
-  const launches = await listLaunchesForAdmin(getDb(), tab.status)
+  const db = getDb()
+  // Phase 6 (CLAUDE.md §19.39): every launch, not only the review queue. Several statuses are
+  // merged newest first (the review queue keeps its oldest-submission-first order).
+  const lists = await Promise.all(tab.statuses.map((status) => listLaunchesForAdmin(db, status)))
+  const launches =
+    lists.length === 1
+      ? (lists[0] ?? [])
+      : lists.flat().sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
 
   return (
     <div className="space-y-6">

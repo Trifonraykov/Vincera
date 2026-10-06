@@ -278,7 +278,8 @@ test("the admin area works at phone width, with its menu in a sheet", async ({ p
   await expect(menu).toBeVisible()
   const overview = menu.getByRole("link", { name: "Overview" })
   expect((await overview.boundingBox())?.height).toBeGreaterThanOrEqual(44)
-  await expect(menu.getByRole("button", { name: "Users (coming soon)" })).toBeDisabled()
+  // Phase 6 built the admin pages: Users is a real link now.
+  await expect(menu.getByRole("link", { name: "Users", exact: true })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(menu).toBeHidden()
 })

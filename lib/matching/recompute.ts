@@ -43,7 +43,7 @@ import {
   type MatchPair,
   type PairEvidence,
 } from "./features"
-import { scoreFeatures } from "./score"
+import { scoreMatch, type RankingModel } from "./score"
 
 /**
  * Matching v0 runs (§8, §13; CLAUDE.md §19.24 "Matching", §19.27):
@@ -90,6 +90,8 @@ export type RoleRecompute = {
 export type RecomputeResult = {
   userId: string
   modelVersion: string
+  /** Why v0 ranks although another version was asked for (CLAUDE.md §19.38), else null. */
+  fallbackReason: string | null
   roles: RoleRecompute[]
   pending: PendingExplanation[]
 }
@@ -165,12 +167,12 @@ function pairFor(
   return null
 }
 
-function scorePair(pair: MatchPair, weights: MatchWeights, targetId: string): Scored {
+function scorePair(pair: MatchPair, ranking: RankingModel, targetId: string): Scored {
   const features = pairFeatures(pair)
   return {
     targetType: pair.targetType,
     targetId,
-    score: scoreFeatures(features, weights),
+    score: scoreMatch(features, ranking),
     features,
     evidence: pairEvidence(pair),
   }
@@ -181,7 +183,7 @@ async function scoreCandidates(
   tx: Tx,
   role: ViewerRole,
   subject: CreatorFactsRow | BuilderFactsRow,
-  weights: MatchWeights,
+  ranking: RankingModel,
 ): Promise<Scored[]> {
   const topics = [
     ...(role === "creator"
@@ -202,7 +204,7 @@ async function scoreCandidates(
   const scored: Scored[] = []
   for (const candidate of candidates) {
     const pair = pairFor(role, subject, candidate, creators, builders, history)
-    if (pair) scored.push(scorePair(pair, weights, candidate.targetId))
+    if (pair) scored.push(scorePair(pair, ranking, candidate.targetId))
   }
   return scored.sort(compareScored)
 }
@@ -417,7 +419,6 @@ export async function recomputeMatchesForUser(
           .where(
             and(
               eq(matches.subjectUserId, userId),
-              eq(matches.modelVersion, config.modelVersion),
               inArray(matches.targetType, [...targetTypes]),
               isNull(matches.staleAt),
             ),
@@ -429,7 +430,7 @@ export async function recomputeMatchesForUser(
         continue
       }
 
-      const scored = await scoreCandidates(tx, role, subject, config.weights)
+      const scored = await scoreCandidates(tx, role, subject, config)
       const top = scored.slice(0, MATCH_LIST_SIZE)
       const existing = await loadExisting(
         tx,
@@ -447,9 +448,10 @@ export async function recomputeMatchesForUser(
         .update(matches)
         .set({ staleAt: at })
         .where(
+          // Every version: after a model switch the previous version's rows leave the list
+          // (CLAUDE.md §19.38); the rows are kept as history.
           and(
             eq(matches.subjectUserId, userId),
-            eq(matches.modelVersion, config.modelVersion),
             inArray(matches.targetType, [...targetTypes]),
             isNull(matches.staleAt),
             written.ids.length > 0 ? notInArray(matches.id, written.ids) : undefined,
@@ -490,7 +492,13 @@ export async function recomputeMatchesForUser(
         tx,
       )
     }
-    return { userId, modelVersion: config.modelVersion, roles, pending }
+    return {
+      userId,
+      modelVersion: config.modelVersion,
+      fallbackReason: config.fallbackReason,
+      roles,
+      pending,
+    }
   }, database)
 }
 
@@ -512,7 +520,7 @@ async function scoreTargetForSubjects(
   tx: Tx,
   target: RescoreTarget,
   subjects: readonly { userId: string; cosine: number | null }[],
-  weights: MatchWeights,
+  ranking: RankingModel,
 ): Promise<Map<string, Scored>> {
   const subjectRole = roleForTargetType(target.targetType)
   const subjectIds = subjects.map((subject) => subject.userId)
@@ -554,7 +562,7 @@ async function scoreTargetForSubjects(
               cosine: subject.cosine,
             }
     const pair = pairFor(subjectRole, subjectFacts, candidate, creators, builders, history)
-    if (pair) scored.set(subject.userId, scorePair(pair, weights, target.targetId))
+    if (pair) scored.set(subject.userId, scorePair(pair, ranking, target.targetId))
   }
   return scored
 }
@@ -634,7 +642,7 @@ async function rescoreOne(
         page.map((subject) => subject.userId),
       )
       const at = now()
-      const scored = await scoreTargetForSubjects(tx, target, page, config.weights)
+      const scored = await scoreTargetForSubjects(tx, target, page, config)
       const existing = await loadExisting(
         tx,
         [...scored.keys()],

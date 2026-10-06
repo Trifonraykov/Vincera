@@ -2,10 +2,11 @@ import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import type { ReactNode } from "react"
 
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { AppShell } from "@/components/layout/app-shell"
 import { toShellViewer } from "@/components/layout/viewer"
 import { signOutAction } from "@/lib/auth/actions"
-import { requireOnboardedUser } from "@/lib/auth/session"
+import { getViewer, requireOnboardedUser } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
 import { env } from "@/lib/env"
 import { countUnreadNotifications } from "@/lib/notifications/center"
@@ -27,6 +28,8 @@ export const metadata: Metadata = {
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireOnboardedUser()
   const viewer = toShellViewer(user)
+  // An admin's read-only "view as" (CLAUDE.md §19.38): the banner on every page.
+  const { impersonation } = await getViewer()
   const db = getDb()
   const [cookieStore, unreadNotifications, unreadMessages] = await Promise.all([
     cookies(),
@@ -46,6 +49,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       switchRole={switchActiveRole}
       signOut={signOutAction}
       defaultSidebarOpen={sidebarState !== "false"}
+      banner={impersonation ? <ImpersonationBanner impersonation={impersonation} /> : undefined}
       unreadNotifications={unreadNotifications}
       unreadMessages={unreadMessages}
     >

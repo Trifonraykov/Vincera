@@ -72,6 +72,25 @@ describe("job registry", () => {
     await expect(release?.runInline({ runKey: "weekly:1" })).rejects.toThrow()
   })
 
+  it("registers the Phase 6–7 job ids of the W4 contract (CLAUDE.md §19.38)", () => {
+    const byId = new Map(jobs.map((job) => [job.id, job]))
+    expect(Object.fromEntries([...byId].map(([id, job]) => [id, job.event]))).toMatchObject({
+      "gdpr-cleanup": "gdpr/cleanup.requested",
+      "matching-train": "matching/train.requested",
+    })
+    expect(byId.get("gdpr-cleanup")?.cron).toBeUndefined()
+    expect(byId.get("matching-train")?.cron).toBeUndefined()
+    const cleanup = jobEventSchemas["gdpr/cleanup.requested"]
+    expect(
+      cleanup.safeParse({ userId: "0190a000-0000-7000-8000-000000000001", storageKeys: [] })
+        .success,
+    ).toBe(true)
+    expect(cleanup.safeParse({ userId: "nope", storageKeys: [] }).success).toBe(false)
+    expect(
+      jobEventSchemas["matching/train.requested"].safeParse({ requestedByUserId: null }).success,
+    ).toBe(true)
+  })
+
   it("runs a handler inline with a validated payload and pass-through steps", async () => {
     const [ping] = jobsFor("system/ping")
     expect(await ping?.runInline({ note: "hi" })).toEqual({

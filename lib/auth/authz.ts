@@ -1,11 +1,13 @@
 import type {
   AgreementStatus,
   CollabStage,
+  DisputeStatus,
   IdeaStatus,
   LaunchPausedBy,
   LaunchStatus,
   ProductStatus,
   ProposalStatus,
+  RefundRequestStatus,
   ThreadKind,
 } from "@/lib/db/schema/enums"
 import type { AppRole } from "@/lib/nav"
@@ -489,4 +491,180 @@ export function canRefundOrder(user: AuthzUser): boolean {
 /** Start a manual payout run or look at every batch: an admin. */
 export function canManagePayouts(user: AuthzUser): boolean {
   return isAdmin(user)
+}
+
+// --- Admin (Phase 6; CLAUDE.md §19.38) ---------------------------------------------------------
+// Every admin rule starts from `isAdmin` (an active admin). Admin actions also write
+// `admin_audit_log` (lib/admin/audit.ts) and are refused while the admin is viewing as someone
+// else (read-only impersonation refuses every mutation, lib/auth/impersonation.ts).
+
+/** The account an admin acts on, as /admin/users loads it. */
+export type AdminTargetUser = Pick<AuthzUser, "id" | "roles" | "status"> & {
+  deletedAt: Date | null
+}
+
+/** Search users and open their admin detail page; read the audit log. */
+export function canManageUsers(user: AuthzUser): boolean {
+  return isAdmin(user)
+}
+
+/**
+ * Suspend or lift a suspension: an admin, never on themselves, never on a deleted account
+ * (deleted accounts stay suspended for good). Suspending another admin needs their admin role
+ * revoked first, so the platform never locks out its last admin by accident.
+ */
+export function canSuspendUser(user: AuthzUser, target: AdminTargetUser): boolean {
+  return (
+    isAdmin(user) &&
+    target.id !== user.id &&
+    target.deletedAt === null &&
+    !target.roles.includes("admin")
+  )
+}
+
+/** Grant the admin role: an admin, to an active, not deleted account without it. */
+export function canGrantAdmin(user: AuthzUser, target: AdminTargetUser): boolean {
+  return (
+    isAdmin(user) &&
+    target.deletedAt === null &&
+    target.status === "active" &&
+    !target.roles.includes("admin")
+  )
+}
+
+/** Revoke the admin role: an admin, from another admin (never from themselves). */
+export function canRevokeAdmin(user: AuthzUser, target: AdminTargetUser): boolean {
+  return isAdmin(user) && target.id !== user.id && target.roles.includes("admin")
+}
+
+/**
+ * Start read-only "view as" (§6): an admin, on an active, not deleted, non-admin account other
+ * than their own.
+ */
+export function canImpersonate(user: AuthzUser, target: AdminTargetUser): boolean {
+  return (
+    isAdmin(user) &&
+    target.id !== user.id &&
+    target.status === "active" &&
+    target.deletedAt === null &&
+    !target.roles.includes("admin")
+  )
+}
+
+/** What dispute rules need. */
+export type DisputeAccess = CollabAccess & { status: DisputeStatus; raisedByUserId: string }
+
+/** Move an open dispute to `in_review`: an admin. */
+export function canReviewDispute(user: AuthzUser, dispute: Pick<DisputeAccess, "status">): boolean {
+  return isAdmin(user) && dispute.status === "open"
+}
+
+/** Resolve a dispute (note + outcome) once it is in review: an admin. */
+export function canResolveDispute(
+  user: AuthzUser,
+  dispute: Pick<DisputeAccess, "status">,
+): boolean {
+  return isAdmin(user) && dispute.status === "in_review"
+}
+
+/** Write an audited ledger adjustment (entries summing to zero): an admin. */
+export function canAdjustLedger(user: AuthzUser): boolean {
+  return isAdmin(user)
+}
+
+/** Approve or decline a buyer's refund request while it is pending: an admin. */
+export function canDecideRefundRequest(
+  user: AuthzUser,
+  request: { status: RefundRequestStatus },
+): boolean {
+  return isAdmin(user) && request.status === "pending"
+}
+
+/** `/admin/events` (Phase 7): an admin. Events hold no personal data by construction (§11). */
+export function canViewEvents(user: AuthzUser): boolean {
+  return isAdmin(user)
+}
+
+/** `/admin/matching` (Phase 7): compare, train and (de)activate model versions; an admin. */
+export function canManageMatchingModels(user: AuthzUser): boolean {
+  return isAdmin(user)
+}
+
+// --- Trust: disputes and GDPR (Phase 6; CLAUDE.md §19.38) --------------------------------------
+
+/**
+ * Raise a dispute about a collab: an active member, at any stage (ended collabs included: a
+ * non-delivery can surface after the end), when they have no unresolved dispute on it already
+ * (the database also allows one per member and collab).
+ */
+export function canRaiseDispute(
+  user: AuthzUser,
+  collab: CollabAccess & { hasUnresolvedDisputeByUser: boolean },
+): boolean {
+  return isActive(user) && isCollabMember(user, collab) && !collab.hasUnresolvedDisputeByUser
+}
+
+/** See a dispute and its status: the collab's members and admins (§6). */
+export function canViewDispute(user: AuthzUser, dispute: CollabAccess): boolean {
+  return canViewCollab(user, dispute)
+}
+
+/** Download "Export my data" (§14): the signed-in, active user, for their own account only. */
+export function canExportOwnData(user: Pick<AuthzUser, "status">): boolean {
+  return isActive(user)
+}
+
+/**
+ * Delete the own account (§14): an active user without the admin role (an admin is removed by
+ * another admin first). The action also refuses while blocking conditions hold (active collabs,
+ * money not yet paid out; lib/gdpr), with a plain-language reason.
+ */
+export function canDeleteOwnAccount(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isActive(user) && !hasRole(user, "admin")
+}
+
+// --- Analytics and v1 pages (Phase 7; CLAUDE.md §19.38) ---------------------------------------
+
+/** `/app/collabs/[id]/analytics`: the collab's members and admins (admins read). */
+export function canViewCollabAnalytics(user: AuthzUser, collab: CollabAccess): boolean {
+  return canViewCollab(user, collab)
+}
+
+/** `/app/launches/[id]/links`: the launch's members and admins; creating links is `canCreateTrackedLink`. */
+export function canViewLaunchLinks(user: AuthzUser, launch: LaunchAccess): boolean {
+  return canViewCollab(user, launch)
+}
+
+/** Days after payment within which a buyer may ask for a refund (decided by delegation, §19.38). */
+export const REFUND_REQUEST_WINDOW_DAYS = 14
+
+/** What the buyer-side refund rule needs (no user: the access token proves the purchase). */
+export type RefundRequestEligibility = {
+  orderStatus: "paid" | "refunded" | "partially_refunded" | "disputed"
+  paidAt: Date
+  amountGrossCents: number
+  amountRefundedCents: number
+  grantRevoked: boolean
+  hasRequest: boolean
+}
+
+export type RefundRequestRefusal =
+  "already_requested" | "revoked" | "disputed" | "nothing_to_refund" | "window_closed"
+
+/**
+ * May the holder of an access token ask for a refund (`/access/[token]/refund`)? Null when yes,
+ * else why not. One request per order, ever; within `REFUND_REQUEST_WINDOW_DAYS` of payment; not
+ * for revoked access, open chargebacks or orders with nothing left to refund.
+ */
+export function refundRequestRefusal(
+  order: RefundRequestEligibility,
+  now: Date,
+): RefundRequestRefusal | null {
+  if (order.hasRequest) return "already_requested"
+  if (order.grantRevoked) return "revoked"
+  if (order.orderStatus === "disputed") return "disputed"
+  if (order.amountRefundedCents >= order.amountGrossCents) return "nothing_to_refund"
+  const windowEnds = order.paidAt.getTime() + REFUND_REQUEST_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  if (now.getTime() > windowEnds) return "window_closed"
+  return null
 }

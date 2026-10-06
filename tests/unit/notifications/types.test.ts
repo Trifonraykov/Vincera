@@ -30,6 +30,14 @@ const LAUNCH = "0190a000-0000-7000-8000-000000000005"
 const ORDER = "0190a000-0000-7000-8000-000000000006"
 const launch = { collab_id: COLLAB, launch_id: LAUNCH, launch_title: "Budget tracker" }
 const order = { ...launch, order_id: ORDER, amount_cents: 2900, currency: "eur" }
+const DISPUTE = "0190a000-0000-7000-8000-000000000007"
+const dispute = {
+  dispute_id: DISPUTE,
+  collab_id: COLLAB,
+  collab_title: "Budget tracker",
+  kind: "split",
+} as const
+const REQUEST = "0190a000-0000-7000-8000-000000000008"
 
 /** One valid payload per type (CLAUDE.md §19.24). */
 const SAMPLES: NotificationCatalog = {
@@ -65,6 +73,12 @@ const SAMPLES: NotificationCatalog = {
   "order.refunded": order,
   "order.disputed": order,
   "admin.chargeback_opened": { ...order, chargeback_id: TASK },
+  "dispute.opened": { ...dispute, raised_by_name: "Ada Codes" },
+  "dispute.in_review": dispute,
+  "dispute.resolved": { ...dispute, outcome: "adjusted" },
+  "admin.dispute_opened": dispute,
+  "refund.requested": { ...order, refund_request_id: REQUEST },
+  "admin.refund_requested": { ...order, refund_request_id: REQUEST },
 }
 
 describe("notification catalog", () => {
@@ -113,6 +127,19 @@ describe("notification catalog", () => {
     expect(
       NOTIFICATION_PAYLOAD_SCHEMAS["sale.made"].safeParse({ ...order, amount_cents: 29.5 }).success,
     ).toBe(false)
+  })
+
+  it("links Phase 6–7 notices to the collab, earnings and admin pages (CLAUDE.md §19.38)", () => {
+    expect(notificationHref("dispute.opened", SAMPLES["dispute.opened"])).toBe(
+      `/app/collabs/${COLLAB}#disputes`,
+    )
+    expect(notificationHref("admin.dispute_opened", SAMPLES["admin.dispute_opened"])).toBe(
+      `/admin/disputes/${DISPUTE}`,
+    )
+    expect(notificationHref("refund.requested", SAMPLES["refund.requested"])).toBe("/app/earnings")
+    expect(notificationHref("admin.refund_requested", SAMPLES["admin.refund_requested"])).toBe(
+      "/admin/payouts#refund-requests",
+    )
   })
 
   it("always emails money and agreement records, with a reason, and keeps admin types apart", () => {

@@ -2,6 +2,8 @@ import type { NextAuthRequest } from "next-auth"
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server"
 
 import { auth } from "@/lib/auth/auth"
+import { isAdmin } from "@/lib/auth/authz"
+import { IMPERSONATION_COOKIE, impersonationClaimFrom } from "@/lib/auth/impersonation"
 import { guardRoute } from "@/lib/auth/route-guard"
 import { PATHNAME_HEADER, sameOriginRedirectUrl } from "@/lib/auth/routes"
 import { parseAuthUser } from "@/lib/auth/user"
@@ -21,7 +23,13 @@ import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 // The unused `_event` parameter selects Auth.js's middleware overload (not the route-handler one).
 const guarded = auth(async (request: NextAuthRequest, _event: NextFetchEvent) => {
   const user = parseAuthUser(request.auth?.user)
-  const decision = await guardRoute(request.nextUrl, user, (u) => resolveOnboardingRedirect(u))
+  // During an admin's read-only "view as" (CLAUDE.md §19.38) the app shows the target, whose
+  // onboarding is what counts: pages check it (requireOnboardedUser), not the admin's own.
+  const claim = impersonationClaimFrom(request.cookies.get(IMPERSONATION_COOKIE)?.value)
+  const viewingAs = user !== null && isAdmin(user) && claim?.adminUserId === user.id
+  const decision = await guardRoute(request.nextUrl, user, (u) =>
+    viewingAs ? Promise.resolve(null) : resolveOnboardingRedirect(u),
+  )
   if (decision.type === "redirect") {
     return NextResponse.redirect(sameOriginRedirectUrl(decision.to, request.nextUrl.href))
   }

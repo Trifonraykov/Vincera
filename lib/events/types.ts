@@ -6,12 +6,14 @@ import type {
   DealPreference,
   DeliveryType,
   DisputeKind,
+  DisputeOutcome,
   EventContext,
   IdeaStatus,
   LaunchPausedBy,
   ProductFormat,
   ProductStage,
   ProductStatus,
+  RefundRequestReason,
   SizeTier,
   SocialConnectionSource,
   SocialProvider,
@@ -56,6 +58,10 @@ export const SUBJECT_TYPES = [
   "transfer",
   "payout_batch",
   "dispute",
+  // Phases 6–7 (CLAUDE.md §19.38)
+  "refund_request",
+  "ledger_adjustment",
+  "matching_config",
 ] as const
 export type SubjectType = (typeof SUBJECT_TYPES)[number]
 
@@ -64,9 +70,10 @@ export type AuthMethod = "email" | "google" | "github"
 
 /**
  * How a role was added: chosen during onboarding, granted on sign-up because the email is in
- * ADMIN_EMAILS, or granted by an operator with `pnpm admin:grant`.
+ * ADMIN_EMAILS, granted by an operator with `pnpm admin:grant`, or by an admin in /admin/users
+ * (Phase 6).
  */
-export type RoleSource = "onboarding" | "admin_emails" | "admin_cli"
+export type RoleSource = "onboarding" | "admin_emails" | "admin_cli" | "admin"
 
 /** What triggered a matching recompute (§8, §13). */
 export type MatchTrigger = "nightly" | "on_change" | "manual"
@@ -109,6 +116,16 @@ export interface EventCatalog {
   // Identity & onboarding
   "user.signed_up": { subject: "user"; properties: { method: AuthMethod } }
   "user.role_added": { subject: "user"; properties: { role: UserRole; source: RoleSource } }
+  /** Not in the §11 list (Phase 6): an admin removed a role (only `admin` can be removed). */
+  "user.role_removed": { subject: "user"; properties: { role: UserRole } }
+  /** Not in the §11 list (Phase 6): an admin suspended the account (its sessions are deleted). */
+  "user.suspended": { subject: "user"; properties: NoProperties }
+  /** Not in the §11 list (Phase 6): an admin lifted a suspension. */
+  "user.unsuspended": { subject: "user"; properties: NoProperties }
+  /** Not in the §11 list (§14 GDPR): the user downloaded their data export. */
+  "user.data_exported": { subject: "user"; properties: { format: "json" } }
+  /** Not in the §11 list (§14 GDPR): the account was deleted and anonymised at the user's request. */
+  "user.deleted": { subject: "user"; properties: { roles: UserRole[] } }
   /** A step recorded done or skipped ("Do this later"); Phase 1 funnel. Not in the §11 list. */
   "onboarding.step_completed": {
     subject: "user"
@@ -323,6 +340,11 @@ export interface EventCatalog {
   }
   /** Not in the §11 list: a link stops attributing (and its promotion code is deactivated). */
   "tracked_link.disabled": { subject: "tracked_link"; properties: { launch_id: string } }
+  /** Not in the §11 list (Phase 7 links page): the owner renamed a link; `fields` are names only. */
+  "tracked_link.updated": {
+    subject: "tracked_link"
+    properties: { launch_id: string; fields: string[] }
+  }
 
   // Attribution & commerce (§10)
   "link.clicked": { subject: "tracked_link"; properties: { launch_id: string; is_bot: boolean } }
@@ -388,6 +410,26 @@ export interface EventCatalog {
     properties: { order_id: string; amount_cents: number; currency: string }
   }
   /** Not in the §11 list: a chargeback closed; `lost` writes the mirror entries. */
+  /** Not in the §11 list (Phase 7): a buyer asked for a refund at /access/[token]/refund. */
+  "refund_request.created": {
+    subject: "refund_request"
+    properties: {
+      order_id: string
+      launch_id: string
+      reason: RefundRequestReason
+      amount_cents: number
+      currency: string
+      /** Days between payment and the request (whole days, rounded down). */
+      days_after_purchase: number
+    }
+  }
+  /** Not in the §11 list: an admin approved it; `refund_id` is the refund it started. */
+  "refund_request.approved": {
+    subject: "refund_request"
+    properties: { order_id: string; refund_id: string }
+  }
+  /** Not in the §11 list: an admin declined it. */
+  "refund_request.declined": { subject: "refund_request"; properties: { order_id: string } }
   "chargeback.closed": {
     subject: "chargeback"
     properties: {
@@ -425,7 +467,45 @@ export interface EventCatalog {
     properties: { transfer_count: number; total_cents: number; failed_count: number }
   }
   "dispute.opened": { subject: "dispute"; properties: { collab_id: string; kind: DisputeKind } }
-  "dispute.resolved": { subject: "dispute"; properties: { collab_id: string; kind: DisputeKind } }
+  /** Not in the §11 list (Phase 6): an admin started looking into it. */
+  "dispute.in_review": { subject: "dispute"; properties: { collab_id: string; kind: DisputeKind } }
+  "dispute.resolved": {
+    subject: "dispute"
+    properties: { collab_id: string; kind: DisputeKind; outcome: DisputeOutcome }
+  }
+  /**
+   * Not in the §11 list (Phase 6): an admin's ledger adjustment. Its entries sum to zero; the
+   * properties describe the money moved to (or from) members, never the reason text.
+   */
+  "ledger.adjusted": {
+    subject: "ledger_adjustment"
+    properties: {
+      dispute_id: string | null
+      order_id: string | null
+      entry_count: number
+      /** Σ of the positive entries (what moved), integer cents. */
+      amount_cents: number
+      currency: string
+    }
+  }
+
+  // Matching v1 (§8, Phase 7)
+  /** Not in the §11 list: `pnpm matching:train` (or the admin page) stored a new model row. */
+  "matching.model_trained": {
+    subject: "matching_config"
+    properties: {
+      model_version: string
+      training_rows: number
+      holdout_rows: number
+      positives_accepted: number
+      positives_sale: number
+    }
+  }
+  /** Not in the §11 list: an admin made this model version the one that ranks (audited too). */
+  "matching.model_activated": {
+    subject: "matching_config"
+    properties: { model_version: string; previous_version: string | null; forced: boolean }
+  }
 
   // AI (§7.3)
   "ai.generated": {
@@ -459,6 +539,11 @@ export type EventProperties<T extends EventType> = EventCatalog[T]["properties"]
 export const EVENT_TYPES = [
   "user.signed_up",
   "user.role_added",
+  "user.role_removed",
+  "user.suspended",
+  "user.unsuspended",
+  "user.data_exported",
+  "user.deleted",
   "onboarding.step_completed",
   "onboarding.completed",
   "creator_profile.created",
@@ -514,6 +599,7 @@ export const EVENT_TYPES = [
   "launch.ended",
   "tracked_link.created",
   "tracked_link.disabled",
+  "tracked_link.updated",
   "link.clicked",
   "product_page.viewed",
   "checkout.started",
@@ -524,13 +610,20 @@ export const EVENT_TYPES = [
   "access.opened",
   "refund.created",
   "refund.failed",
+  "refund_request.created",
+  "refund_request.approved",
+  "refund_request.declined",
   "chargeback.closed",
   "payout.sent",
   "payout.failed",
   "payout.reversed",
   "payout.batch_completed",
   "dispute.opened",
+  "dispute.in_review",
   "dispute.resolved",
+  "ledger.adjusted",
+  "matching.model_trained",
+  "matching.model_activated",
   "ai.generated",
   "ai.reviewed",
 ] as const satisfies readonly EventType[]

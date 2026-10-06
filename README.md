@@ -254,7 +254,7 @@ Browsers install a web app, and run its service worker, only from a secure addre
 | `pnpm typecheck` / `pnpm lint` | `tsc --noEmit`, ESLint |
 | `pnpm format` / `pnpm format:check` | Prettier (write / check) |
 | `pnpm test` | Vitest: the `unit` and `integration` projects (`pnpm test:unit`, `pnpm test:integration`) |
-| `pnpm test:e2e` | Playwright end-to-end tests: under `next dev` in 12 shards with a fresh server each (`scripts/e2e.ts`); `CI=1 pnpm test:e2e` builds and runs `next start` in one run |
+| `pnpm test:e2e` | Playwright end-to-end tests: under `next dev` in 16 shards with a fresh server each (`scripts/e2e.ts`); `CI=1 pnpm test:e2e` builds and runs `next start` in one run |
 | `pnpm db:generate` | Generate a Drizzle migration from `lib/db/schema` (`--custom --name <name>` for hand-written SQL) |
 | `pnpm db:migrate` | Apply migrations to `DATABASE_URL`, then the Supabase hardening (a no-op on plain Postgres) |
 | `pnpm db:reset` | Drop, re-create and migrate the `DATABASE_URL` database (never in production) |

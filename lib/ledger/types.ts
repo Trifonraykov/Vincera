@@ -102,6 +102,7 @@ export type LedgerCheckMismatch = {
     | "reversal_pending" // a transfer reversal still `pending` after a day
     | "refund_sum" // a posted refund's entries ≠ −amount (0 once it failed and was reversed)
     | "chargeback_sum" // a lost chargeback's entries ≠ −amount
+    | "adjustment_sum" // an admin ledger adjustment's entries ≠ 0 (Phase 6)
   orderId?: string
   transferId?: string
   reversalId?: string
@@ -109,6 +110,7 @@ export type LedgerCheckMismatch = {
   stripeId?: string
   refundId?: string
   chargebackId?: string
+  adjustmentId?: string
   /** Ids and amounts only: what differs (e.g. `destination`, `missing at Stripe`). */
   detail?: string
   expectedCents: number

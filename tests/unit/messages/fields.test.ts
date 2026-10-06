@@ -117,6 +117,12 @@ describe("notification wording", () => {
   const launch = { collab_id: ID, launch_id: ID, launch_title: "Budget app" }
   const order = { ...launch, order_id: ID, amount_cents: 2900, currency: "eur" }
   const transfer = { transfer_id: ID, amount_cents: 4200, currency: "eur" }
+  const dispute = {
+    dispute_id: ID,
+    collab_id: ID,
+    collab_title: "Budget app",
+    kind: "split" as const,
+  }
   const samples: ParsedNotification[] = [
     { type: "social.expired", payload: { connection_id: ID, provider: "youtube" } },
     { type: "payouts.ready", payload: { stripe_account_id: "acct_1" } },
@@ -156,6 +162,15 @@ describe("notification wording", () => {
     { type: "order.refunded", payload: order },
     { type: "order.disputed", payload: order },
     { type: "admin.chargeback_opened", payload: { ...order, chargeback_id: ID } },
+    {
+      type: "dispute.opened",
+      payload: { ...dispute, raised_by_name: "Ada" },
+    },
+    { type: "dispute.in_review", payload: dispute },
+    { type: "dispute.resolved", payload: { ...dispute, outcome: "no_action" } },
+    { type: "admin.dispute_opened", payload: dispute },
+    { type: "refund.requested", payload: { ...order, refund_request_id: ID } },
+    { type: "admin.refund_requested", payload: { ...order, refund_request_id: ID } },
   ]
 
   it("has a title for every type, naming the person or the thing", () => {

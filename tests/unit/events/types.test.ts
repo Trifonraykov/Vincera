@@ -63,7 +63,13 @@ describe("event catalog", () => {
     for (const type of SPEC_EVENT_TYPES) expect(EVENT_TYPES).toContain(type)
     expect(new Set(EVENT_TYPES).size).toBe(EVENT_TYPES.length)
     // Additions beyond §11 are deliberate and documented in CLAUDE.md §19.6 / §19.11 / §19.24 / §19.31.
+    // §19.38 added the Phase 6–7 ones (users, refund requests, disputes, ledger, matching v1).
     expect(EVENT_TYPES.filter((t) => !SPEC_EVENT_TYPES.includes(t))).toEqual([
+      "user.role_removed",
+      "user.suspended",
+      "user.unsuspended",
+      "user.data_exported",
+      "user.deleted",
       "onboarding.step_completed",
       "creator_profile.created",
       "creator_profile.updated",
@@ -87,14 +93,22 @@ describe("event catalog", () => {
       "launch.ended",
       "tracked_link.created",
       "tracked_link.disabled",
+      "tracked_link.updated",
       "order.ledger_posted",
       "access.opened",
       "refund.created",
       "refund.failed",
+      "refund_request.created",
+      "refund_request.approved",
+      "refund_request.declined",
       "chargeback.closed",
       "payout.failed",
       "payout.reversed",
       "payout.batch_completed",
+      "dispute.in_review",
+      "ledger.adjusted",
+      "matching.model_trained",
+      "matching.model_activated",
       "ai.reviewed",
     ])
   })

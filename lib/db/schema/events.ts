@@ -35,6 +35,10 @@ export const events = withRLS(
       index("events_type_occurred_at_idx").on(t.type, t.occurredAt),
       index("events_subject_id_idx").on(t.subjectId),
       index("events_actor_user_id_idx").on(t.actorUserId),
+      // /admin/events (Phase 7): newest first across every type, keyset (occurred_at, id).
+      index("events_occurred_at_id_idx").on(t.occurredAt.desc(), t.id.desc()),
+      // Collab analytics funnel (§10): one launch's events of a type over time.
+      index("events_subject_type_occurred_at_idx").on(t.subjectId, t.type, t.occurredAt),
       check("events_subject_complete", sql`(${t.subjectType} IS NULL) = (${t.subjectId} IS NULL)`),
     ],
   ),

@@ -1,6 +1,7 @@
 import { seedCollabs } from "./collabs"
 import { seedLaunches } from "./launches"
 import { seedMatches } from "./matches"
+import { seedMatchingHistory } from "./matching-history"
 import { seedOrders } from "./orders"
 import { seedPeople } from "./people"
 import { seedSupply } from "./supply"
@@ -16,6 +17,7 @@ export const SEED_STEPS: readonly SeedStep[] = [
   seedCollabs,
   seedLaunches,
   seedOrders,
+  seedMatchingHistory,
 ]
 
 /** Run every step in order; a failing step stops the seed (later steps depend on earlier ones). */

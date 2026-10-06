@@ -3,11 +3,13 @@ import type { Job } from "../define"
 
 import { agreementsFinalize } from "./agreements-finalize"
 import { embeddingsRefresh } from "./embeddings-refresh"
+import { gdprCleanup } from "./gdpr-cleanup"
 import { ledgerCheck } from "./ledger-check"
 import { ledgerPostPending } from "./ledger-post-pending"
 import { matchingNightly } from "./matching-nightly"
 import { matchingRecompute } from "./matching-recompute"
 import { matchingTargetChanged } from "./matching-target-changed"
+import { matchingTrain } from "./matching-train"
 import { ordersFulfilled } from "./orders-fulfilled"
 import { payoutsRelease } from "./payouts-release"
 import { payoutsReverse } from "./payouts-reverse"
@@ -23,7 +25,8 @@ import { systemPing } from "./system-ping"
  * Registry of every background job (§13). Add new jobs here: the list feeds both the Inngest
  * serve route and the inline runner used when jobs are fake.
  *
- * Phase 2–3 jobs are owned per area (CLAUDE.md §19.24), Phase 4–5 jobs too (§19.31).
+ * Phase 2–3 jobs are owned per area (CLAUDE.md §19.24), Phase 4–5 jobs too (§19.31), and
+ * Phase 6–7 jobs (§19.38).
  */
 export const jobs: readonly Job[] = [
   systemPing,
@@ -46,6 +49,9 @@ export const jobs: readonly Job[] = [
   payoutsReverse,
   refundsNotify,
   ledgerCheck,
+  // Phases 6–7: trust, matching v1 (registered by the W4 prep)
+  gdprCleanup,
+  matchingTrain,
 ]
 
 /** Inngest functions for `serve()`. */
