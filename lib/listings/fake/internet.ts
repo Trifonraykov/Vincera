@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -101,7 +102,7 @@ export async function readFakeAppStoreState(stateRoot?: string): Promise<FakeApp
 async function writeState(state: FakeAppStoreState, stateRoot?: string): Promise<void> {
   const file = statePath(stateRoot)
   await mkdir(path.dirname(file), { recursive: true })
-  const temp = `${file}.${process.pid}.${Date.now()}.tmp`
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(temp, JSON.stringify(state, null, 2))
   await rename(temp, file)
 }
@@ -231,7 +232,8 @@ export function createFakeInternet(options: FakeInternetOptions = {}): NetTransp
       if (/(^|\.)mzstatic\.com$/.test(host)) return APPLE_CDN_ADDRESS
       const sites = await loadSites(root)
       const answers = sites.hosts[host]
-      if (!answers) throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: "ENOTFOUND" })
+      if (!answers)
+        throw Object.assign(new Error(`getaddrinfo ENOTFOUND ${host}`), { code: "ENOTFOUND" })
       return answers
     },
     request: async ({ url, signal }) => {
@@ -261,9 +263,17 @@ export function createFakeInternet(options: FakeInternetOptions = {}): NetTransp
       }
       if (route.file) {
         const html = await readFile(path.join(root, "web", path.basename(route.file)), "utf8")
-        return reply(route.status ?? 200, route.contentType ?? "text/html; charset=utf-8", textBody(html))
+        return reply(
+          route.status ?? 200,
+          route.contentType ?? "text/html; charset=utf-8",
+          textBody(html),
+        )
       }
-      return reply(route.status ?? 200, route.contentType ?? "text/plain", textBody(route.text ?? ""))
+      return reply(
+        route.status ?? 200,
+        route.contentType ?? "text/plain",
+        textBody(route.text ?? ""),
+      )
     },
   }
 }

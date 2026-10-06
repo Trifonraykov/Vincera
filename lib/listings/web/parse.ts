@@ -189,7 +189,10 @@ export function parseWebPage(html: string, pageUrl: URL): ParsedPage {
           } else if (rel.includes("icon")) {
             icons.push({ href, rank: 1, size })
           }
-        } else if (name === "script" && (attrs.type ?? "").toLowerCase() === "application/ld+json") {
+        } else if (
+          name === "script" &&
+          (attrs.type ?? "").toLowerCase() === "application/ld+json"
+        ) {
           ldBuffer = ""
         }
       },

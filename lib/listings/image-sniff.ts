@@ -21,7 +21,9 @@ function u24le(b: Uint8Array, i: number): number {
   return (b[i] ?? 0) | ((b[i + 1] ?? 0) << 8) | ((b[i + 2] ?? 0) << 16)
 }
 function u32be(b: Uint8Array, i: number): number {
-  return (((b[i] ?? 0) << 24) | ((b[i + 1] ?? 0) << 16) | ((b[i + 2] ?? 0) << 8) | (b[i + 3] ?? 0)) >>> 0
+  return (
+    (((b[i] ?? 0) << 24) | ((b[i + 1] ?? 0) << 16) | ((b[i + 2] ?? 0) << 8) | (b[i + 3] ?? 0)) >>> 0
+  )
 }
 function ascii(b: Uint8Array, start: number, length: number): string {
   return String.fromCharCode(...b.subarray(start, start + length))

@@ -7,6 +7,7 @@ import {
   builderProfiles,
   creatorProfiles,
   portfolioItems,
+  products,
   socialConnections,
   stripeAccounts,
   users,
@@ -50,10 +51,16 @@ export async function loadOnboardingSnapshot(
       )`.mapWith(Boolean),
       creatorConnectionCount: connectionCount([...CREATOR_SOCIAL_PROVIDERS]),
       githubConnectionCount: connectionCount(["github"]),
+      // Portfolio items plus imported listings (App Store or web, CLAUDE.md §19.45): both show
+      // creators what the builder has made.
       portfolioItemCount: sql<number>`(
         select count(*) from ${portfolioItems}
         inner join ${builderProfiles} on ${eq(builderProfiles.id, portfolioItems.builderProfileId)}
         where ${eq(builderProfiles.userId, users.id)}
+      ) + (
+        select count(*) from ${products}
+        inner join ${builderProfiles} on ${eq(builderProfiles.id, products.builderProfileId)}
+        where ${eq(builderProfiles.userId, users.id)} and ${products.source} <> 'manual'
       )`.mapWith(Number),
       payoutsEnabled: stripeAccounts.payoutsEnabled,
       transfersCapability: stripeAccounts.transfersCapability,

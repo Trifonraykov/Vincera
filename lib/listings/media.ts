@@ -35,7 +35,9 @@ export function mediaKey(productId: string, hash: string, extension: string): st
 
 /** Whether `key` is one of this product's media keys (route and cleanup checks). */
 export function isOwnMediaKey(productId: string, key: string): boolean {
-  return new RegExp(`^${LISTING_IMAGE_PREFIX}/${productId}/[0-9a-f]{16}\\.(png|jpg|gif|webp)$`).test(key)
+  return new RegExp(
+    `^${LISTING_IMAGE_PREFIX}/${productId}/[0-9a-f]{16}\\.(png|jpg|gif|webp)$`,
+  ).test(key)
 }
 
 export type CopyImagesResult = {
@@ -78,7 +80,11 @@ export async function copyListingImages(input: {
         const fetched = await safeFetch(
           image.url,
           {
-            accept: [...UPLOAD_LIMITS.image.mimeTypes, "application/octet-stream", "binary/octet-stream"],
+            accept: [
+              ...UPLOAD_LIMITS.image.mimeTypes,
+              "application/octet-stream",
+              "binary/octet-stream",
+            ],
             acceptHeader: "image/png, image/jpeg, image/webp, image/gif",
             maxBytes: LISTING_IMAGE_MAX_BYTES,
             timeoutMs: 8_000,
@@ -117,7 +123,10 @@ export async function copyListingImages(input: {
 }
 
 /** Best-effort deletion of keys no listing uses any more. */
-export async function deleteMediaKeys(keys: readonly string[], storage?: ObjectStorage): Promise<void> {
+export async function deleteMediaKeys(
+  keys: readonly string[],
+  storage?: ObjectStorage,
+): Promise<void> {
   if (keys.length === 0) return
   const store = storage ?? getStorage()
   await Promise.all(

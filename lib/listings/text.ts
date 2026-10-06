@@ -27,7 +27,12 @@ function clip(value: string, max: number): string {
 /** One line: no tags, no controls, whitespace collapsed, at most `max` characters. */
 export function cleanLine(value: string | null | undefined, max: number): string | null {
   if (!value) return null
-  const text = value.normalize("NFC").replace(TAGS, " ").replace(UNSAFE_CHARS, "").replace(/\s+/g, " ").trim()
+  const text = value
+    .normalize("NFC")
+    .replace(TAGS, " ")
+    .replace(UNSAFE_CHARS, "")
+    .replace(/\s+/g, " ")
+    .trim()
   return text === "" ? null : clip(text, max)
 }
 

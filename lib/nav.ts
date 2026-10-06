@@ -21,6 +21,7 @@ import {
   Send,
   Settings,
   Sparkles,
+  Flame,
   UserRound,
   Users,
   Wallet,
@@ -91,9 +92,11 @@ export const AUTH_LINKS = {
 const HOME: NavItem = { title: "Home", href: "/app", icon: House }
 const AUDIENCE: NavItem = { title: "Audience", href: "/app/audience", icon: Users }
 const PRODUCTS: NavItem = { title: "Products", href: "/app/products", icon: Package }
+/** The creator feed (beyond §12; CLAUDE.md §19.45). */
+const FEED: NavItem = { title: "Feed", href: "/app/feed", icon: Flame }
 
 const ROLE_ITEMS: Record<AppRole, NavItem[]> = {
-  creator: [HOME, AUDIENCE, { title: "Ideas", href: "/app/ideas", icon: Lightbulb }],
+  creator: [HOME, FEED, AUDIENCE, { title: "Ideas", href: "/app/ideas", icon: Lightbulb }],
   builder: [HOME, PRODUCTS],
 }
 
@@ -177,7 +180,7 @@ export function appNav(role: AppRole, options: NavOptions = {}): NavSection[] {
  * for creators and Profile, Connections and Payouts for builders. As later phases add their pages
  * to BUILT_ROUTES, the bar becomes Home, Discover, Collabs, Inbox, Me by itself.
  */
-export type MobileTabId = "home" | "discover" | "collabs" | "inbox" | "me" | "page"
+export type MobileTabId = "home" | "feed" | "discover" | "collabs" | "inbox" | "me" | "page"
 
 export type MobileTab = NavItem & {
   id: MobileTabId
@@ -192,7 +195,10 @@ export const MOBILE_TAB_COUNT = 5
 
 const ME_TAB: MobileTab = { id: "me", title: "Me", href: ME_PATH, icon: CircleUser }
 
-/** The three middle slots, in order: the finished app's tabs. */
+/**
+ * The three middle slots, in order: the finished app's tabs. Creators get the Feed where builders
+ * have Discover (CLAUDE.md §19.45); Discover stays one tap away on Me and in the feed's header.
+ */
 const MOBILE_TAB_SLOTS: MobileTab[] = [
   { id: "discover", title: "Discover", href: "/app/discover", icon: Compass },
   { id: "collabs", title: "Collabs", href: "/app/collabs", icon: Handshake },
@@ -226,8 +232,15 @@ const MOBILE_TAB_FALLBACKS: Record<AppRole, MobileTab[]> = {
 }
 
 /** The phone tab bar for the active role: Home, three built pages, Me. */
+const FEED_TAB: MobileTab = { id: "feed", ...FEED }
+
+function tabSlots(role: AppRole): MobileTab[] {
+  if (role === "builder" || !isBuiltRoute(FEED_TAB.href)) return MOBILE_TAB_SLOTS
+  return MOBILE_TAB_SLOTS.map((tab) => (tab.id === "discover" ? FEED_TAB : tab))
+}
+
 export function appTabs(role: AppRole): MobileTab[] {
-  const middle = [...MOBILE_TAB_SLOTS, ...MOBILE_TAB_FALLBACKS[role]]
+  const middle = [...tabSlots(role), ...MOBILE_TAB_FALLBACKS[role]]
     .filter((tab) => isBuiltRoute(tab.href))
     .slice(0, MOBILE_TAB_COUNT - 2)
   return [{ id: "home", ...HOME }, ...middle, ME_TAB]
@@ -408,6 +421,8 @@ const ADMIN_ROUTES: string[] = [
 ]
 const ANALYTICS_ROUTES: string[] = ["/launches", "/admin/events"]
 const MATCHING_V1_ROUTES: string[] = ["/admin/matching"]
+/** The creator feed (CLAUDE.md §19.45; `/app/feed/[id]` is reached from it). */
+const FEED_ROUTES: string[] = ["/app/feed"]
 
 const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...PHASE_1_ROUTES,
@@ -420,6 +435,7 @@ const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...ADMIN_ROUTES,
   ...ANALYTICS_ROUTES,
   ...MATCHING_V1_ROUTES,
+  ...FEED_ROUTES,
 ])
 
 /** Whether the page at `href` (a menu path, without query or hash) exists in this build. */

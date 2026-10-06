@@ -75,10 +75,18 @@ describe("App Store import", () => {
     const builder = await insertBuilder(testDb.db)
     const summary = await connectAppStore(
       testDb.db,
-      { userId: builder.user.id, raw: `https://apps.apple.com/us/developer/pinecone-labs/id${PINECONE}` },
+      {
+        userId: builder.user.id,
+        raw: `https://apps.apple.com/us/developer/pinecone-labs/id${PINECONE}`,
+      },
       deps,
     )
-    expect(summary).toMatchObject({ developerName: "Pinecone Labs", apps: 4, created: 4, updated: 0 })
+    expect(summary).toMatchObject({
+      developerName: "Pinecone Labs",
+      apps: 4,
+      created: 4,
+      updated: 0,
+    })
 
     const [profile] = await testDb.db
       .select()
@@ -93,7 +101,12 @@ describe("App Store import", () => {
     const rows = await listingsOf(builder.profile.id)
     expect(rows).toHaveLength(4)
     for (const row of rows) {
-      expect(row).toMatchObject({ status: "seeking", source: "app_store", format: "app", stage: "live" })
+      expect(row).toMatchObject({
+        status: "seeking",
+        source: "app_store",
+        format: "app",
+        stage: "live",
+      })
       expect(row.sourceId).toMatch(/^\d+$/)
       expect(row.description?.length).toBeGreaterThan(20)
       expect(row.topics.length).toBeGreaterThan(0)
@@ -113,10 +126,18 @@ describe("App Store import", () => {
     expect(focus?.targetPriceCents).toBeNull()
 
     const kinds = (
-      await testDb.db.select({ type: events.type }).from(events).where(eq(events.subjectId, focus!.id))
+      await testDb.db
+        .select({ type: events.type })
+        .from(events)
+        .where(eq(events.subjectId, focus!.id))
     ).map((e) => e.type)
     expect(kinds).toEqual(
-      expect.arrayContaining(["product.created", "product.published", "product.imported", "ai.generated"]),
+      expect.arrayContaining([
+        "product.created",
+        "product.published",
+        "product.imported",
+        "ai.generated",
+      ]),
     )
   })
 
@@ -135,7 +156,11 @@ describe("App Store import", () => {
       .where(eq(builderProfiles.id, builder.profile.id))
     expect(profile).toEqual({ id: TINY_FORGE, country: "gb" })
 
-    const again = await connectAppStore(testDb.db, { userId: builder.user.id, raw: `id${TINY_FORGE}` }, deps)
+    const again = await connectAppStore(
+      testDb.db,
+      { userId: builder.user.id, raw: `id${TINY_FORGE}` },
+      deps,
+    )
     expect(again).toMatchObject({ created: 0 })
     const second = await listingsOf(builder.profile.id)
     expect(second.map((row) => row.id)).toEqual(first.map((row) => row.id))
@@ -176,7 +201,10 @@ describe("App Store import", () => {
     expect(summary).toMatchObject({ apps: 3, removed: 1 })
     const after = await listingsOf(builder.profile.id)
     const editedRow = after.find((row) => row.id === focus.id)!
-    expect(editedRow).toMatchObject({ title: "Focus Garden", description: "My own words about it." })
+    expect(editedRow).toMatchObject({
+      title: "Focus Garden",
+      description: "My own words about it.",
+    })
     expect(editedRow.sourceEditedAt).not.toBeNull()
     expect(editedRow.tagline).toBeNull()
     expect(after.find((row) => row.id === sleep.id)?.sourceRemovedAt).not.toBeNull()
@@ -234,7 +262,11 @@ describe("App Store import", () => {
   it("refuses links that are not App Store links, and unknown developers", async () => {
     const builder = await insertBuilder(testDb.db)
     await expect(
-      connectAppStore(testDb.db, { userId: builder.user.id, raw: "https://example.com/id123" }, deps),
+      connectAppStore(
+        testDb.db,
+        { userId: builder.user.id, raw: "https://example.com/id123" },
+        deps,
+      ),
     ).rejects.toBeInstanceOf(ActionError)
     await expect(
       connectAppStore(testDb.db, { userId: builder.user.id, raw: "999999999" }, deps),

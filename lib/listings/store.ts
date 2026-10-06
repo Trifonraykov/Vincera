@@ -119,7 +119,8 @@ function stableJson(value: unknown): string {
 
 function sameMedia(a: readonly ProductMediaItem[], b: readonly ProductMediaItem[]): boolean {
   return (
-    a.length === b.length && a.every((item, i) => item.key === b[i]?.key && item.kind === b[i]?.kind)
+    a.length === b.length &&
+    a.every((item, i) => item.key === b[i]?.key && item.kind === b[i]?.kind)
   )
 }
 
@@ -230,7 +231,11 @@ export async function saveListingDraft(
           "product.imported",
           {
             ...subject,
-            properties: { source: draft.source, action: "created", image_count: copied.media.length },
+            properties: {
+              source: draft.source,
+              action: "created",
+              image_count: copied.media.length,
+            },
           },
           tx,
         )
@@ -284,7 +289,8 @@ export async function saveListingDraft(
         subjectType: "product",
         subjectId: locked.id,
       } as const
-      if (fields.length > 0) await track("product.updated", { ...subject, properties: { fields } }, tx)
+      if (fields.length > 0)
+        await track("product.updated", { ...subject, properties: { fields } }, tx)
       await track(
         "product.imported",
         {
@@ -377,11 +383,6 @@ export async function importedListingIds(
   const rows = await database
     .select({ id: products.id })
     .from(products)
-    .where(
-      and(
-        eq(products.builderProfileId, builderProfileId),
-        inArray(products.source, [source]),
-      ),
-    )
+    .where(and(eq(products.builderProfileId, builderProfileId), inArray(products.source, [source])))
   return rows.map((row) => row.id)
 }

@@ -109,7 +109,10 @@ async function resolveDeveloper(
   if (input.kind === "developer") return { developerId: input.id, country }
   const found = await appStoreLookup({ id: input.id, country, software: false }, transport)
   const app = found.apps[0]
-  if (!app) throw new ActionError(APP_STORE_MESSAGES.notFound, { fieldErrors: { appStore: [APP_STORE_MESSAGES.notFound] } })
+  if (!app)
+    throw new ActionError(APP_STORE_MESSAGES.notFound, {
+      fieldErrors: { appStore: [APP_STORE_MESSAGES.notFound] },
+    })
   return { developerId: idString(app.artistId), country }
 }
 
@@ -476,7 +479,10 @@ export async function dueAppStoreProfiles(
         isNotNull(builderProfiles.appStoreDeveloperId),
         eq(users.status, "active"),
         isNull(users.deletedAt),
-        or(isNull(builderProfiles.appStoreSyncedAt), lt(builderProfiles.appStoreSyncedAt, input.cutoff)),
+        or(
+          isNull(builderProfiles.appStoreSyncedAt),
+          lt(builderProfiles.appStoreSyncedAt, input.cutoff),
+        ),
         input.afterId ? gt(builderProfiles.id, input.afterId) : undefined,
       ),
     )

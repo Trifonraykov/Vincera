@@ -80,11 +80,7 @@ export type MatchTrigger = "nightly" | "on_change" | "manual"
 
 /** Claude API uses (§7.3). */
 export type AiUse =
-  | "audience_summary"
-  | "idea_brief"
-  | "match_explanation"
-  | "launch_kit"
-  | "listing_hook"
+  "audience_summary" | "idea_brief" | "match_explanation" | "launch_kit" | "listing_hook"
 
 /** Where an imported listing came from (CLAUDE.md §19.45). */
 export type ListingSource = "app_store" | "web"
@@ -278,7 +274,10 @@ export interface EventCatalog {
     properties: { surface: ListingSurface; rank: number | null; matched: boolean }
   }
   /** Saved without a match row (with one, match.saved is written instead). */
-  "listing.saved": { subject: "product"; properties: { surface: ListingSurface; rank: number | null } }
+  "listing.saved": {
+    subject: "product"
+    properties: { surface: ListingSurface; rank: number | null }
+  }
   "listing.unsaved": {
     subject: "product"
     properties: { surface: ListingSurface; rank: number | null }

@@ -46,7 +46,10 @@ export const appStoreAppSchema = z.object({
   ipadScreenshotUrls: z.array(z.string()).nullish(),
   formattedPrice: optionalString,
   price: z.number().nonnegative().nullish(),
-  currency: z.string().regex(/^[A-Za-z]{3}$/).nullish(),
+  currency: z
+    .string()
+    .regex(/^[A-Za-z]{3}$/)
+    .nullish(),
   averageUserRating: z.number().min(0).max(5).nullish(),
   userRatingCount: z.number().int().nonnegative().nullish(),
   primaryGenreName: optionalString,

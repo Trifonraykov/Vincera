@@ -35,19 +35,32 @@ function hsl(h: number, s: number, l: number): [number, number, number] {
   return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)]
 }
 
-function inRoundRect(x: number, y: number, rx: number, ry: number, rw: number, rh: number, r: number) {
+function inRoundRect(
+  x: number,
+  y: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number,
+  r: number,
+) {
   if (x < rx || y < ry || x >= rx + rw || y >= ry + rh) return false
   const cx = Math.min(Math.max(x, rx + r), rx + rw - r)
   const cy = Math.min(Math.max(y, ry + r), ry + rh - r)
   return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
 }
 
-export function fakePng(input: { seed: string; width: number; height: number; style: FakeImageStyle }): Uint8Array {
+export function fakePng(input: {
+  seed: string
+  width: number
+  height: number
+  style: FakeImageStyle
+}): Uint8Array {
   const width = Math.max(8, Math.min(800, Math.round(input.width)))
   const height = Math.max(8, Math.min(1400, Math.round(input.height)))
   const seed = hashSeed(input.seed)
   const hue = seed % 360
-  const hue2 = (hue + 40 + (seed >> 9) % 80) % 360
+  const hue2 = (hue + 40 + ((seed >> 9) % 80)) % 360
   const top = hsl(hue, 0.72, 0.58)
   const bottom = hsl(hue2, 0.7, 0.42)
   const light = hsl(hue, 0.6, 0.94)
@@ -69,14 +82,26 @@ export function fakePng(input: { seed: string; width: number; height: number; st
         const dx = x - width / 2
         const dy = y - height / 2
         if (dx * dx + dy * dy < r * r) c = light
-        else if (inRoundRect(x, y, width * 0.2, height * 0.68, width * 0.6, height * 0.08, height * 0.04)) {
+        else if (
+          inRoundRect(x, y, width * 0.2, height * 0.68, width * 0.6, height * 0.08, height * 0.04)
+        ) {
           c = accent
         }
       } else if (input.style === "screenshot") {
         const pad = Math.round(width * 0.07)
         const cardH = Math.round(height * 0.13)
         // Header bar, then cards.
-        if (inRoundRect(x, y, pad, Math.round(height * 0.06), width - 2 * pad, Math.round(height * 0.05), 6)) {
+        if (
+          inRoundRect(
+            x,
+            y,
+            pad,
+            Math.round(height * 0.06),
+            width - 2 * pad,
+            Math.round(height * 0.05),
+            6,
+          )
+        ) {
           c = light
         }
         for (let i = 0; i < 4; i += 1) {
@@ -89,7 +114,17 @@ export function fakePng(input: { seed: string; width: number; height: number; st
             if (dx * dx + dy * dy < dot * dot) c = accent
           }
         }
-        if (inRoundRect(x, y, Math.round(width * 0.3), Math.round(height * 0.86), Math.round(width * 0.4), Math.round(height * 0.06), 20)) {
+        if (
+          inRoundRect(
+            x,
+            y,
+            Math.round(width * 0.3),
+            Math.round(height * 0.86),
+            Math.round(width * 0.4),
+            Math.round(height * 0.06),
+            20,
+          )
+        ) {
           c = accent
         }
       } else {
@@ -97,8 +132,10 @@ export function fakePng(input: { seed: string; width: number; height: number; st
         const dx = x - width * 0.22
         const dy = y - height / 2
         if (dx * dx + dy * dy < r * r) c = light
-        else if (inRoundRect(x, y, width * 0.42, height * 0.36, width * 0.45, height * 0.1, 8)) c = light
-        else if (inRoundRect(x, y, width * 0.42, height * 0.54, width * 0.3, height * 0.08, 8)) c = accent
+        else if (inRoundRect(x, y, width * 0.42, height * 0.36, width * 0.45, height * 0.1, 8))
+          c = light
+        else if (inRoundRect(x, y, width * 0.42, height * 0.54, width * 0.3, height * 0.08, 8))
+          c = accent
       }
       const p = row + 1 + x * 3
       raw[p] = c[0]

@@ -19,7 +19,9 @@ export const listingHookOutputSchema = z.object({
     .string()
     .min(8)
     .max(LISTING_TAGLINE_MAX)
-    .describe("One short line (at most 140 characters) that says what the product does for people."),
+    .describe(
+      "One short line (at most 140 characters) that says what the product does for people.",
+    ),
 })
 export type ListingHookOutput = z.infer<typeof listingHookOutputSchema>
 
@@ -33,7 +35,9 @@ function untrusted(text: string, max: number): string {
 
 function fakeHook(input: ListingHookInput): ListingHookOutput {
   const line = taglineOf(input.description) ?? cleanLine(input.title, LISTING_TAGLINE_MAX) ?? ""
-  return { hook: line.length >= 8 ? line : `${input.title}, ready to use.`.slice(0, LISTING_TAGLINE_MAX) }
+  return {
+    hook: line.length >= 8 ? line : `${input.title}, ready to use.`.slice(0, LISTING_TAGLINE_MAX),
+  }
 }
 
 export const listingHookPromptV1 = definePrompt<ListingHookInput>({

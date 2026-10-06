@@ -155,7 +155,8 @@ async function resolvePublic(
     if (signal.aborted) throw error
     throw new SafeFetchError("dns_failed", "We couldn't find that website.")
   }
-  if (addresses.length === 0) throw new SafeFetchError("dns_failed", "We couldn't find that website.")
+  if (addresses.length === 0)
+    throw new SafeFetchError("dns_failed", "We couldn't find that website.")
   // Every answer must be public: a host that resolves to one public and one private address
   // could otherwise be connected to the private one by a later lookup.
   if (!addresses.every((address) => isPublicAddress(address))) {
@@ -278,7 +279,9 @@ async function fetchWithRedirects(
 export function decodeBody(result: Pick<SafeFetchResult, "body" | "charset">): string {
   const sniffed =
     result.charset ??
-    /<meta[^>]+charset=["']?([\w-]+)/i.exec(new TextDecoder("latin1").decode(result.body.slice(0, 2048)))?.[1]
+    /<meta[^>]+charset=["']?([\w-]+)/i.exec(
+      new TextDecoder("latin1").decode(result.body.slice(0, 2048)),
+    )?.[1]
   try {
     return new TextDecoder((sniffed ?? "utf-8").toLowerCase(), { fatal: false }).decode(result.body)
   } catch {

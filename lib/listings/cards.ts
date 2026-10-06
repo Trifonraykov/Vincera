@@ -85,7 +85,8 @@ export function toListingCard(row: ListingCardRow): ListingCard {
     tag,
     format: row.format,
     source: row.source,
-    sourceLabel: meta?.kind === "app_store" ? "App Store" : meta?.kind === "web" ? meta.domain : null,
+    sourceLabel:
+      meta?.kind === "app_store" ? "App Store" : meta?.kind === "web" ? meta.domain : null,
     priceLabel: meta?.priceLabel ?? null,
     rating: meta?.rating ?? null,
     ratingCount: meta?.ratingCount ?? null,

@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from "next/navigation"
 import { cache } from "react"
 
 import { formatDate } from "@/components/audience/format"
+import { ListingGrid } from "@/components/public-profile/listing-grid"
 import { GitHubStatsSection } from "@/components/public-profile/github-stats"
 import { PortfolioList } from "@/components/public-profile/portfolio-list"
 import { ProfileHero } from "@/components/public-profile/profile-hero"
@@ -98,20 +99,39 @@ export default async function BuilderProfilePage({ params }: Props) {
         </section>
       ) : null}
 
-      <section aria-labelledby="portfolio-heading" className="space-y-4">
-        <h2 id="portfolio-heading" className="text-lg font-semibold">
-          Portfolio
-        </h2>
-        {profile.portfolio.length > 0 ? (
-          <PortfolioList items={profile.portfolio} />
-        ) : (
-          <EmptyState
-            icon={FolderOpen}
-            title="No portfolio items yet"
-            description={`${profile.displayName} hasn't added projects yet.`}
-          />
-        )}
-      </section>
+      {profile.listings.length > 0 ? (
+        <section aria-labelledby="listings-heading" className="space-y-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="listings-heading" className="text-lg font-semibold">
+              Products
+            </h2>
+            {profile.appStore ? (
+              <p className="text-sm text-muted-foreground">
+                {profile.appStore.developerName ?? "App Store developer"} on the App Store
+                {profile.appStore.verified ? " · verified" : " · unverified"}
+              </p>
+            ) : null}
+          </div>
+          <ListingGrid listings={profile.listings} />
+        </section>
+      ) : null}
+
+      {profile.portfolio.length > 0 || profile.listings.length === 0 ? (
+        <section aria-labelledby="portfolio-heading" className="space-y-4">
+          <h2 id="portfolio-heading" className="text-lg font-semibold">
+            Portfolio
+          </h2>
+          {profile.portfolio.length > 0 ? (
+            <PortfolioList items={profile.portfolio} />
+          ) : (
+            <EmptyState
+              icon={FolderOpen}
+              title="No portfolio items yet"
+              description={`${profile.displayName} hasn't added projects yet.`}
+            />
+          )}
+        </section>
+      ) : null}
 
       {profile.github ? <GitHubStatsSection github={profile.github} /> : null}
 

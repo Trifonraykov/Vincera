@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { AppBarSlot } from "@/components/layout/app-bar-slot"
+import { ImportListingsSection } from "@/components/listings/import-section"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { formatPrice } from "@/components/supply/format"
@@ -103,6 +104,8 @@ export default async function ProductsPage({ searchParams }: Props) {
         description="What you've built or plan to build. Publish a product and creators can team up with you to sell it."
         actions={<NewProductButton className="hidden md:inline-flex" />}
       />
+
+      <ImportListingsSection db={db} userId={user.id} />
 
       {total === 0 ? (
         <EmptyState

@@ -15,6 +15,8 @@ import {
   type SizeTier,
 } from "@/lib/db/schema"
 import { HANDLE_REGEX } from "@/lib/db/schema/columns"
+import type { ListingCard } from "@/lib/listings/cards"
+import { listBuilderListings } from "@/lib/listings/queries"
 import { portfolioImagePath } from "@/lib/profiles/image-policy"
 import { SOCIAL_PROVIDER_META } from "@/lib/social/catalog"
 import { latestSnapshotsFor } from "@/lib/social/queries"
@@ -211,6 +213,10 @@ export type PublicBuilderProfile = {
   portfolio: PublicPortfolioItem[]
   github: PublicGitHub | null
   memberSince: Date
+  /** Published listings, newest first (CLAUDE.md §19.45). */
+  listings: ListingCard[]
+  /** The connected App Store developer account, if any. */
+  appStore: { developerName: string | null; verified: boolean } | null
 }
 
 export async function loadPublicBuilderProfile(
@@ -231,6 +237,9 @@ export async function loadPublicBuilderProfile(
       dealPreference: builderProfiles.dealPreference,
       verifiedAt: builderProfiles.verifiedAt,
       memberSince: builderProfiles.createdAt,
+      appStoreDeveloperId: builderProfiles.appStoreDeveloperId,
+      appStoreDeveloperName: builderProfiles.appStoreDeveloperName,
+      appStoreVerifiedAt: builderProfiles.appStoreVerifiedAt,
     })
     .from(builderProfiles)
     .innerJoin(users, eq(users.id, builderProfiles.userId))
@@ -294,6 +303,10 @@ export async function loadPublicBuilderProfile(
     })),
     github: publicGitHub,
     memberSince: row.memberSince,
+    listings: await listBuilderListings(database, { builderProfileId: row.id }),
+    appStore: row.appStoreDeveloperId
+      ? { developerName: row.appStoreDeveloperName, verified: row.appStoreVerifiedAt !== null }
+      : null,
   }
 }
 

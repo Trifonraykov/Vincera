@@ -6,6 +6,7 @@ import { z } from "zod"
 import { defineAction } from "@/lib/actions/define-action"
 import { canBrowseFeed } from "@/lib/auth/authz"
 
+import { listFeed } from "./queries"
 import { recordFeedOpen, recordFeedShown, saveFeedListing, unsaveFeedListing } from "./interactions"
 
 /**
@@ -69,4 +70,12 @@ export const markFeedShownAction = defineAction({
   }),
   authorize: (user) => canBrowseFeed(user),
   run: async ({ input, user, db }) => recordFeedShown(db, { userId: user.id, ...input }),
+})
+
+/** The next page of the feed (infinite scroll). */
+export const loadFeedPageAction = defineAction({
+  name: "feed.page",
+  input: z.object({ cursor: z.string().min(1).max(300) }),
+  authorize: (user) => canBrowseFeed(user),
+  run: async ({ input, user, db }) => listFeed(db, { viewerId: user.id, cursor: input.cursor }),
 })

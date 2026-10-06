@@ -6,7 +6,13 @@ import { ActionError } from "@/lib/actions/errors"
 import type { ClaudeDeps } from "@/lib/ai/claude"
 import type { DbOrTx } from "@/lib/db/client"
 import { builderProfiles } from "@/lib/db/schema"
-import { checkFetchableUrl, decodeBody, safeFetch, SafeFetchError, type NetTransport } from "@/lib/net/safe-fetch"
+import {
+  checkFetchableUrl,
+  decodeBody,
+  safeFetch,
+  SafeFetchError,
+  type NetTransport,
+} from "@/lib/net/safe-fetch"
 import type { ObjectStorage } from "@/lib/storage/types"
 
 import { saveListingDraft, type ListingWriteResult } from "../store"
@@ -70,7 +76,11 @@ export async function importWebListing(
     throw error
   }
 
-  const draft = pageToDraft({ page: parseWebPage(html, finalUrl), requestedUrl: requested, finalUrl })
+  const draft = pageToDraft({
+    page: parseWebPage(html, finalUrl),
+    requestedUrl: requested,
+    finalUrl,
+  })
   return saveListingDraft(database, {
     builderProfileId: profile.id,
     actorUserId: input.userId,

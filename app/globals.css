@@ -319,3 +319,16 @@ html {
     scroll-behavior: auto !important;
   }
 }
+
+/* The feed's heart (components/feed/heart-button.tsx, CLAUDE.md §19.45). */
+@keyframes heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1.1);
+  }
+}

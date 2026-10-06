@@ -54,6 +54,8 @@ const SPEC_ROUTES = new Set([
   "/legal/agreement",
   "/app",
   "/app/audience",
+  // Beyond §12: the creator feed (CLAUDE.md §19.45).
+  "/app/feed",
   "/app/ideas",
   "/app/products",
   "/app/discover",
@@ -155,7 +157,9 @@ describe("navigation", () => {
     // built pages stand in, in this order (Phase 2 supply added Ideas and Products).
     const preference: Record<"creator" | "builder", [string, string][]> = {
       creator: [
-        ["Discover", "/app/discover"],
+        ...(isBuiltRoute("/app/feed")
+          ? ([["Feed", "/app/feed"]] as [string, string][])
+          : ([["Discover", "/app/discover"]] as [string, string][])),
         ["Collabs", "/app/collabs"],
         ["Inbox", "/app/messages"],
         ["Audience", "/app/audience"],
@@ -181,17 +185,23 @@ describe("navigation", () => {
         .slice(0, MOBILE_TAB_COUNT - 2)
       expect(appTabs(role).map((tab) => tab.title)).toEqual(["Home", ...middle, "Me"])
     }
-    // Once Discover, Collabs and Inbox are built, both roles have the final five tabs.
+    // Once Discover, Collabs and Inbox are built, both roles have the final five tabs; creators
+    // get the Feed in Discover's place (CLAUDE.md §19.45).
     if (["/app/discover", "/app/collabs", "/app/messages"].every(isBuiltRoute)) {
-      for (const role of ["creator", "builder"] as const) {
-        expect(appTabs(role).map((tab) => tab.title)).toEqual([
-          "Home",
-          "Discover",
-          "Collabs",
-          "Inbox",
-          "Me",
-        ])
-      }
+      expect(appTabs("builder").map((tab) => tab.title)).toEqual([
+        "Home",
+        "Discover",
+        "Collabs",
+        "Inbox",
+        "Me",
+      ])
+      expect(appTabs("creator").map((tab) => tab.title)).toEqual([
+        "Home",
+        isBuiltRoute("/app/feed") ? "Feed" : "Discover",
+        "Collabs",
+        "Inbox",
+        "Me",
+      ])
     }
   })
 

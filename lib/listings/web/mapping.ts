@@ -27,14 +27,18 @@ export function listingKeyForUrl(url: URL): string {
   for (const name of [...copy.searchParams.keys()]) {
     if (TRACKING_PARAMS.test(name)) copy.searchParams.delete(name)
   }
-  if (copy.pathname !== "/" && copy.pathname.endsWith("/")) copy.pathname = copy.pathname.replace(/\/+$/, "")
+  if (copy.pathname !== "/" && copy.pathname.endsWith("/"))
+    copy.pathname = copy.pathname.replace(/\/+$/, "")
   return copy.href.slice(0, 500)
 }
 
 function formatOf(page: ParsedPage, finalUrl: URL): ProductFormat {
   if (page.structured.type === "product") return "other"
   const category = (page.structured.category ?? "").toLowerCase()
-  if (/game|mobile/.test(category) || /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)) {
+  if (
+    /game|mobile/.test(category) ||
+    /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)
+  ) {
     return "app"
   }
   if (/template|notion/.test(`${page.title ?? ""} ${category}`.toLowerCase())) return "template"
@@ -76,8 +80,7 @@ export function pageToDraft(input: {
   const candidates = [page.description, page.structured.description]
     .map((d) => cleanParagraphs(d, LISTING_DESCRIPTION_MAX))
     .filter((d): d is string => !!d)
-  const description =
-    candidates.sort((a, b) => b.length - a.length)[0] ?? `${title}, on ${domain}.`
+  const description = candidates.sort((a, b) => b.length - a.length)[0] ?? `${title}, on ${domain}.`
   const category = categoryTopic(page.structured.category)
   const topics = topicsFrom([category, ...page.structured.keywords, ...page.keywords])
   const currency = page.structured.priceCurrency?.toLowerCase() ?? null
@@ -89,8 +92,10 @@ export function pageToDraft(input: {
   const image = page.images[0]
   if (image) images.push({ kind: "image", url: image })
 
-  const link = safeLink(page.canonical && displayDomain(page.canonical) === domain ? page.canonical : finalUrl.href) ??
-    safeLink(finalUrl.href)
+  const link =
+    safeLink(
+      page.canonical && displayDomain(page.canonical) === domain ? page.canonical : finalUrl.href,
+    ) ?? safeLink(finalUrl.href)
 
   return {
     source: "web",

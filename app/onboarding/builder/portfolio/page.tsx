@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { ImportListingsSection } from "@/components/listings/import-section"
 import { ContinueStepButton } from "@/components/onboarding/continue-step-button"
 import { OnboardingProgress } from "@/components/onboarding/onboarding-progress"
 import { SkipStepButton } from "@/components/onboarding/skip-step-button"
@@ -47,7 +48,7 @@ export default async function OnboardingPortfolioPage({ searchParams }: Props) {
   const githubView = connections
     .map(toConnectionView)
     .find((connection) => connection.provider === "github")
-  const canContinue = items.length > 0 || snapshot.githubConnectionCount > 0
+  const canContinue = snapshot.portfolioItemCount > 0 || snapshot.githubConnectionCount > 0
 
   return (
     <div className="space-y-8">
@@ -55,11 +56,18 @@ export default async function OnboardingPortfolioPage({ searchParams }: Props) {
 
       <PageHeader
         title="Show what you've built"
-        description="Creators choose builders by their work. Connect GitHub, add a few projects, or both."
+        description="Creators choose builders by their work. Import your apps, connect GitHub or add a few projects."
       />
 
       <ConnectResultAlert searchParams={params} />
       {githubView && hasPendingSync([githubView], now()) ? <SyncRefresher /> : null}
+
+      <section aria-labelledby="import-heading" className="space-y-3">
+        <h2 id="import-heading" className="text-base font-semibold">
+          Your apps and products
+        </h2>
+        <ImportListingsSection db={db} userId={user.id} compact />
+      </section>
 
       <section aria-labelledby="github-heading" className="space-y-3">
         <h2 id="github-heading" className="text-base font-semibold">
