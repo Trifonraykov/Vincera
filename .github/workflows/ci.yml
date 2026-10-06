@@ -1,0 +1,161 @@
+# CI for the Creator x Builder platform (Next.js app at the repo root).
+# The legacy Vincera Bot (Python) is not built or tested here.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, lint, test, e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: creator_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      CI: true
+      APP_ENV: test
+      FAKE_SERVICES: all
+      NEXT_TELEMETRY_DISABLED: 1
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/creator_ci
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/creator_e2e
+      # Test-only values, not secrets.
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
+      ENCRYPTION_KEY: Y2ktb25seS1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE=
+      STRIPE_WEBHOOK_SECRET: whsec_ci_only_test_secret
+      ADMIN_EMAILS: admin@example.com
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit and integration tests
+        run: pnpm test
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v6
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - name: Build
+        run: pnpm build
+
+      # Playwright's web server rebuilds (NEXT_PUBLIC_* values are inlined at build time and e2e
+      # serves on port 3100), reusing the build cache from the step above, then runs `next start`.
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # The production database can be a Supabase project (README, CLAUDE.md §19.18). Supabase's own
+  # Postgres image has the same roles as a hosted project: a non-superuser `postgres` that owns the
+  # tables, and the Data API roles `anon` / `authenticated` with default privileges on `public`.
+  # Every migration must apply there, and the integration tests must pass on it.
+  supabase-postgres:
+    name: Migrations and integration tests on Supabase Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: supabase/postgres:17.11.0.003
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -h localhost"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    env:
+      CI: true
+      APP_ENV: test
+      FAKE_SERVICES: all
+      NEXT_TELEMETRY_DISABLED: 1
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # Test-only values, not secrets (the same as the check job's).
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else
+      ENCRYPTION_KEY: Y2ktb25seS1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE=
+      STRIPE_WEBHOOK_SECRET: whsec_ci_only_test_secret
+      ADMIN_EMAILS: admin@example.com
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations as Supabase's postgres role
+        run: pnpm db:migrate
+
+      - name: Data API roles see no tables
+        run: |
+          granted=$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM information_schema.role_table_grants WHERE grantee IN ('anon', 'authenticated') AND table_schema = 'public'")
+          no_rls=$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND NOT relrowsecurity")
+          echo "grants to anon/authenticated: $granted; tables without RLS: $no_rls"
+          test "$granted" = "0" && test "$no_rls" = "0"
+
+      - name: Integration tests
+        run: pnpm test:integration

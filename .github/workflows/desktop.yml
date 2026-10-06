@@ -1,0 +1,129 @@
+# Desktop app installers (desktop/README.md): macOS (dmg + zip), Windows (NSIS .exe) and Linux
+# (AppImage), unsigned. Each run uploads them as workflow artifacts and publishes them on a GitHub
+# prerelease tagged desktop-<short sha>.
+name: Desktop app
+
+on:
+  push:
+    branches: [claude/youthful-gauss-hvgurg]
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      # electron-builder must not look for signing certificates (the installers are unsigned).
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # A flat node_modules (no symlinks), so the standalone server copied into the app has one.
+      - name: Install the platform's dependencies
+        run: pnpm install --frozen-lockfile --config.node-linker=hoisted
+
+      - name: Install the desktop app's dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build the app bundle (Next.js standalone server, database bootstrap)
+        working-directory: desktop
+        run: npm run build:app
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        run: npx electron-builder --mac dmg zip --arm64 --publish never
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npx electron-builder --linux AppImage --x64 --publish never
+
+      # Launch the packaged app: embedded database, migrations, seed, sign-up through the in-app
+      # mailbox, quit, relaunch still signed in (desktop/scripts/smoke-test.mjs). The AppImage
+      # itself, extracted outside the checkout, so nothing can resolve from the repo's node_modules.
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          xvfb-run -a node scripts/smoke-test.mjs --app release/*.AppImage --out release/smoke
+
+      - name: Upload the smoke test screenshots
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-smoke-screenshots
+          path: desktop/release/smoke/
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ runner.os }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.exe
+            desktop/release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    name: Prerelease
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          path: installers
+          merge-multiple: true
+
+      - name: Publish desktop-<short sha>
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          tag="desktop-${SHA::7}"
+          rm -f installers/*.png
+          ls -la installers
+          if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
+            gh release upload "$tag" installers/* --repo "$REPO" --clobber
+          else
+            gh release create "$tag" installers/* --repo "$REPO" --target "$SHA" --prerelease \
+              --title "Vincera desktop ${SHA::7}" \
+              --notes "Unsigned test builds of the Vincera desktop app from ${SHA}. macOS: open the .dmg, drag Vincera to Applications, then right-click it and choose Open (or System Settings, Privacy & Security, Open Anyway). Windows: run the .exe; on the SmartScreen warning choose More info, Run anyway. Linux: make the .AppImage executable and run it. See desktop/README.md."
+          fi

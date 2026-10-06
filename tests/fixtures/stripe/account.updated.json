@@ -1,0 +1,94 @@
+{
+  "id": "evt_1QfixtureAccountUpdated",
+  "object": "event",
+  "account": "acct_1QfixtureConnected",
+  "api_version": "2026-09-30.endive",
+  "created": 1791201600,
+  "data": {
+    "object": {
+      "id": "acct_1QfixtureConnected",
+      "object": "account",
+      "business_profile": {
+        "annual_revenue": null,
+        "estimated_worker_count": null,
+        "mcc": "5734",
+        "name": null,
+        "product_description": null,
+        "support_address": null,
+        "support_email": null,
+        "support_phone": null,
+        "support_url": null,
+        "url": "https://example.test/c/fixture"
+      },
+      "business_type": "individual",
+      "capabilities": { "transfers": "active" },
+      "charges_enabled": false,
+      "controller": {
+        "fees": { "payer": "application" },
+        "is_controller": true,
+        "losses": { "payments": "application" },
+        "requirement_collection": "stripe",
+        "stripe_dashboard": { "type": "express" },
+        "type": "application"
+      },
+      "country": "ES",
+      "created": 1791198000,
+      "default_currency": "eur",
+      "details_submitted": true,
+      "email": "fixture@example.test",
+      "external_accounts": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "total_count": 1,
+        "url": "/v1/accounts/acct_1QfixtureConnected/external_accounts"
+      },
+      "future_requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "metadata": { "user_id": "00000000-0000-0000-0000-000000000000" },
+      "payouts_enabled": true,
+      "requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "settings": {
+        "payouts": {
+          "debit_negative_balances": true,
+          "schedule": { "delay_days": 7, "interval": "daily" },
+          "statement_descriptor": null
+        }
+      },
+      "tos_acceptance": { "date": 1791201000, "service_agreement": "full" },
+      "type": "none"
+    },
+    "previous_attributes": {
+      "capabilities": { "transfers": "pending" },
+      "details_submitted": false,
+      "payouts_enabled": false,
+      "requirements": {
+        "currently_due": ["external_account", "tos_acceptance.date", "tos_acceptance.ip"],
+        "disabled_reason": "requirements.past_due",
+        "eventually_due": ["external_account", "tos_acceptance.date", "tos_acceptance.ip"],
+        "past_due": ["external_account", "tos_acceptance.date", "tos_acceptance.ip"]
+      }
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "account.updated"
+}

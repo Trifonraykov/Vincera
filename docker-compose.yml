@@ -1,0 +1,81 @@
+# Local test setup for the Creator x Builder platform.
+#   ./launch.sh                    → checks Docker, says which database it uses, then runs this
+#   docker compose up --build      → the same without the checks (Windows) → http://localhost:3000
+#   docker compose down -v         → stop and delete all local data
+# Every external service is fake (payments, social logins, email, storage, AI); see README.
+#
+# Database: with no configuration, the `db` service below (Supabase's own Postgres). To use a
+# hosted Supabase project instead, put its connection string in a `.env` file next to this one
+# (Compose reads it; see docs/supabase.md):
+#   DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres
+#   DATABASE_SSL=require            # optional: the default for Supabase hosts
+#   DATABASE_CA_CERT=-----BEGIN…    # optional: Supabase's CA (one line with \n), then verified
+# A variable exported in your shell wins over .env (Compose's rule).
+name: creator-platform
+
+services:
+  db:
+    # Supabase's Postgres image (what `supabase start` runs and hosted projects are built from):
+    # pgvector, a non-superuser `postgres` role, and the Data API roles `anon` / `authenticated`
+    # with Supabase's default privileges, so migrations and the post-migrate hardening run here
+    # exactly as on a hosted project. Its database is `postgres`, like a hosted project's.
+    image: supabase/postgres:17.11.0.003
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - supabase-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    # Published on this machine only: every service is fake and the dev mailbox shows everyone's
+    # magic links, so anyone who could reach the port could sign in as any user (admin included).
+    ports:
+      - "127.0.0.1:3000:3000"
+    # Lets DATABASE_URL reach a database on this computer, e.g. the Supabase CLI's
+    # (postgres://postgres:postgres@host.docker.internal:54322/postgres); `localhost` inside the
+    # container is the container itself.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/postgres}
+      # Empty means unset (lib/env.ts): TLS then follows DATABASE_URL (require for Supabase hosts).
+      DATABASE_SSL: ${DATABASE_SSL:-}
+      DATABASE_CA_CERT: ${DATABASE_CA_CERT:-}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+      # The migrations refuse a database holding another app's objects; "1" migrates it anyway.
+      DATABASE_ALLOW_FOREIGN_OBJECTS: ${DATABASE_ALLOW_FOREIGN_OBJECTS:-}
+      APP_ENV: development
+      FAKE_SERVICES: all
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      # /api/dev/mailbox: read the fake magic links in the browser (local only, see ports above).
+      DEV_MAILBOX: "1"
+      # Local-only webhook secret; fake Stripe signs its webhooks with it.
+      STRIPE_WEBHOOK_SECRET: whsec_local_docker_only
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-admin@example.com}
+      # Empty: generated on first start and kept in the appdata volume (docker/entrypoint.sh). When
+      # `pnpm dev` uses the same database (a hosted Supabase project), put its two values in .env
+      # too: OAuth tokens are encrypted with ENCRYPTION_KEY, so each app must use the same key.
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+    volumes:
+      - appdata:/app/.data
+
+volumes:
+  # Named after the image: the earlier pgvector/pgvector volume (`pgdata`) is not reused, since
+  # Supabase's image only sets up its roles on an empty data directory.
+  supabase-db:
+  appdata:

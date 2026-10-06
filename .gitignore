@@ -12,3 +12,18 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# === Creator x Builder platform (Next.js app at the repo root) ===
+node_modules/
+.next/
+out/
+.env*.local
+.data/
+playwright-report/
+test-results/
+blob-report/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+.DS_Store

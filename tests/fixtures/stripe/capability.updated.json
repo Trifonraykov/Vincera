@@ -1,0 +1,42 @@
+{
+  "id": "evt_1QfixtureCapabilityUpdated",
+  "object": "event",
+  "account": "acct_1QfixtureConnected",
+  "api_version": "2026-09-30.endive",
+  "created": 1791201600,
+  "data": {
+    "object": {
+      "id": "transfers",
+      "object": "capability",
+      "account": "acct_1QfixtureConnected",
+      "future_requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "requested": true,
+      "requested_at": 1791198000,
+      "requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "status": "active"
+    },
+    "previous_attributes": { "status": "pending" }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "capability.updated"
+}

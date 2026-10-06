@@ -1,0 +1,3 @@
+CREATE TYPE "public"."audience_basis" AS ENUM('viewers', 'followers');--> statement-breakpoint
+ALTER TABLE "audience_snapshots" ADD COLUMN "countries_basis" "audience_basis";--> statement-breakpoint
+ALTER TABLE "audience_snapshots" ADD CONSTRAINT "audience_snapshots_countries_have_basis" CHECK ("audience_snapshots"."countries_basis" IS NOT NULL OR "audience_snapshots"."top_countries" IS NULL OR jsonb_array_length("audience_snapshots"."top_countries") = 0);

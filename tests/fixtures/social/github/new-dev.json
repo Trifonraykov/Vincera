@@ -1,0 +1,84 @@
+{
+  "label": "new-dev-2026 (no public repositories)",
+  "description": "A brand-new GitHub account: no public repositories, no followers and a handful of contributions.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "scope": "",
+        "token_type": "bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "error": "bad_refresh_token",
+        "error_description": "The refresh token passed is incorrect or expired.",
+        "error_uri": "https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user",
+      "body": {
+        "login": "new-dev-2026",
+        "id": 9919777,
+        "node_id": "MDQ6VXNlcjk5MTk777",
+        "avatar_url": "https://avatars.githubusercontent.com/u/9919777?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/new-dev-2026",
+        "html_url": "https://github.com/new-dev-2026",
+        "type": "User",
+        "site_admin": false,
+        "name": null,
+        "company": null,
+        "blog": "",
+        "location": null,
+        "email": null,
+        "hireable": null,
+        "bio": null,
+        "twitter_username": null,
+        "public_repos": 0,
+        "public_gists": 0,
+        "followers": 0,
+        "following": 2,
+        "created_at": "2026-08-20T14:00:00Z",
+        "updated_at": "2026-09-30T08:12:44Z"
+      },
+      "headers": {
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4991",
+        "x-ratelimit-resource": "core"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "body": {
+        "data": {
+          "user": {
+            "followers": {
+              "totalCount": 0
+            },
+            "repositories": {
+              "totalCount": 0,
+              "nodes": []
+            },
+            "contributionsCollection": {
+              "contributionCalendar": {
+                "totalContributions": 3
+              },
+              "totalCommitContributions": 3,
+              "totalIssueContributions": 0,
+              "totalPullRequestContributions": 0,
+              "totalPullRequestReviewContributions": 0,
+              "totalRepositoryContributions": 0,
+              "restrictedContributionsCount": 0
+            }
+          }
+        }
+      }
+    }
+  ]
+}

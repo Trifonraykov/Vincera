@@ -1,0 +1,180 @@
+{
+  "label": "Max Moves (86.4K followers)",
+  "description": "A dance creator who granted every scope. TikTok shares no demographics; refresh tokens rotate on every refresh.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 86400,
+        "open_id": "723f24d7-e717-40f8-a2b6-cb8464cd23b4",
+        "refresh_token": "{{refresh_token}}",
+        "refresh_expires_in": 31536000,
+        "scope": "user.info.basic,user.info.profile,user.info.stats,video.list",
+        "token_type": "Bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 86400,
+        "open_id": "723f24d7-e717-40f8-a2b6-cb8464cd23b4",
+        "refresh_token": "{{refresh_token}}",
+        "refresh_expires_in": 31536000,
+        "scope": "user.info.basic,user.info.profile,user.info.stats,video.list",
+        "token_type": "Bearer"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://open.tiktokapis.com/v2/user/info/",
+      "query": {
+        "fields": "open_id,union_id,avatar_url,display_name,username,bio_description,is_verified,follower_count,following_count,likes_count,video_count"
+      },
+      "body": {
+        "data": {
+          "user": {
+            "open_id": "723f24d7-e717-40f8-a2b6-cb8464cd23b4",
+            "union_id": "c9c60f44-b25c-4f25-9e4a-5b2f3e2a1f07",
+            "avatar_url": "https://p16-sign-va.tiktokcdn.com/fake/max-moves~c5_168x168.jpeg",
+            "display_name": "Max Moves",
+            "username": "maxmoves",
+            "bio_description": "Dance tutorials for absolute beginners 💃 New combo every Tuesday",
+            "is_verified": false,
+            "follower_count": 86400,
+            "following_count": 210,
+            "likes_count": 1840000,
+            "video_count": 214
+          }
+        },
+        "error": {
+          "code": "ok",
+          "message": "",
+          "log_id": "20261005093000FAKE0000000000000001"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://open.tiktokapis.com/v2/video/list/",
+      "body": {
+        "data": {
+          "videos": [
+            {
+              "id": "7421000000000000008",
+              "title": "Beginner hip hop combo, slow then fast #dance #hiphop #tutorial",
+              "video_description": "Beginner hip hop combo, slow then fast #dance #hiphop #tutorial",
+              "create_time": 1791057600,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000008~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000008",
+              "duration": 32,
+              "like_count": 31200,
+              "comment_count": 410,
+              "share_count": 2210,
+              "view_count": 241000
+            },
+            {
+              "id": "7421000000000000007",
+              "title": "Learn this footwork in 30 seconds #dance #footwork #beginner",
+              "video_description": "Learn this footwork in 30 seconds #dance #footwork #beginner",
+              "create_time": 1790712000,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000007~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000007",
+              "duration": 30,
+              "like_count": 40120,
+              "comment_count": 655,
+              "share_count": 3980,
+              "view_count": 312400
+            },
+            {
+              "id": "7421000000000000006",
+              "title": "Mirror tutorial: shoulder isolations #dance #tutorial",
+              "video_description": "Mirror tutorial: shoulder isolations #dance #tutorial",
+              "create_time": 1790366400,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000006~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000006",
+              "duration": 41,
+              "like_count": 9120,
+              "comment_count": 133,
+              "share_count": 610,
+              "view_count": 88200
+            },
+            {
+              "id": "7421000000000000005",
+              "title": "Dance warm-up you can do anywhere #warmup #dance #fitness",
+              "video_description": "Dance warm-up you can do anywhere #warmup #dance #fitness",
+              "create_time": 1790020800,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000005~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000005",
+              "duration": 58,
+              "like_count": 4410,
+              "comment_count": 72,
+              "share_count": 380,
+              "view_count": 54300
+            },
+            {
+              "id": "7421000000000000004",
+              "title": "Trend breakdown: step by step #trend #dance #tutorial",
+              "video_description": "Trend breakdown: step by step #trend #dance #tutorial",
+              "create_time": 1789675200,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000004~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000004",
+              "duration": 26,
+              "like_count": 52300,
+              "comment_count": 1210,
+              "share_count": 6120,
+              "view_count": 401200
+            },
+            {
+              "id": "7421000000000000003",
+              "title": "Freestyle confidence tips for shy dancers #dance #beginner",
+              "video_description": "Freestyle confidence tips for shy dancers #dance #beginner",
+              "create_time": 1789329600,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000003~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000003",
+              "duration": 47,
+              "like_count": 6820,
+              "comment_count": 214,
+              "share_count": 540,
+              "view_count": 73100
+            },
+            {
+              "id": "7421000000000000002",
+              "title": "Choreo class recap #choreography #dance",
+              "video_description": "Choreo class recap #choreography #dance",
+              "create_time": 1788984000,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000002~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000002",
+              "duration": 59,
+              "like_count": 3110,
+              "comment_count": 48,
+              "share_count": 190,
+              "view_count": 41200
+            },
+            {
+              "id": "7421000000000000001",
+              "title": "Counting music for beginners #dance #beginner #tutorial",
+              "video_description": "Counting music for beginners #dance #beginner #tutorial",
+              "create_time": 1788638400,
+              "cover_image_url": "https://p16-sign-va.tiktokcdn.com/fake/7421000000000000001~tplv-noop.image?x-expires=1728000000&x-signature=fake",
+              "share_url": "https://www.tiktok.com/@maxmoves/video/7421000000000000001",
+              "duration": 37,
+              "like_count": 14210,
+              "comment_count": 302,
+              "share_count": 1320,
+              "view_count": 129800
+            }
+          ],
+          "cursor": 1790072000000,
+          "has_more": true
+        },
+        "error": {
+          "code": "ok",
+          "message": "",
+          "log_id": "20261005093000FAKE0000000000000001"
+        }
+      }
+    }
+  ]
+}

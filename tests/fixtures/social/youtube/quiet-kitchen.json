@@ -1,0 +1,420 @@
+{
+  "label": "Quiet Kitchen (subscriber count hidden)",
+  "description": "A small cooking channel that hides its subscriber count. YouTube Analytics returns no rows yet, so there are no countries or demographics.",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 3599,
+        "refresh_token": "{{refresh_token}}",
+        "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "token_type": "Bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "expires_in": 3599,
+        "scope": "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "token_type": "Bearer"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/channels",
+      "query": {
+        "part": "snippet,statistics,contentDetails",
+        "mine": "true"
+      },
+      "body": {
+        "kind": "youtube#channelListResponse",
+        "etag": "fake-etag-quietkitchen",
+        "pageInfo": {
+          "totalResults": 1,
+          "resultsPerPage": 5
+        },
+        "items": [
+          {
+            "kind": "youtube#channel",
+            "etag": "fake-etag-ch-quietkitchen",
+            "id": "UCqU1etK1tchenR0ad5Ma8Xw",
+            "snippet": {
+              "title": "Quiet Kitchen",
+              "description": "Slow, quiet vegan cooking. No talking, just food.",
+              "customUrl": "@quietkitchen",
+              "publishedAt": "2025-11-02T08:15:00Z",
+              "thumbnails": {
+                "default": {
+                  "url": "https://yt3.ggpht.com/fake-quietkitchen=s88-c-k-c0x00ffffff-no-rj",
+                  "width": 88,
+                  "height": 88
+                },
+                "medium": {
+                  "url": "https://yt3.ggpht.com/fake-quietkitchen=s240-c-k-c0x00ffffff-no-rj",
+                  "width": 240,
+                  "height": 240
+                },
+                "high": {
+                  "url": "https://yt3.ggpht.com/fake-quietkitchen=s800-c-k-c0x00ffffff-no-rj",
+                  "width": 800,
+                  "height": 800
+                }
+              },
+              "localized": {
+                "title": "Quiet Kitchen",
+                "description": "Slow, quiet vegan cooking. No talking, just food."
+              }
+            },
+            "contentDetails": {
+              "relatedPlaylists": {
+                "likes": "",
+                "uploads": "UUqU1etK1tchenR0ad5Ma8Xw"
+              }
+            },
+            "statistics": {
+              "viewCount": "182340",
+              "hiddenSubscriberCount": true,
+              "videoCount": "9"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+      "query": {
+        "part": "contentDetails",
+        "playlistId": "UUqU1etK1tchenR0ad5Ma8Xw"
+      },
+      "body": {
+        "kind": "youtube#playlistItemListResponse",
+        "etag": "fake-etag-playlist",
+        "pageInfo": {
+          "totalResults": 5,
+          "resultsPerPage": 25
+        },
+        "items": [
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-qK000000009",
+            "id": "UUqU1etK1tchenR0ad5Ma8Xw.qK000000009",
+            "contentDetails": {
+              "videoId": "qK000000009",
+              "videoPublishedAt": "2026-09-29T09:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-qK000000008",
+            "id": "UUqU1etK1tchenR0ad5Ma8Xw.qK000000008",
+            "contentDetails": {
+              "videoId": "qK000000008",
+              "videoPublishedAt": "2026-09-15T09:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-qK000000007",
+            "id": "UUqU1etK1tchenR0ad5Ma8Xw.qK000000007",
+            "contentDetails": {
+              "videoId": "qK000000007",
+              "videoPublishedAt": "2026-09-01T09:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-qK000000006",
+            "id": "UUqU1etK1tchenR0ad5Ma8Xw.qK000000006",
+            "contentDetails": {
+              "videoId": "qK000000006",
+              "videoPublishedAt": "2026-08-18T09:00:00Z"
+            }
+          },
+          {
+            "kind": "youtube#playlistItem",
+            "etag": "fake-etag-pi-qK000000005",
+            "id": "UUqU1etK1tchenR0ad5Ma8Xw.qK000000005",
+            "contentDetails": {
+              "videoId": "qK000000005",
+              "videoPublishedAt": "2026-08-04T09:00:00Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://www.googleapis.com/youtube/v3/videos",
+      "query": {
+        "part": "snippet,statistics,contentDetails"
+      },
+      "body": {
+        "kind": "youtube#videoListResponse",
+        "etag": "fake-etag-videos",
+        "pageInfo": {
+          "totalResults": 5,
+          "resultsPerPage": 5
+        },
+        "items": [
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-qK000000009",
+            "id": "qK000000009",
+            "snippet": {
+              "publishedAt": "2026-09-29T09:00:00Z",
+              "channelId": "UCqU1etK1tchenR0ad5Ma8Xw",
+              "title": "One-pot vegan pasta in 15 minutes #vegan #onepot",
+              "description": "",
+              "tags": [],
+              "categoryId": "26",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT6M12S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "3120",
+              "favoriteCount": "0",
+              "likeCount": "210",
+              "commentCount": "18"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-qK000000008",
+            "id": "qK000000008",
+            "snippet": {
+              "publishedAt": "2026-09-15T09:00:00Z",
+              "channelId": "UCqU1etK1tchenR0ad5Ma8Xw",
+              "title": "Meal prep for a busy week (vegan, budget)",
+              "description": "",
+              "tags": ["meal prep", "vegan"],
+              "categoryId": "26",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT12M40S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "5410",
+              "favoriteCount": "0",
+              "likeCount": "362",
+              "commentCount": "40"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-qK000000007",
+            "id": "qK000000007",
+            "snippet": {
+              "publishedAt": "2026-09-01T09:00:00Z",
+              "channelId": "UCqU1etK1tchenR0ad5Ma8Xw",
+              "title": "Crispy tofu three ways #vegan",
+              "description": "",
+              "tags": ["tofu", "vegan"],
+              "categoryId": "26",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT8M1S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "2890",
+              "favoriteCount": "0",
+              "commentCount": "12"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-qK000000006",
+            "id": "qK000000006",
+            "snippet": {
+              "publishedAt": "2026-08-18T09:00:00Z",
+              "channelId": "UCqU1etK1tchenR0ad5Ma8Xw",
+              "title": "Budget grocery haul: feeding two for €40",
+              "description": "",
+              "tags": ["budget", "meal prep"],
+              "categoryId": "26",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT10M55S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "7810",
+              "favoriteCount": "0",
+              "likeCount": "455"
+            }
+          },
+          {
+            "kind": "youtube#video",
+            "etag": "fake-etag-v-qK000000005",
+            "id": "qK000000005",
+            "snippet": {
+              "publishedAt": "2026-08-04T09:00:00Z",
+              "channelId": "UCqU1etK1tchenR0ad5Ma8Xw",
+              "title": "One-pot lentil curry",
+              "description": "",
+              "tags": ["onepot", "curry"],
+              "categoryId": "26",
+              "liveBroadcastContent": "none",
+              "defaultAudioLanguage": "en"
+            },
+            "contentDetails": {
+              "duration": "PT7M3S",
+              "dimension": "2d",
+              "definition": "hd",
+              "caption": "false",
+              "licensedContent": false,
+              "projection": "rectangular"
+            },
+            "statistics": {
+              "viewCount": "4020",
+              "favoriteCount": "0",
+              "likeCount": "281",
+              "commentCount": "22"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "metrics": "views,engagedViews,estimatedMinutesWatched,averageViewDuration,likes,comments,shares,subscribersGained,subscribersLost"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "engagedViews",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "estimatedMinutesWatched",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "averageViewDuration",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "likes",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "comments",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "shares",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersGained",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          },
+          {
+            "name": "subscribersLost",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "country",
+        "metrics": "views"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "country",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "views",
+            "columnType": "METRIC",
+            "dataType": "INTEGER"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+      "query": {
+        "ids": "channel==MINE",
+        "dimensions": "ageGroup,gender",
+        "metrics": "viewerPercentage"
+      },
+      "body": {
+        "kind": "youtubeAnalytics#resultTable",
+        "columnHeaders": [
+          {
+            "name": "ageGroup",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "gender",
+            "columnType": "DIMENSION",
+            "dataType": "STRING"
+          },
+          {
+            "name": "viewerPercentage",
+            "columnType": "METRIC",
+            "dataType": "FLOAT"
+          }
+        ]
+      }
+    }
+  ]
+}

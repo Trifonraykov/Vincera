@@ -1,0 +1,260 @@
+{
+  "label": "octo-builder (1.2K stars, TypeScript)",
+  "description": "A builder with popular public repositories, several languages and a busy contribution year (including private contributions, counted only).",
+  "oauth": {
+    "token": {
+      "body": {
+        "access_token": "{{access_token}}",
+        "scope": "",
+        "token_type": "bearer"
+      }
+    },
+    "refresh": {
+      "body": {
+        "error": "bad_refresh_token",
+        "error_description": "The refresh token passed is incorrect or expired.",
+        "error_uri": "https://docs.github.com/apps/managing-oauth-apps/troubleshooting-oauth-app-access-token-request-errors"
+      }
+    }
+  },
+  "responses": [
+    {
+      "method": "GET",
+      "url": "https://api.github.com/user",
+      "body": {
+        "login": "octo-builder",
+        "id": 9919001,
+        "node_id": "MDQ6VXNlcjk5MTk001",
+        "avatar_url": "https://avatars.githubusercontent.com/u/9919001?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/octo-builder",
+        "html_url": "https://github.com/octo-builder",
+        "type": "User",
+        "site_admin": false,
+        "name": "Octo Builder",
+        "company": null,
+        "blog": "",
+        "location": null,
+        "email": null,
+        "hireable": null,
+        "bio": "I build small tools for creators. TypeScript, Python, a bit of Rust.",
+        "twitter_username": null,
+        "public_repos": 23,
+        "public_gists": 0,
+        "followers": 312,
+        "following": 41,
+        "created_at": "2017-04-02T09:13:44Z",
+        "updated_at": "2026-09-30T08:12:44Z"
+      },
+      "headers": {
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4991",
+        "x-ratelimit-resource": "core"
+      }
+    },
+    {
+      "method": "POST",
+      "url": "https://api.github.com/graphql",
+      "body": {
+        "data": {
+          "user": {
+            "followers": {
+              "totalCount": 312
+            },
+            "repositories": {
+              "totalCount": 18,
+              "nodes": [
+                {
+                  "name": "invoice-cli",
+                  "url": "https://github.com/octo-builder/invoice-cli",
+                  "stargazerCount": 1240,
+                  "forkCount": 88,
+                  "isArchived": false,
+                  "pushedAt": "2026-09-30T17:22:10Z",
+                  "primaryLanguage": {
+                    "name": "TypeScript"
+                  },
+                  "languages": {
+                    "totalSize": 196690,
+                    "edges": [
+                      {
+                        "size": 182340,
+                        "node": {
+                          "name": "TypeScript"
+                        }
+                      },
+                      {
+                        "size": 12040,
+                        "node": {
+                          "name": "JavaScript"
+                        }
+                      },
+                      {
+                        "size": 2310,
+                        "node": {
+                          "name": "Shell"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "notion-sync",
+                  "url": "https://github.com/octo-builder/notion-sync",
+                  "stargazerCount": 860,
+                  "forkCount": 54,
+                  "isArchived": false,
+                  "pushedAt": "2026-09-18T11:02:45Z",
+                  "primaryLanguage": {
+                    "name": "TypeScript"
+                  },
+                  "languages": {
+                    "totalSize": 102440,
+                    "edges": [
+                      {
+                        "size": 98320,
+                        "node": {
+                          "name": "TypeScript"
+                        }
+                      },
+                      {
+                        "size": 4120,
+                        "node": {
+                          "name": "CSS"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "thumbnail-ai",
+                  "url": "https://github.com/octo-builder/thumbnail-ai",
+                  "stargazerCount": 412,
+                  "forkCount": 31,
+                  "isArchived": false,
+                  "pushedAt": "2026-08-29T20:40:00Z",
+                  "primaryLanguage": {
+                    "name": "Python"
+                  },
+                  "languages": {
+                    "totalSize": 160660,
+                    "edges": [
+                      {
+                        "size": 120450,
+                        "node": {
+                          "name": "Python"
+                        }
+                      },
+                      {
+                        "size": 40210,
+                        "node": {
+                          "name": "Jupyter Notebook"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "yt-stats-dashboard",
+                  "url": "https://github.com/octo-builder/yt-stats-dashboard",
+                  "stargazerCount": 230,
+                  "forkCount": 12,
+                  "isArchived": false,
+                  "pushedAt": "2026-07-14T09:30:12Z",
+                  "primaryLanguage": {
+                    "name": "TypeScript"
+                  },
+                  "languages": {
+                    "totalSize": 88440,
+                    "edges": [
+                      {
+                        "size": 76540,
+                        "node": {
+                          "name": "TypeScript"
+                        }
+                      },
+                      {
+                        "size": 9800,
+                        "node": {
+                          "name": "CSS"
+                        }
+                      },
+                      {
+                        "size": 2100,
+                        "node": {
+                          "name": "HTML"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "rusty-resize",
+                  "url": "https://github.com/octo-builder/rusty-resize",
+                  "stargazerCount": 95,
+                  "forkCount": 4,
+                  "isArchived": false,
+                  "pushedAt": "2026-05-02T15:11:09Z",
+                  "primaryLanguage": {
+                    "name": "Rust"
+                  },
+                  "languages": {
+                    "totalSize": 45020,
+                    "edges": [
+                      {
+                        "size": 45020,
+                        "node": {
+                          "name": "Rust"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "dotfiles",
+                  "url": "https://github.com/octo-builder/dotfiles",
+                  "stargazerCount": 12,
+                  "forkCount": 1,
+                  "isArchived": true,
+                  "pushedAt": "2024-01-03T10:00:00Z",
+                  "primaryLanguage": {
+                    "name": "Shell"
+                  },
+                  "languages": {
+                    "totalSize": 5600,
+                    "edges": [
+                      {
+                        "size": 3400,
+                        "node": {
+                          "name": "Shell"
+                        }
+                      },
+                      {
+                        "size": 2200,
+                        "node": {
+                          "name": "Lua"
+                        }
+                      }
+                    ]
+                  }
+                },
+                null
+              ]
+            },
+            "contributionsCollection": {
+              "contributionCalendar": {
+                "totalContributions": 1532
+              },
+              "totalCommitContributions": 1104,
+              "totalIssueContributions": 46,
+              "totalPullRequestContributions": 212,
+              "totalPullRequestReviewContributions": 98,
+              "totalRepositoryContributions": 7,
+              "restrictedContributionsCount": 64
+            }
+          }
+        }
+      }
+    }
+  ]
+}
