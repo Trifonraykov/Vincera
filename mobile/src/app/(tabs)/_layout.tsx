@@ -6,13 +6,15 @@ import { useAuth } from "@/lib/auth"
 import { useTheme } from "@/ui/theme"
 
 /**
- * The native tab bar (UITabBarController): Home, Discover, Collabs, Inbox, Me, the same five as
- * the web's phone layout (CLAUDE.md §19.20). Each tab is its own navigation stack
- * (./(home,discover,collabs,inbox,me)/_layout.tsx). Inbox carries the unread count.
+ * The native tab bar (UITabBarController): Home, Feed (creators) or Discover (builders), Collabs,
+ * Inbox, Me, the same five as the web's phone layout (CLAUDE.md §19.20, §19.45). Each tab is its
+ * own navigation stack (./(home,feed,discover,collabs,inbox,me)/_layout.tsx). Inbox carries the
+ * unread count. Creators reach Discover from Me.
  */
 export default function TabsLayout() {
   const auth = useAuth()
   const theme = useTheme()
+  const creator = auth.status === "signedIn" && auth.me.activeRole === "creator"
   const unread =
     auth.status === "signedIn" ? auth.me.unread.notifications + auth.me.unread.messages : 0
 
@@ -31,7 +33,11 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "house", selected: "house.fill" }} />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="(discover)">
+      <NativeTabs.Trigger name="(feed)" hidden={!creator}>
+        <NativeTabs.Trigger.Label>Feed</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "flame", selected: "flame.fill" }} />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="(discover)" hidden={creator}>
         <NativeTabs.Trigger.Label>Discover</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "safari", selected: "safari.fill" }} />
       </NativeTabs.Trigger>

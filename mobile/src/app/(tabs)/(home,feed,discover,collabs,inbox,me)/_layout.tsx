@@ -10,6 +10,7 @@ import { useTheme } from "@/ui/theme"
 export const unstable_settings = {
   anchor: "home",
   home: { anchor: "home" },
+  feed: { anchor: "feed" },
   discover: { anchor: "discover" },
   collabs: { anchor: "collabs" },
   inbox: { anchor: "inbox" },
@@ -34,6 +35,7 @@ export default function TabStack() {
       }}
     >
       <Stack.Screen name="home" options={{ title: "Home" }} />
+      <Stack.Screen name="feed" options={{ title: "For you" }} />
       <Stack.Screen name="discover" options={{ title: "Discover" }} />
       <Stack.Screen name="collabs" options={{ title: "Collabs" }} />
       <Stack.Screen name="inbox" options={{ title: "Inbox" }} />

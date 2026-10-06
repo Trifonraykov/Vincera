@@ -73,12 +73,28 @@ export default function MeScreen() {
       <Section title="Your work">
         {me.roles.includes("creator") ? (
           <>
+            <Row icon="safari" title="Discover" onPress={() => router.push("/discover")} />
             <Row icon="lightbulb" title="My ideas" onPress={() => router.push("/ideas")} />
             <Row icon="chart.bar" title="Audience" onPress={() => router.push("/audience")} />
           </>
         ) : null}
         {me.roles.includes("builder") ? (
-          <Row icon="shippingbox" title="My products" onPress={() => router.push("/products")} />
+          <>
+            <Row icon="shippingbox" title="My products" onPress={() => router.push("/products")} />
+            <Row
+              icon="square.and.arrow.down"
+              title="Import listings"
+              subtitle="App Store or a link"
+              onPress={() => router.push("/imports")}
+            />
+            {me.profiles.builder ? (
+              <Row
+                icon="square.grid.2x2"
+                title="My public profile"
+                onPress={() => router.push(`/builder/${me.profiles.builder?.handle}`)}
+              />
+            ) : null}
+          </>
         ) : null}
         <Row icon="paperplane" title="Proposals" onPress={() => router.push("/proposals")} />
         <Row
