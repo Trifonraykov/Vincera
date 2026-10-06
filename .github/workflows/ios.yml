@@ -1,0 +1,123 @@
+# The native iPhone app (mobile/, CLAUDE.md §19.44): builds it for the iOS Simulator (no signing),
+# uploads the .app, then boots a Simulator, installs and launches the app and uploads a screenshot.
+# TestFlight is not set up here; mobile/README.md says how to add it and which secrets it needs.
+name: iOS app
+
+on:
+  push:
+    branches: [claude/youthful-gauss-hvgurg]
+    paths:
+      - "mobile/**"
+      - "lib/mobile-api/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Backend the build talks to (EXPO_PUBLIC_API_URL)"
+        required: false
+        default: ""
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    name: Simulator build and screenshot
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    env:
+      # Inlined into the JS bundle at build time. Set the repository variable MOBILE_API_URL (or
+      # the workflow input) to a hosted backend; the default suits a Mac running `pnpm dev`.
+      EXPO_PUBLIC_API_URL: ${{ inputs.api_url || vars.MOBILE_API_URL || 'http://localhost:3000' }}
+      EXPO_NO_TELEMETRY: 1
+      CI: 1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install the app's dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck and lint
+        working-directory: mobile
+        run: |
+          npx tsc --noEmit
+          npx expo lint
+
+      - name: Generate the native iOS project (expo prebuild)
+        working-directory: mobile
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Build for the iOS Simulator (Release, unsigned)
+        working-directory: mobile/ios
+        run: |
+          set -o pipefail
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          echo "Building scheme $SCHEME from $WORKSPACE"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build | tee xcodebuild.log | grep -E "^(\*\*|error:|warning: .*deprecated)" || true
+          APP=$(find build/Build/Products/Release-iphonesimulator -maxdepth 1 -name "*.app" | head -n 1)
+          test -n "$APP" || { tail -n 200 xcodebuild.log; exit 1; }
+          echo "APP_PATH=$PWD/$APP" >> "$GITHUB_ENV"
+
+      - name: Zip the .app
+        run: |
+          cd "$(dirname "$APP_PATH")"
+          ditto -c -k --keepParent "$(basename "$APP_PATH")" "$GITHUB_WORKSPACE/Vincera-simulator.app.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Vincera-simulator-app
+          path: Vincera-simulator.app.zip
+          if-no-files-found: error
+
+      - name: Boot a Simulator, install, launch and screenshot
+        run: |
+          DEVICE=$(xcrun simctl list devices available --json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in sorted(d, reverse=True) if "iOS" in r for x in d[r] if x["name"].startswith("iPhone")))')
+          echo "Using simulator $DEVICE"
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl install "$DEVICE" "$APP_PATH"
+          xcrun simctl launch "$DEVICE" com.vincera.app
+          sleep 20
+          mkdir -p screenshots
+          xcrun simctl io "$DEVICE" screenshot screenshots/launch-light.png
+          xcrun simctl ui "$DEVICE" appearance dark
+          sleep 5
+          xcrun simctl io "$DEVICE" screenshot screenshots/launch-dark.png
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Vincera-simulator-screenshots
+          path: screenshots/
+          if-no-files-found: error
+
+      - name: Upload the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-log
+          path: mobile/ios/xcodebuild.log
+          if-no-files-found: ignore

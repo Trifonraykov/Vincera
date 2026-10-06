@@ -18,6 +18,7 @@ import {
   ledgerEntries,
   matches,
   messages,
+  mobileSessions,
   notificationPrefs,
   notifications,
   orders,
@@ -75,6 +76,7 @@ export const DATA_EXPORT_SECTIONS = [
   "transfers",
   "notifications",
   "notificationPreferences",
+  "mobileSessions",
   "events",
 ] as const
 
@@ -528,6 +530,20 @@ export async function buildDataExport(
     .where(eq(events.actorUserId, userId))
     .orderBy(asc(events.occurredAt))
 
+  // The iPhone app's signed-in devices (CLAUDE.md §19.44): device name and dates, never the token
+  // hash.
+  const phones = await database
+    .select({
+      id: mobileSessions.id,
+      deviceName: mobileSessions.deviceName,
+      createdAt: mobileSessions.createdAt,
+      lastUsedAt: mobileSessions.lastUsedAt,
+      expiresAt: mobileSessions.expiresAt,
+    })
+    .from(mobileSessions)
+    .where(eq(mobileSessions.userId, userId))
+    .orderBy(asc(mobileSessions.createdAt))
+
   return {
     format: "json",
     version: DATA_EXPORT_FORMAT_VERSION,
@@ -559,6 +575,7 @@ export async function buildDataExport(
     transfers: ownTransfers,
     notifications: ownNotifications,
     notificationPreferences: prefs,
+    mobileSessions: phones,
     events: ownEvents,
   }
 }

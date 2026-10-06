@@ -70,6 +70,8 @@ export default defineConfig([
     "test-results/**",
     "coverage/**",
     ".data/**",
+    // The native iPhone app has its own toolchain (mobile/README.md, `npm run lint` there)
+    "mobile/**",
     // Desktop app build output (desktop/README.md)
     "desktop/app-bundle/**",
     "desktop/release/**",

@@ -39,6 +39,7 @@
     ".data",
     "vincera",
     "dashboard",
+    "mobile",
     "supabase",
     "drizzle",
     "playwright-report",

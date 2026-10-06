@@ -146,6 +146,8 @@ The repository root is also a Next.js app: a two-sided platform where creators a
 
 **Desktop app:** download the installer for macOS, Windows or Linux and double-click it: no Docker, terminal or database to install. See [`desktop/README.md`](./desktop/README.md).
 
+**iPhone app:** a native iOS app (Expo / React Native, not a web view) on the platform's `/api/mobile/v1` API: run it in the iOS Simulator, point it at a hosted backend, TestFlight steps. See [`mobile/README.md`](./mobile/README.md).
+
 ## Prerequisites
 
 - Node.js 22+ and pnpm 10 (`corepack enable` picks the version pinned in `package.json`).

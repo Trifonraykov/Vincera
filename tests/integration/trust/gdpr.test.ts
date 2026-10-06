@@ -19,6 +19,7 @@ import {
   ledgerEntries,
   matches,
   messages,
+  mobileSessions,
   notificationPrefs,
   notifications,
   orders,
@@ -32,6 +33,7 @@ import {
   threads,
   users,
 } from "@/lib/db/schema"
+import { createMobileSession, findMobileSessionUser } from "@/lib/mobile-api/sessions"
 import { listOutbox } from "@/lib/email/outbox"
 import {
   accountDeletionBlockers,
@@ -585,6 +587,24 @@ describe("deleteAccount", () => {
     ])
 
     await expect(deleteAccount(testDb.db, { userId, now: NOW })).rejects.toThrow(/no longer exists/)
+  })
+
+  it("exports the iPhone app's sessions without their token and signs the phones out", async () => {
+    const user = await insertUser(testDb.db, { roles: ["creator"] })
+    const phone = await createMobileSession(testDb.db, { userId: user.id, deviceName: "iPhone 16" })
+    expect(await findMobileSessionUser(testDb.db, phone.token)).not.toBeNull()
+
+    const data = await buildDataExport(testDb.db, { userId: user.id, now: NOW, appName: "Vincera" })
+    expect(data.mobileSessions).toEqual([expect.objectContaining({ deviceName: "iPhone 16" })])
+    const exported = JSON.stringify(data.mobileSessions)
+    expect(exported).not.toContain("tokenHash")
+    expect(exported).not.toContain(phone.token)
+
+    await deleteAccount(testDb.db, { userId: user.id, now: NOW })
+    expect(await findMobileSessionUser(testDb.db, phone.token)).toBeNull()
+    expect(
+      await testDb.db.select().from(mobileSessions).where(eq(mobileSessions.userId, user.id)),
+    ).toEqual([])
   })
 
   it("keeps revisions' terms but clears the deleted author's message", async () => {

@@ -12,17 +12,13 @@ import {
   canManagePortfolioItem,
 } from "@/lib/auth/authz"
 import { getDb, type Db } from "@/lib/db/client"
-import {
-  requestEmbeddingRefreshAfterCommit,
-  requestProfileEmbeddingRefresh,
-} from "@/lib/embeddings/request"
+import { requestProfileEmbeddingRefresh } from "@/lib/embeddings/request"
 import { runInBackground } from "@/lib/jobs/background"
-import { requestMatchingForPerson } from "@/lib/matching/request"
 import { completeOnboardingStep } from "@/lib/onboarding/complete-step"
 import { loadOnboardingSnapshot } from "@/lib/onboarding/snapshot"
 import { ONBOARDING_STEP_PATHS } from "@/lib/onboarding/steps"
 import { rateLimit, type RateLimitRule } from "@/lib/ratelimit"
-import { publicProfilePaths, revalidatePublicProfiles } from "@/lib/social/revalidate"
+import { revalidatePublicProfiles } from "@/lib/social/revalidate"
 
 import {
   builderProfileFormSchema,
@@ -44,7 +40,8 @@ import {
   deletePortfolioImage,
   discardPortfolioUpload,
 } from "./portfolio-image"
-import { saveBuilderProfile, saveCreatorProfile, type ProfileSaveResult } from "./save"
+import { afterBuilderProfileSave, afterCreatorProfileSave } from "./after-save"
+import { saveBuilderProfile, saveCreatorProfile } from "./save"
 
 /**
  * Server actions for profiles (§4, §12): the creator and builder profile forms (onboarding step
@@ -61,42 +58,8 @@ const PORTFOLIO_IMAGE_RATE_LIMIT: RateLimitRule = { limit: 20, window: "1 h" }
 
 const sourceField = z.enum(PROFILE_FORM_SOURCES).default("settings")
 
-/** Columns whose change alters the embedding text (lib/social/derived.ts, ./embedding.ts). */
-const CREATOR_EMBEDDED = new Set(["niche", "bio", "topics", "languages", "country"])
-const BUILDER_EMBEDDED = new Set(["bio", "skills", "stack"])
-/**
- * Fields that change who may be matched without changing the embedded text: a builder's
- * availability decides whether creators see them at all (§8 "availability ≠ closed"), so a change
- * asks matching directly instead of waiting for the nightly run (CLAUDE.md §19.30).
- */
-const BUILDER_CANDIDACY = new Set(["availability"])
-
-const PROFILE_PAGES = ["/app/settings/profile", "/app/audience", "/app"] as const
-
 function revalidatePaths(paths: Iterable<string>): void {
   for (const path of paths) revalidatePath(path)
-}
-
-async function afterProfileSave(
-  db: Db,
-  userId: string,
-  result: ProfileSaveResult,
-  embedded: ReadonlySet<string>,
-  type: "creator_profile" | "builder_profile",
-  candidacy: ReadonlySet<string> = new Set(),
-): Promise<void> {
-  const reembed = result.created || result.fields.some((field) => embedded.has(field))
-  if (reembed) {
-    await requestEmbeddingRefreshAfterCommit({ type, id: result.profileId })
-  } else if (result.fields.some((field) => candidacy.has(field))) {
-    // The embedding job would ask matching anyway; without a re-embed, ask it here.
-    await requestMatchingForPerson(userId, [type === "creator_profile" ? "creator" : "builder"])
-  }
-  if (result.created || result.fields.length > 0) {
-    await revalidatePublicProfiles(db, userId)
-    if (result.previousHandle) revalidatePaths(publicProfilePaths(result.previousHandle))
-    revalidatePaths(PROFILE_PAGES)
-  }
 }
 
 /** The creator profile form: creates the profile (onboarding step) or saves changes. */
@@ -107,7 +70,7 @@ export const saveCreatorProfileAction = defineAction({
   run: async ({ input, user, db }) => {
     const { from, ...form } = input
     const result = await saveCreatorProfile(db, { userId: user.id, form, source: from })
-    await afterProfileSave(db, user.id, result, CREATOR_EMBEDDED, "creator_profile")
+    await afterCreatorProfileSave(db, user.id, result)
     if (from === "onboarding") redirect(result.nextStep ?? "/app")
     return { created: result.created, changed: result.fields.length > 0, handle: form.handle }
   },
@@ -121,14 +84,7 @@ export const saveBuilderProfileAction = defineAction({
   run: async ({ input, user, db }) => {
     const { from, ...form } = input
     const result = await saveBuilderProfile(db, { userId: user.id, form, source: from })
-    await afterProfileSave(
-      db,
-      user.id,
-      result,
-      BUILDER_EMBEDDED,
-      "builder_profile",
-      BUILDER_CANDIDACY,
-    )
+    await afterBuilderProfileSave(db, user.id, result)
     if (from === "onboarding") redirect(result.nextStep ?? "/app")
     return { created: result.created, changed: result.fields.length > 0, handle: form.handle }
   },

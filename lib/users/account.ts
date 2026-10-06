@@ -4,6 +4,7 @@ import { count, eq } from "drizzle-orm"
 
 import type { DbOrTx } from "@/lib/db/client"
 import { sessions, users } from "@/lib/db/schema"
+import { countMobileSessions, deleteAllMobileSessions } from "@/lib/mobile-api/sessions"
 
 /**
  * Settings → Account (§12): the account fields a user changes themselves. Data export and
@@ -23,13 +24,13 @@ export async function updateAccountName(
   return updated.length > 0
 }
 
-/** How many devices/browsers are signed in (live database sessions). */
+/** How many devices/browsers are signed in (live database sessions, plus the iPhone app's). */
 export async function countSessions(database: DbOrTx, userId: string): Promise<number> {
   const [row] = await database
     .select({ total: count() })
     .from(sessions)
     .where(eq(sessions.userId, userId))
-  return row?.total ?? 0
+  return (row?.total ?? 0) + (await countMobileSessions(database, userId))
 }
 
 /**
@@ -41,5 +42,6 @@ export async function deleteAllSessions(database: DbOrTx, userId: string): Promi
     .delete(sessions)
     .where(eq(sessions.userId, userId))
     .returning({ token: sessions.sessionToken })
-  return deleted.length
+  // The native iPhone app's bearer sessions too (CLAUDE.md §19.44).
+  return deleted.length + (await deleteAllMobileSessions(database, userId))
 }

@@ -22,6 +22,11 @@ test-results/
 coverage/
 .data/
 pnpm-lock.yaml
+mobile/package-lock.json
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
 next-env.d.ts
 
 # Agent worktrees (local only)

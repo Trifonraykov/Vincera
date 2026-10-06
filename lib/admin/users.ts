@@ -21,6 +21,7 @@ import {
 } from "@/lib/db/schema"
 import type { CollabRole, CollabStage, UserStatus } from "@/lib/db/schema/enums"
 import { track } from "@/lib/events/track"
+import { countMobileSessions, deleteAllMobileSessions } from "@/lib/mobile-api/sessions"
 import type { UserRole } from "@/lib/auth/user"
 import { payoutsStatusOf, type PayoutsStatus } from "@/lib/payouts/readiness"
 
@@ -262,7 +263,8 @@ export async function loadAdminUserDetail(
     roles: [...row.roles],
     creatorHandle: creator[0]?.handle ?? null,
     builderHandle: builder[0]?.handle ?? null,
-    sessionCount: sessionRows[0]?.n ?? 0,
+    // Web sessions plus the iPhone app's (CLAUDE.md §19.44).
+    sessionCount: (sessionRows[0]?.n ?? 0) + (await countMobileSessions(db, userId)),
     creatorProfile: creator[0] ?? null,
     builderProfile: builder[0] ?? null,
     connections: connections.map(({ evidence, ...connection }) => ({
@@ -333,6 +335,9 @@ export async function suspendUser(
       .delete(sessions)
       .where(eq(sessions.userId, target.id))
       .returning({ token: sessions.sessionToken })
+    // The iPhone app is signed out too (CLAUDE.md §19.44).
+    const phones = await deleteAllMobileSessions(tx, target.id)
+    const sessionsDeleted = deleted.length + phones
     await tx
       .update(impersonationSessions)
       .set({ endedAt: at, endReason: "stopped" })
@@ -348,14 +353,14 @@ export async function suspendUser(
       targetType: "user",
       targetId: target.id,
       before: { status: "active" },
-      after: { status: "suspended", sessions_deleted: deleted.length },
+      after: { status: "suspended", sessions_deleted: sessionsDeleted },
     })
     await track(
       "user.suspended",
       { actorUserId: admin.id, subjectType: "user", subjectId: target.id, properties: {} },
       tx,
     )
-    return { sessionsDeleted: deleted.length }
+    return { sessionsDeleted }
   }, db)
 }
 

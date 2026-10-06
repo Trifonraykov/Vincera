@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
     "/api/inngest": ["./lib/agreements/fonts/*.ttf"],
     "/app/collabs/[id]/agreement": ["./lib/agreements/fonts/*.ttf"],
     "/api/test/jobs/[name]": ["./lib/agreements/fonts/*.ttf"],
+    // The iPhone app signs agreements through the mobile API (CLAUDE.md §19.44).
+    "/api/mobile/v1/[...path]": ["./lib/agreements/fonts/*.ttf"],
   },
   experimental: {
     // `next dev` keeps every compiled route in memory until Turbopack's "auto" eviction sees memory

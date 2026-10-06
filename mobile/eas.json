@@ -1,0 +1,23 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "simulator": {
+      "ios": { "simulator": true },
+      "env": { "EXPO_PUBLIC_API_URL": "http://localhost:3000" }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-YOUR-BACKEND" }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-YOUR-BACKEND" }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

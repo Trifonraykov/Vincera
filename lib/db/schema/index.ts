@@ -15,5 +15,6 @@ export * from "./commerce"
 export * from "./money"
 export * from "./trust"
 export * from "./events"
+export * from "./mobile"
 
 export * from "./relations"

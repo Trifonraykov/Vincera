@@ -37,6 +37,7 @@ import {
   type UserRole,
 } from "@/lib/db/schema"
 import { track, trackMany } from "@/lib/events/track"
+import { deleteAllMobileSessions } from "@/lib/mobile-api/sessions"
 import type { AnyTrackEvent } from "@/lib/events/types"
 import { tokenSetOf } from "@/lib/social/connections"
 import type { SocialProviderId, TokenSet } from "@/lib/social/types"
@@ -435,6 +436,8 @@ export async function deleteAccount(
 
     // Sign-in data.
     await tx.delete(sessions).where(eq(sessions.userId, userId))
+    // The iPhone app's bearer sessions (CLAUDE.md §19.44).
+    await deleteAllMobileSessions(tx, userId)
     await tx.delete(accounts).where(eq(accounts.userId, userId))
     if (user.email) {
       await tx.delete(verificationTokens).where(eq(verificationTokens.identifier, user.email))

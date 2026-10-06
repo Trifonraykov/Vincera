@@ -28,6 +28,7 @@ import { setClockForTests } from "@/lib/clock"
 import { closeDb, type Db } from "@/lib/db/client"
 import {
   adminAuditLog,
+  mobileSessions,
   collabs,
   disputes,
   events,
@@ -42,6 +43,7 @@ import {
   sessions,
   users,
 } from "@/lib/db/schema"
+import { createMobileSession, findMobileSessionUser } from "@/lib/mobile-api/sessions"
 import { resetEnvCache } from "@/lib/env"
 import { checkLedger } from "@/lib/ledger/check"
 import { resetMemoryRateLimits } from "@/lib/ratelimit"
@@ -199,10 +201,16 @@ describe("users", () => {
       { sessionToken: `a-${target.id}`, userId: target.id, expires: future },
       { sessionToken: `b-${target.id}`, userId: target.id, expires: future },
     ])
+    // The iPhone app's bearer session is signed out too (CLAUDE.md §19.44).
+    const phone = await createMobileSession(testDb.db, { userId: target.id, deviceName: "iPhone" })
     mocks.user = admin
 
     const result = await suspendUserAction({ userId: target.id })
-    expect(result).toEqual({ ok: true, data: { sessionsDeleted: 2 } })
+    expect(result).toEqual({ ok: true, data: { sessionsDeleted: 3 } })
+    expect(await findMobileSessionUser(testDb.db, phone.token)).toBeNull()
+    expect(
+      await testDb.db.select().from(mobileSessions).where(eq(mobileSessions.userId, target.id)),
+    ).toEqual([])
     const [row] = await testDb.db.select().from(users).where(eq(users.id, target.id))
     expect(row?.status).toBe("suspended")
     expect(await testDb.db.select().from(sessions).where(eq(sessions.userId, target.id))).toEqual(
@@ -216,7 +224,7 @@ describe("users", () => {
       ["user.unsuspended", admin.id],
     ])
     expect(audit[0]?.before).toEqual({ status: "active" })
-    expect(audit[0]?.after).toEqual({ status: "suspended", sessions_deleted: 2 })
+    expect(audit[0]?.after).toEqual({ status: "suspended", sessions_deleted: 3 })
     expect(await eventTypes(target.id)).toEqual(
       expect.arrayContaining(["user.suspended", "user.unsuspended"]),
     )
