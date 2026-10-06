@@ -31,7 +31,9 @@ const __dirname = import.meta.dirname
 const APP_NAME = "Vincera"
 const DEFAULT_PORT = 47321
 const DB_DEFAULT_PORT = 47322
-const WINDOW_SIZE = { width: 420, height: 860 }
+// A normal desktop window, so the app shows its desktop layout (sidebar). Below 768 px wide the
+// pages switch to the phone layout, so the minimum width stays above that.
+const WINDOW_SIZE = { width: 1280, height: 820 }
 
 app.setName(APP_NAME)
 // A separate data folder (tests, a second profile): VINCERA_USER_DATA_DIR=/some/folder.
@@ -336,8 +338,8 @@ let quitting = false
 function createWindow() {
   mainWindow = new BrowserWindow({
     ...WINDOW_SIZE,
-    minWidth: 340,
-    minHeight: 560,
+    minWidth: 900,
+    minHeight: 600,
     title: APP_NAME,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     backgroundColor: "#0a0a0a",

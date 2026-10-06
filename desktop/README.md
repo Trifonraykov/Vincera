@@ -19,7 +19,7 @@ Download the installer for your computer from the repository's **Releases** page
 3. Emails never leave your computer: they land in the app's own **mailbox**. Click the **Open mailbox** button at the bottom of the sign-in page, or choose **File → Open Mailbox** (Ctrl+Shift+M / Cmd+Shift+M), then click the sign-in link (or type the code shown in the email). **← Back to the app** returns to the app.
 4. Sign up as `admin@example.com` to get the admin area. The demo data includes 10 creators (`seed-creator-01@example.com` … `-10`) and 10 builders (`seed-builder-01@example.com` … `-10`) you can sign in as.
 
-The window starts phone-sized (the app is mobile-first); resize it freely. **File → Home** goes back to the app; **View** has back/forward, reload and zoom. Closing the window quits the app.
+The window opens at desktop size (1280 × 820) with the desktop layout: sidebar navigation, wide pages. It can be resized down to 900 px wide. **File → Home** goes back to the app; **View** has back/forward, reload and zoom. Closing the window quits the app.
 
 ## Where your data lives
 
