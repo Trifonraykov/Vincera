@@ -10,7 +10,8 @@
  *                   scripts/migrate.ts + lib/seed bundled into one file (desktop/bootstrap).
  *   resources/      files the server reads relative to its working directory: drizzle/ (the
  *                   migrations), lib/agreements/fonts (the agreement PDF), tests/fixtures/social (the
- *                   fake social providers' recorded answers), copied to the runtime directory on
+ *                   fake social providers' recorded answers), tests/fixtures/appstore and
+ *                   tests/fixtures/web (the fake App Store and web pages for imported listings), copied to the runtime directory on
  *                   every start.
  *   icon.png        the app icon (public/icons/icon-512.png).
  *
@@ -149,7 +150,13 @@ await build({
 
 step("Copying run-time resources")
 const resourcesDir = path.join(outDir, "resources")
-for (const relative of ["drizzle", "lib/agreements/fonts", "tests/fixtures/social"]) {
+for (const relative of [
+  "drizzle",
+  "lib/agreements/fonts",
+  "tests/fixtures/social",
+  "tests/fixtures/appstore",
+  "tests/fixtures/web",
+]) {
   cpSync(path.join(rootDir, relative), path.join(resourcesDir, relative), { recursive: true })
 }
 cpSync(path.join(rootDir, "public", "icons", "icon-512.png"), path.join(outDir, "icon.png"))

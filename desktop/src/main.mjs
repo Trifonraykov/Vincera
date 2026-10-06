@@ -287,7 +287,12 @@ async function pickPort(preferred) {
 /** The files the server reads relative to its working directory (see build-app.mjs). */
 function prepareRuntimeDir() {
   fs.mkdirSync(paths.runtime, { recursive: true })
-  for (const relative of ["lib/agreements/fonts", "tests/fixtures/social"]) {
+  for (const relative of [
+    "lib/agreements/fonts",
+    "tests/fixtures/social",
+    "tests/fixtures/appstore",
+    "tests/fixtures/web",
+  ]) {
     const target = path.join(paths.runtime, relative)
     fs.rmSync(target, { recursive: true, force: true })
     fs.cpSync(path.join(resourcesDir, relative), target, { recursive: true })
