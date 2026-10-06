@@ -13,6 +13,7 @@ import {
   matchStatusEnum,
   orderStatusEnum,
   productFormatEnum,
+  productSourceEnum,
   productStageEnum,
   productStatusEnum,
   proposalStatusEnum,
@@ -38,6 +39,7 @@ describe("mobile API schemas", () => {
   it("copies every enum exactly", () => {
     const pairs: [readonly string[], readonly string[]][] = [
       [wire.USER_ROLE_VALUES, userRoleEnum.enumValues],
+      [wire.PRODUCT_SOURCE_VALUES, productSourceEnum.enumValues],
       [wire.SIZE_TIER_VALUES, sizeTierEnum.enumValues],
       [wire.AVAILABILITY_VALUES, availabilityEnum.enumValues],
       [wire.DEAL_PREFERENCE_VALUES, dealPreferenceEnum.enumValues],

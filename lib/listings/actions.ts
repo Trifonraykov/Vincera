@@ -9,8 +9,8 @@ import { writeAdminAudit } from "@/lib/admin/audit"
 import { canImportListings, canVerifyAppStoreAccount } from "@/lib/auth/authz"
 import type { DbOrTx } from "@/lib/db/client"
 import { builderProfiles } from "@/lib/db/schema"
-import { requestEmbeddingRefreshAfterCommit } from "@/lib/embeddings/request"
-import { rateLimit, type RateLimitRule } from "@/lib/ratelimit"
+import { afterListingsChange, refreshErrorMessage } from "./after-change"
+import { limitListingImport } from "./limits"
 import { revalidatePublicProfiles } from "@/lib/social/revalidate"
 
 import {
@@ -22,7 +22,6 @@ import {
   syncAppStore,
   type AppStoreSyncSummary,
 } from "./app-store/service"
-import type { ListingWriteResult } from "./store"
 import { importWebListing } from "./web/service"
 
 /**
@@ -32,35 +31,6 @@ import { importWebListing } from "./web/service"
  * listing that changed asks for its embedding (which asks matching to rescore it), and the pages
  * that show listings are revalidated.
  */
-
-const LISTING_RATE_LIMITS = {
-  appStoreConnect: { limit: 10, window: "1 h" },
-  appStoreRefresh: { limit: 6, window: "1 h" },
-  appStoreVerify: { limit: 20, window: "1 h" },
-  webImport: { limit: 15, window: "1 h" },
-} as const satisfies Record<string, RateLimitRule>
-
-const LIMITED = "You've done that a lot just now. Try again in a little while."
-
-async function limit(bucket: string, userId: string, rule: RateLimitRule): Promise<void> {
-  const result = await rateLimit(bucket, userId, rule)
-  if (!result.success) throw new ActionError(LIMITED)
-}
-
-async function afterListingsChange(
-  db: DbOrTx,
-  userId: string,
-  listings: readonly ListingWriteResult[],
-): Promise<void> {
-  for (const listing of listings) {
-    if (listing.action === "unchanged") continue
-    await requestEmbeddingRefreshAfterCommit({ type: "product", id: listing.productId })
-  }
-  revalidatePath("/app/products")
-  revalidatePath("/app/feed")
-  revalidatePath("/onboarding/builder/portfolio")
-  await revalidatePublicProfiles(db, userId)
-}
 
 function summaryWire(summary: AppStoreSyncSummary) {
   return {
@@ -83,7 +53,7 @@ export const connectAppStoreAction = defineAction({
   }),
   authorize: (user) => canImportListings(user),
   run: async ({ input, user, db }) => {
-    await limit("app-store-connect", user.id, LISTING_RATE_LIMITS.appStoreConnect)
+    await limitListingImport("app-store-connect", user.id)
     const summary = await connectAppStore(db, { userId: user.id, raw: input.appStore })
     await afterListingsChange(db, user.id, summary.listings)
     return summaryWire(summary)
@@ -105,21 +75,13 @@ export const refreshAppStoreAction = defineAction({
   input: z.object({}),
   authorize: (user) => canImportListings(user),
   run: async ({ user, db }) => {
-    await limit("app-store-refresh", user.id, LISTING_RATE_LIMITS.appStoreRefresh)
+    await limitListingImport("app-store-refresh", user.id)
     const result = await syncAppStore(db, {
       builderProfileId: await ownProfileId(db, user.id),
       actorUserId: user.id,
       trigger: "manual",
     })
-    if ("error" in result) {
-      throw new ActionError(
-        result.error === "not_connected"
-          ? APP_STORE_MESSAGES.noAccount
-          : result.error === "not_found"
-            ? APP_STORE_MESSAGES.notFound
-            : APP_STORE_MESSAGES.unavailable,
-      )
-    }
+    if ("error" in result) throw new ActionError(refreshErrorMessage(result.error))
     await afterListingsChange(db, user.id, result.listings)
     return summaryWire(result)
   },
@@ -130,7 +92,7 @@ export const checkAppStoreVerificationAction = defineAction({
   input: z.object({}),
   authorize: (user) => canImportListings(user),
   run: async ({ user, db }) => {
-    await limit("app-store-verify", user.id, LISTING_RATE_LIMITS.appStoreVerify)
+    await limitListingImport("app-store-verify", user.id)
     const result = await checkAppStoreVerification(db, { userId: user.id })
     if (!result.verified) throw new ActionError(APP_STORE_MESSAGES.codeMissing)
     revalidatePath("/app/products")
@@ -163,7 +125,7 @@ export const importWebListingAction = defineAction({
   }),
   authorize: (user) => canImportListings(user),
   run: async ({ input, user, db }) => {
-    await limit("web-listing-import", user.id, LISTING_RATE_LIMITS.webImport)
+    await limitListingImport("web-listing-import", user.id)
     const result = await importWebListing(db, { userId: user.id, url: input.url })
     await afterListingsChange(db, user.id, [result])
     return { productId: result.productId, title: result.title, action: result.action }

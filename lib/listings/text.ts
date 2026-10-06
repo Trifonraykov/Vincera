@@ -60,8 +60,20 @@ export function cleanTitle(value: string | null | undefined): string | null {
  * The feed's one short line: the description's first sentence (or first line), no AI involved,
  * at most 140 characters.
  */
+/** Markdown marks a typed description may hold (`**bold**`, `[link](url)`, `# heading`, …). */
+function plainMarkdown(value: string): string {
+  return value
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__|\*|`|~~)(\S(?:.*?\S)?)\1/g, "$2")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+}
+
 export function taglineOf(description: string | null | undefined): string | null {
-  const text = cleanParagraphs(description, LISTING_DESCRIPTION_MAX)
+  const text = cleanParagraphs(
+    description ? plainMarkdown(description) : description,
+    LISTING_DESCRIPTION_MAX,
+  )
   if (!text) return null
   const firstLine = text.split("\n").find((line) => /[\p{L}\p{N}]/u.test(line)) ?? ""
   const bullet = firstLine.replace(/^[-*•·–—]\s*/, "")

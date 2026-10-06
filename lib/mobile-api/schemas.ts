@@ -788,3 +788,140 @@ export const profileSavedOutput = z.object({
 
 /** Cursor values the list endpoints hand out (opaque to the app). */
 export const cursorSchema = z.string().max(200)
+
+// --- Creator feed and listing imports (CLAUDE.md §19.45) ------------------------------------------
+
+export const PRODUCT_SOURCE_VALUES = ["manual", "app_store", "web"] as const
+
+/** Image URLs are absolute (the server's media route, which redirects to a signed URL). */
+export const listingImageSchema = z.object({
+  url: z.string(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+})
+export type ListingImage = z.infer<typeof listingImageSchema>
+
+export const listingCardSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  hook: z.string().nullable(),
+  tag: z.string(),
+  format: z.enum(PRODUCT_FORMAT_VALUES),
+  source: z.enum(PRODUCT_SOURCE_VALUES),
+  sourceLabel: z.string().nullable(),
+  priceLabel: z.string().nullable(),
+  rating: z.number().nullable(),
+  ratingCount: z.number().int().nullable(),
+  icon: listingImageSchema.nullable(),
+  cover: listingImageSchema.nullable(),
+  screenshots: z.array(listingImageSchema),
+  visual: z.object({
+    from: z.string(),
+    to: z.string(),
+    angle: z.number(),
+    initials: z.string(),
+    gradient: z.string(),
+  }),
+  builder: z.object({ userId: z.string(), handle: z.string(), displayName: z.string() }),
+  unverified: z.boolean(),
+})
+export type ListingCardWire = z.infer<typeof listingCardSchema>
+
+export const feedItemSchema = listingCardSchema.extend({
+  saved: z.boolean(),
+  matchId: z.string().nullable(),
+  score: z.number().nullable(),
+  publishedAt: z.string(),
+})
+export type FeedItemWire = z.infer<typeof feedItemSchema>
+
+export const feedQuery = z.object({ cursor: z.string().max(300).optional() })
+export const feedOutput = z.object({
+  items: z.array(feedItemSchema),
+  nextCursor: z.string().nullable(),
+})
+export type FeedResponse = z.infer<typeof feedOutput>
+
+export const feedDetailOutput = feedItemSchema.extend({
+  description: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  demoUrl: z.string().nullable(),
+  builder: z.object({
+    userId: z.string(),
+    handle: z.string(),
+    displayName: z.string(),
+    bio: z.string().nullable(),
+    skills: z.array(z.string()),
+    listingCount: z.number().int(),
+  }),
+})
+export type FeedDetail = z.infer<typeof feedDetailOutput>
+
+export const feedActionInput = z.object({
+  rank: z.number().int().min(1).max(10_000).nullable().optional(),
+})
+export const feedSaveOutput = z.object({ saved: z.boolean() })
+export const feedShownInput = z.object({
+  page: z.number().int().min(1).max(1000),
+  items: z
+    .array(
+      z.object({
+        productId: z.string(),
+        matchId: z.string().nullable(),
+        rank: z.number().int().min(1).max(10_000),
+      }),
+    )
+    .max(50),
+})
+
+export const builderProfileGridOutput = z.object({
+  handle: z.string(),
+  displayName: z.string(),
+  bio: z.string().nullable(),
+  skills: z.array(z.string()),
+  appStore: z.object({ developerName: z.string().nullable(), verified: z.boolean() }).nullable(),
+  listings: z.array(listingCardSchema),
+})
+export type BuilderProfileGrid = z.infer<typeof builderProfileGridOutput>
+
+export const importStatusOutput = z.object({
+  appStore: z
+    .object({
+      developerName: z.string().nullable(),
+      developerUrl: z.string(),
+      verified: z.boolean(),
+      verificationCode: z.string().nullable(),
+      syncedAt: z.string().nullable(),
+      syncError: z.string().nullable(),
+    })
+    .nullable(),
+  listings: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      source: z.enum(["app_store", "web"]),
+      removed: z.boolean(),
+      iconUrl: z.string().nullable(),
+      coverUrl: z.string().nullable(),
+      gradient: z.string(),
+      initials: z.string(),
+    }),
+  ),
+})
+export type ImportStatus = z.infer<typeof importStatusOutput>
+
+export const appStoreConnectInput = z.object({ appStore: z.string().max(500) })
+export const appStoreSyncOutput = z.object({
+  developerName: z.string(),
+  apps: z.number().int(),
+  created: z.number().int(),
+  updated: z.number().int(),
+  removed: z.number().int(),
+})
+export const appStoreVerifyOutput = z.object({ verified: z.boolean() })
+export const webImportInput = z.object({ url: z.string().max(2000) })
+export const webImportOutput = z.object({
+  productId: z.string(),
+  title: z.string(),
+  action: z.enum(["created", "updated", "unchanged"]),
+})

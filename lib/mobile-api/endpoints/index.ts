@@ -7,6 +7,7 @@ import { authEndpoints } from "./auth"
 import { collabEndpoints } from "./collabs"
 import { discoverEndpoints } from "./discover"
 import { inboxEndpoints } from "./inbox"
+import { listingEndpoints } from "./listings"
 import { proposalEndpoints } from "./proposals"
 import { supplyEndpoints } from "./supply"
 
@@ -22,5 +23,6 @@ export function mobileEndpoints(
     ...collabEndpoints,
     ...inboxEndpoints,
     ...accountEndpoints,
+    ...listingEndpoints,
   ]
 }

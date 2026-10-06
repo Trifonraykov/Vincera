@@ -10,6 +10,7 @@ import { isProduction } from "@/lib/env"
 import { reportError } from "@/lib/observability"
 import { resolveOnboardingRedirect } from "@/lib/onboarding/gate"
 
+import { LISTING_LIMITED_MESSAGE } from "@/lib/listings/limits"
 import { MESSAGE_MESSAGES } from "@/lib/messages/post"
 import { PROPOSAL_MESSAGES } from "@/lib/proposals/service"
 
@@ -39,6 +40,7 @@ export type AuthMode = "public" | "user" | "onboarded"
 const SERVICE_RATE_LIMIT_MESSAGES = new Set<string>([
   PROPOSAL_MESSAGES.rateLimited,
   MESSAGE_MESSAGES.rateLimited,
+  LISTING_LIMITED_MESSAGE,
 ])
 
 function cleanFieldErrors(
