@@ -19,6 +19,8 @@ export const stripeAccountIdSchema = z.string().regex(STRIPE_ACCOUNT_ID_PATTERN)
 
 const stringList = z.array(z.string()).nullish()
 
+export { expandableIdSchema, stripeIdOf, stripeIdSchema, stripeMetadataSchema } from "./ids"
+
 /** The fields of a v1 `Account` the platform syncs (§5 stripe_accounts, §19.10). */
 export const stripeAccountSchema = z.object({
   id: stripeAccountIdSchema,
@@ -97,3 +99,8 @@ export type StripeEvent = z.output<typeof stripeEventSchema>
 
 /** A whole JSON object (an event as received, for `stripe_events.payload`). */
 export { jsonObjectSchema }
+
+// Phases 4–5 objects live in their topic files (CLAUDE.md §19.31) and are re-exported here.
+export * from "./checkout-shared"
+export * from "./money-shared"
+export * from "./promotions-shared"

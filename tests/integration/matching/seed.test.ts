@@ -1,5 +1,9 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+
 import { and, count, eq, inArray, isNotNull, isNull, like, sql } from "drizzle-orm"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   audienceSnapshots,
@@ -29,7 +33,12 @@ import { stubServiceEnv } from "../../helpers/service-env"
  * then ranked matches with explanations for everyone. Idempotent.
  */
 
-const mocks = vi.hoisted(() => ({ db: null as unknown }))
+const mocks = vi.hoisted(() => ({ dir: "", db: null as unknown }))
+// Fake Stripe accounts for seeded people go to a temporary directory, not the repo's `.data/`.
+vi.mock("@/lib/services", async () => {
+  const nodePath = await import("node:path")
+  return { dataDir: (...segments: string[]) => nodePath.join(mocks.dir, ...segments) }
+})
 vi.mock("@/lib/db/client", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/db/client")>()
   return { ...original, getDb: () => mocks.db }
@@ -38,6 +47,12 @@ vi.mock("@/lib/db/client", async (importOriginal) => {
 const testDb = setupTestDatabase()
 const STEPS = [seedPeople, seedSupply, seedMatches]
 
+beforeAll(async () => {
+  mocks.dir = await mkdtemp(path.join(tmpdir(), "seed-people-"))
+})
+afterAll(async () => {
+  await rm(mocks.dir, { recursive: true, force: true })
+})
 beforeEach(() => {
   stubServiceEnv()
   mocks.db = testDb.db

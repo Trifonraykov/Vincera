@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs"
 import posthog from "posthog-js"
 
+import { redactPostHogEvent } from "@/lib/analytics/posthog-client"
 import { publicEnv } from "@/lib/public-env"
 
 import { sharedSentryOptions } from "./sentry.shared"
@@ -23,6 +24,8 @@ if (publicEnv.NEXT_PUBLIC_POSTHOG_KEY) {
     // Product analytics only: anonymous until identified, no session replay, no input values.
     person_profiles: "identified_only",
     disable_session_recording: true,
+    // Buyer access tokens and Checkout session ids never leave the browser (CLAUDE.md §19.37).
+    before_send: redactPostHogEvent,
   })
 }
 

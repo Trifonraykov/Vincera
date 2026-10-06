@@ -87,6 +87,51 @@ export const jobEventSchemas = {
    * email it to both members (job `agreements-finalize`).
    */
   "agreements/finalize.requested": z.object({ agreementId: z.uuid() }),
+
+  // --- Phases 4–5 (declared by the W3 prep; contracts in CLAUDE.md §19.31) ----------------------
+
+  /**
+   * After an order commits (checkout): the buyer's receipt with the access link (a required
+   * email) and `sale.made` to both members (job `orders-fulfilled`). Event id `order:<orderId>`.
+   */
+  "orders/paid.requested": z.object({ orderId: z.uuid() }),
+
+  /**
+   * Hourly safety net (ledger): orders whose ledger is still unposted an hour after payment are
+   * posted once Stripe has the balance transaction (job `ledger-post-pending`).
+   */
+  "ledger/post-pending.requested": z.object({}),
+
+  /**
+   * Daily 06:00 UTC (§13 `payouts/release`): one payout batch (job `payouts-release`). Without
+   * `runKey` the run is `daily:<YYYY-MM-DD>` of the job's clock; an admin run passes
+   * `manual:<uuid>`.
+   */
+  "payouts/release.requested": z.object({
+    runKey: z
+      .string()
+      .regex(/^(daily:\d{4}-\d{2}-\d{2}|manual:[0-9a-f-]{36})$/)
+      .optional(),
+  }),
+
+  /**
+   * After a refund succeeded or a chargeback was lost (payouts): reverse the transferred part of
+   * the user shares at Stripe and record it (job `payouts-reverse`). Event id
+   * `reverse:<cause>:<id>`.
+   */
+  "payouts/reverse.requested": z.object({
+    cause: z.enum(["refund", "chargeback"]),
+    id: z.uuid(),
+  }),
+
+  /**
+   * After a refund succeeded (payouts): the buyer's refund confirmation (a required email) and
+   * `order.refunded` to both members (job `refunds-notify`).
+   */
+  "refunds/succeeded.requested": z.object({ refundId: z.uuid() }),
+
+  /** Daily (§13 `ledger/check`): reconciliation; a mismatch is reported to Sentry. */
+  "ledger/check.requested": z.object({}),
 } as const satisfies Record<string, z.ZodObject>
 
 export type JobEventName = keyof typeof jobEventSchemas

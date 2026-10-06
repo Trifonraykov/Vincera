@@ -6,9 +6,14 @@
  * emails and messages, which must never leave the app (§11, §14).
  */
 
-/** A URL or path without its query string and fragment (magic-link tokens, signatures, codes). */
+import { redactDeep, redactSensitiveText } from "./lib/analytics/redact"
+
+/**
+ * A URL or path without its query string and fragment (magic-link tokens, signatures, codes), and
+ * without a buyer's access token in the path (`/access/[token]`, CLAUDE.md §19.37).
+ */
 export function withoutQuery(url: string): string {
-  return url.split(/[?#]/, 1)[0] ?? ""
+  return redactSensitiveText(url.split(/[?#]/, 1)[0] ?? "")
 }
 
 /**
@@ -62,6 +67,9 @@ export function scrubBreadcrumb<Breadcrumb extends BreadcrumbLike>(
  * - Database errors that reach Sentry without `reportError` (an error thrown out of a page or a
  *   route handler, or logged and picked up as a console breadcrumb) lose their query parameters
  *   (`scrubBreadcrumb` for breadcrumbs, including the console's raw arguments).
+ * - Buyer access tokens (`/access/<token>`) and credential query values (`session_id`, `token`,
+ *   `email`, ...) are redacted in every string of the event (`redactDeep`, CLAUDE.md §19.37).
+ *   Also installed as `beforeSendTransaction`: transactions carry the URL too.
  */
 export function scrubEvent<Event extends SentryEventLike>(event: Event): Event {
   const nextjs = event.contexts?.nextjs
@@ -73,7 +81,9 @@ export function scrubEvent<Event extends SentryEventLike>(event: Event): Event {
   }
   for (const breadcrumb of event.breadcrumbs ?? []) scrubBreadcrumb(breadcrumb)
   if (typeof event.message === "string") event.message = withoutQueryParams(event.message)
-  return event
+  // Access tokens and credential-like query values anywhere else (request URL, transaction name,
+  // navigation breadcrumbs, span descriptions).
+  return redactDeep(event)
 }
 
 export const sharedSentryOptions = {
@@ -89,5 +99,6 @@ export const sharedSentryOptions = {
     stackFrameVariables: false,
   },
   beforeSend: scrubEvent,
+  beforeSendTransaction: scrubEvent,
   beforeBreadcrumb: scrubBreadcrumb,
 }

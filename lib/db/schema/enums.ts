@@ -161,6 +161,35 @@ export const orderStatusEnum = pgEnum("order_status", [
 ])
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number]
 
+/**
+ * Who paused a live launch (CLAUDE.md §19.31): a member (either member may resume), an admin or a
+ * chargeback/dispute (only an admin resumes).
+ */
+export const launchPausedByEnum = pgEnum("launch_paused_by", ["member", "admin", "dispute"])
+export type LaunchPausedBy = (typeof launchPausedByEnum.enumValues)[number]
+
+/** How an order was attributed to a tracked link (§10; CLAUDE.md §19.31). */
+export const orderAttributionEnum = pgEnum("order_attribution", ["cookie", "ref", "discount_code"])
+export type OrderAttribution = (typeof orderAttributionEnum.enumValues)[number]
+
+/** Stripe's `Refund.status` (§9 refunds; CLAUDE.md §19.31). Unknown future values map to `pending`. */
+export const refundStatusEnum = pgEnum("refund_status", [
+  "pending",
+  "requires_action",
+  "succeeded",
+  "failed",
+  "canceled",
+])
+export type RefundStatus = (typeof refundStatusEnum.enumValues)[number]
+
+/**
+ * A chargeback (Stripe `Dispute`, §9) as the ledger sees it: `open` while Stripe's status is any
+ * `needs_response` / `under_review` / `warning_*` value, then `won` or `lost`
+ * (`chargebacks.stripe_status` keeps Stripe's own value).
+ */
+export const chargebackStatusEnum = pgEnum("chargeback_status", ["open", "won", "lost"])
+export type ChargebackStatus = (typeof chargebackStatusEnum.enumValues)[number]
+
 // Money
 export const ledgerAccountEnum = pgEnum("ledger_account", [
   "creator_share",
@@ -197,6 +226,22 @@ export const transferStatusEnum = pgEnum("transfer_status", [
   "partially_reversed",
 ])
 export type TransferStatus = (typeof transferStatusEnum.enumValues)[number]
+
+/** One run of the daily payout job (§9; CLAUDE.md §19.31). */
+export const payoutBatchStatusEnum = pgEnum("payout_batch_status", [
+  "running",
+  "completed",
+  "failed",
+])
+export type PayoutBatchStatus = (typeof payoutBatchStatusEnum.enumValues)[number]
+
+/** A transfer reversal after a refund or lost chargeback of already transferred money (§9). */
+export const transferReversalStatusEnum = pgEnum("transfer_reversal_status", [
+  "pending",
+  "succeeded",
+  "failed",
+])
+export type TransferReversalStatus = (typeof transferReversalStatusEnum.enumValues)[number]
 
 // Trust & ops
 export const disputeKindEnum = pgEnum("dispute_kind", ["split", "non_delivery", "exit", "other"])

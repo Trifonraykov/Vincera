@@ -11,8 +11,10 @@ import {
   handles,
   ideas,
   launches,
+  ledgerEntries,
   matches,
   orders,
+  payoutBatches,
   portfolioItems,
   products,
   proposalRevisions,
@@ -21,6 +23,8 @@ import {
   stripeAccounts,
   threadReads,
   threads,
+  trackedLinks,
+  transfers,
   users,
   type CollabStage,
   type MatchFeatures,
@@ -320,6 +324,8 @@ export async function insertLiveLaunch(db: DbOrTx) {
       deliveryType: "url",
       deliveryConfig: { type: "url", url: "https://example.test/app" },
       status: "live",
+      submittedAt: FIXTURE_TIME,
+      wentLiveAt: FIXTURE_TIME,
     })
     .returning()
   if (!launch) throw new Error("insertLiveLaunch: no launch")
@@ -327,7 +333,12 @@ export async function insertLiveLaunch(db: DbOrTx) {
   return { creator, builder, idea, proposal, collab, launch }
 }
 
-export async function insertOrder(db: DbOrTx, launchId: string, paidAt: Date) {
+export async function insertOrder(
+  db: DbOrTx,
+  launchId: string,
+  paidAt: Date,
+  overrides: Partial<typeof orders.$inferInsert> = {},
+) {
   const [order] = await db
     .insert(orders)
     .values({
@@ -338,10 +349,84 @@ export async function insertOrder(db: DbOrTx, launchId: string, paidAt: Date) {
       taxCents: 0,
       stripeFeeCents: 85,
       paidAt,
+      ...overrides,
     })
     .returning()
   if (!order) throw new Error("insertOrder: no row returned")
   return order
+}
+
+/** A tracked link for a launch (random 8-character code). */
+export async function insertTrackedLink(
+  db: DbOrTx,
+  launchId: string,
+  ownerUserId: string,
+  overrides: Partial<typeof trackedLinks.$inferInsert> = {},
+) {
+  const [link] = await db
+    .insert(trackedLinks)
+    .values({
+      launchId,
+      ownerUserId,
+      code: randomBytes(4).toString("hex").slice(0, 8),
+      ...overrides,
+    })
+    .returning()
+  if (!link) throw new Error("insertTrackedLink: no row returned")
+  return link
+}
+
+/** A payout batch (default: a running daily batch with a unique run key). */
+export async function insertPayoutBatch(
+  db: DbOrTx,
+  overrides: Partial<typeof payoutBatches.$inferInsert> = {},
+) {
+  const [batch] = await db
+    .insert(payoutBatches)
+    .values({
+      runKey: `test:${suffix()}`,
+      cutoffAt: FIXTURE_TIME,
+      startedAt: FIXTURE_TIME,
+      ...overrides,
+    })
+    .returning()
+  if (!batch) throw new Error("insertPayoutBatch: no row returned")
+  return batch
+}
+
+/** A transfer row (default: `pending`, in a new batch, to a fake connected account). */
+export async function insertTransfer(
+  db: DbOrTx,
+  userId: string,
+  overrides: Partial<typeof transfers.$inferInsert> = {},
+) {
+  const batchId = overrides.batchId ?? (await insertPayoutBatch(db)).id
+  const [transfer] = await db
+    .insert(transfers)
+    .values({
+      batchId,
+      userId,
+      destinationAccountId: `acct_test_${suffix()}`,
+      amountCents: 1000,
+      ...overrides,
+    })
+    .returning()
+  if (!transfer) throw new Error("insertTransfer: no row returned")
+  return transfer
+}
+
+/** One ledger entry (default: a creator share of 1000 cents, available on FIXTURE_TIME). */
+export async function insertLedgerEntry(
+  db: DbOrTx,
+  values: Pick<typeof ledgerEntries.$inferInsert, "account" | "amountCents"> &
+    Partial<typeof ledgerEntries.$inferInsert>,
+) {
+  const [entry] = await db
+    .insert(ledgerEntries)
+    .values({ availableAt: FIXTURE_TIME, ...values })
+    .returning()
+  if (!entry) throw new Error("insertLedgerEntry: no row returned")
+  return entry
 }
 
 /**

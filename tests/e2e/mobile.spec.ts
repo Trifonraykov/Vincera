@@ -212,20 +212,22 @@ test("a builder's tabs, and pages that don't exist yet keep the shell and a way 
   }
 
   // A §12 page a later phase builds: "Coming soon" inside the shell, with the tabs and a back
-  // button (to Me, which lists it).
+  // button (to Me, which lists it). Since Phases 4–5 every builder menu page exists, so this
+  // runs again only if a planned page joins the builder's menu.
   const planned = appNav("builder")
     .flatMap((section) => section.items)
     .find((item) => !isBuiltRoute(item.href))
-  if (!planned) throw new Error("every builder menu page is built; pick another planned route")
-  const soon = await page.goto(planned.href)
-  expect(soon?.status()).toBe(404)
-  await expect(page.getByRole("heading", { level: 1, name: planned.title })).toBeVisible()
-  await expect(page.getByText("Coming soon", { exact: true })).toBeVisible()
-  await expect(tabs).toBeVisible()
   const appBar = page.locator("[data-app-bar]")
-  await expect(appBar).toContainText(planned.title)
-  await appBar.getByRole("link", { name: "Back" }).click()
-  await expect(page).toHaveURL(/\/app\/me$/)
+  if (planned) {
+    const soon = await page.goto(planned.href)
+    expect(soon?.status()).toBe(404)
+    await expect(page.getByRole("heading", { level: 1, name: planned.title })).toBeVisible()
+    await expect(page.getByText("Coming soon", { exact: true })).toBeVisible()
+    await expect(tabs).toBeVisible()
+    await expect(appBar).toContainText(planned.title)
+    await appBar.getByRole("link", { name: "Back" }).click()
+    await expect(page).toHaveURL(/\/app\/me$/)
+  }
 
   // A mistyped app URL: "Page not found", still inside the shell.
   expect((await page.goto("/app/no-such-page"))?.status()).toBe(404)

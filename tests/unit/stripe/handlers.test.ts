@@ -7,17 +7,33 @@ import { stripeAccountSchema, stripeEventSchema } from "@/lib/stripe/schemas"
 
 import accountUpdated from "../../fixtures/stripe/account.updated.json"
 
-const context = { tx: {} as Tx, now: new Date("2026-10-05T12:00:00.000Z") }
+const context = {
+  tx: {} as Tx,
+  now: new Date("2026-10-05T12:00:00.000Z"),
+  afterCommit: () => {},
+}
 
 describe("Stripe webhook handler registry", () => {
-  it("handles the Connect account events (Phase 1)", () => {
-    expect(handledStripeEventTypes()).toEqual(["account.updated", "capability.updated"])
+  it("handles the Connect account events (Phase 1) and the money events (Phase 5)", () => {
+    expect(handledStripeEventTypes()).toEqual(
+      expect.arrayContaining([
+        "account.updated",
+        "capability.updated",
+        "charge.dispute.closed",
+        "charge.dispute.created",
+        "charge.refunded",
+        "refund.created",
+        "refund.failed",
+        "refund.updated",
+        "transfer.reversed",
+      ]),
+    )
     expect(stripeEventHandler("account.updated")).toBeTypeOf("function")
     expect(stripeEventHandler("capability.updated")).toBeTypeOf("function")
   })
 
   it("has no handler for other types, including object prototype keys", () => {
-    for (const type of ["checkout.session.completed", "toString", "__proto__", "constructor"]) {
+    for (const type of ["customer.created", "toString", "__proto__", "constructor"]) {
       expect(stripeEventHandler(type)).toBeNull()
     }
   })

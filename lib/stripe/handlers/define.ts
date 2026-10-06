@@ -14,11 +14,21 @@ import type { StripeEvent } from "../schemas"
  * `transfers.ts`, ...) exporting a `StripeHandlerGroup`, and `./index.ts` registers the groups.
  */
 
+/** Work to run once the event's transaction committed (emails, enqueues, revalidation). */
+export type AfterCommitTask = () => Promise<void> | void
+
 export type StripeWebhookContext = {
   /** The transaction that also marks the event processed; write everything with it. */
   tx: Tx
   /** When processing started (`lib/clock`). */
   now: Date
+  /**
+   * Queue a side effect for after the commit (CLAUDE.md §19.31). Tasks run in order once the
+   * transaction committed, never when it rolled back; a failing task is reported to Sentry and
+   * does not fail the event (it is already processed), so anything that must happen is enqueued
+   * as a job (which retries) rather than done here directly.
+   */
+  afterCommit: (task: AfterCommitTask) => void
 }
 
 /** A verified event whose `data.object` was parsed with the handler's schema. */

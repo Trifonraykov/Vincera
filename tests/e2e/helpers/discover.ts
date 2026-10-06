@@ -5,7 +5,7 @@ import { signIn } from "./auth"
 /**
  * Discover helpers (CLAUDE.md §19.27). Specs sign in as people `pnpm db:seed` created (the e2e
  * global setup seeds before every run): their matches are computed by the real recompute, with
- * explanations from the fake AI. The collab seed uses creators/builders 01–03, so Discover specs
+ * explanations from the fake AI. The collab seed uses creators/builders 01–04, so Discover specs
  * use 05 and up, one person per spec, and never depend on a fixed card: earlier tests (or a retry)
  * may have saved or dismissed some.
  */

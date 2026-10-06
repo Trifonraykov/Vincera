@@ -58,6 +58,18 @@ function uniqueId(prefix: string): string {
 
 type Fixture = typeof accountUpdatedFixture
 
+/**
+ * A platform event the app has no handler for. (`checkout.session.completed` used to be one; the
+ * checkout handlers own it since Phase 4, CLAUDE.md §19.34.)
+ */
+function unhandledEvent() {
+  return {
+    ...structuredClone(checkoutCompletedFixture),
+    id: uniqueId("evt_test_"),
+    type: "customer.created",
+  }
+}
+
 /** The account.updated fixture for `stripeAccountId`, with a fresh event id. */
 function accountUpdated(
   stripeAccountId: string,
@@ -134,7 +146,7 @@ async function builderAwaitingPayouts() {
 
 describe("POST /api/webhooks/stripe: verification", () => {
   it("accepts events signed with the platform secret", async () => {
-    const event = { ...structuredClone(checkoutCompletedFixture), id: uniqueId("evt_test_") }
+    const event = unhandledEvent()
     const result = await deliver(event, PLATFORM_SECRET)
     expect(result).toEqual({ status: 200, body: { received: true, status: "ignored" } })
   })
@@ -442,13 +454,13 @@ describe("POST /api/webhooks/stripe: processing", () => {
   })
 
   it("acknowledges and records event types without a handler", async () => {
-    const event = { ...structuredClone(checkoutCompletedFixture), id: uniqueId("evt_test_") }
+    const event = unhandledEvent()
     expect((await deliver(event, PLATFORM_SECRET)).body).toEqual({
       received: true,
       status: "ignored",
     })
     expect(await stripeEventRow(event.id)).toMatchObject({
-      type: "checkout.session.completed",
+      type: "customer.created",
       account: null,
       processedAt: NOW,
     })

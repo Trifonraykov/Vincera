@@ -1,3 +1,4 @@
+import { formatMoney } from "@/lib/money"
 import { SOCIAL_PROVIDER_META } from "@/lib/social/catalog"
 
 import type { ParsedNotification } from "./types"
@@ -8,11 +9,12 @@ import type { ParsedNotification } from "./types"
  * A new type needs a case here; the `never` check below fails the typecheck until it has one.
  */
 
-export type NotificationTone = "account" | "proposal" | "collab" | "task"
+export type NotificationTone = "account" | "proposal" | "collab" | "task" | "launch" | "money"
 
 export type NotificationText = { title: string; detail: string | null; tone: NotificationTone }
 
 const quoted = (title: string) => `“${title}”`
+const formatAmount = (cents: number, currency: string) => formatMoney(cents, currency)
 
 export function describeNotification(notification: ParsedNotification): NotificationText {
   switch (notification.type) {
@@ -101,6 +103,84 @@ export function describeNotification(notification: ParsedNotification): Notifica
         title: `${notification.payload.assigned_by_name} assigned you a task`,
         detail: `${quoted(notification.payload.task_title)} in ${quoted(notification.payload.collab_title)}`,
         tone: "task",
+      }
+    case "launch.approval_requested":
+      return {
+        title: `${notification.payload.approver_name} approved the launch`,
+        detail: `${quoted(notification.payload.launch_title)}: your approval is next.`,
+        tone: "launch",
+      }
+    case "launch.rejected":
+      return {
+        title: "Your launch needs changes",
+        detail: `${quoted(notification.payload.launch_title)} was sent back by our review team.`,
+        tone: "launch",
+      }
+    case "launch.live":
+      return {
+        title: `${quoted(notification.payload.launch_title)} is live`,
+        detail: "Share your link and start selling.",
+        tone: "launch",
+      }
+    case "launch.paused":
+      return {
+        title: `${quoted(notification.payload.launch_title)} is paused`,
+        detail:
+          notification.payload.paused_by === "member"
+            ? "Your collaborator paused sales."
+            : "Sales are paused while our team looks into it.",
+        tone: "launch",
+      }
+    case "launch.license_keys_low":
+      return {
+        title:
+          notification.payload.remaining === 0
+            ? `${quoted(notification.payload.launch_title)} is out of license keys`
+            : `${quoted(notification.payload.launch_title)} is running out of license keys`,
+        detail: `${notification.payload.remaining} left. Add more keys to keep selling.`,
+        tone: "launch",
+      }
+    case "admin.launch_review_requested":
+      return {
+        title: "A launch waits for review",
+        detail: quoted(notification.payload.launch_title),
+        tone: "launch",
+      }
+    case "sale.made":
+      return {
+        title: `New sale: ${quoted(notification.payload.launch_title)}`,
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} paid.`,
+        tone: "money",
+      }
+    case "payout.sent":
+      return {
+        title: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} is on its way`,
+        detail: "Stripe sends it to your bank on your payout schedule.",
+        tone: "money",
+      }
+    case "payout.failed":
+      return {
+        title: "Your payout didn't go through",
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} is waiting. Check your payouts settings.`,
+        tone: "money",
+      }
+    case "order.refunded":
+      return {
+        title: `A ${quoted(notification.payload.launch_title)} order was refunded`,
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} returned to the buyer.`,
+        tone: "money",
+      }
+    case "order.disputed":
+      return {
+        title: `A buyer disputed a ${quoted(notification.payload.launch_title)} order`,
+        detail: "Your share of it is on hold until the chargeback is settled.",
+        tone: "money",
+      }
+    case "admin.chargeback_opened":
+      return {
+        title: "A chargeback was opened",
+        detail: `${formatAmount(notification.payload.amount_cents, notification.payload.currency)} on ${quoted(notification.payload.launch_title)}`,
+        tone: "money",
       }
     default: {
       const unhandled: never = notification

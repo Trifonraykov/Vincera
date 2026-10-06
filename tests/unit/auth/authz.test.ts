@@ -3,23 +3,35 @@ import { describe, expect, it } from "vitest"
 import {
   canAccessAdmin,
   canActOnMatch,
+  canApproveLaunch,
+  canCreateTrackedLink,
   canCreateIdea,
   canCreateProduct,
   canDiscover,
   canEditBuilderProfile,
   canEditCreatorProfile,
   canEditLaunch,
+  canEndLaunch,
   canManageIdea,
   canManageOwnAccount,
   canManagePortfolioItem,
+  canManagePayouts,
   canManageProduct,
+  canManageTrackedLink,
+  canPauseLaunch,
   canPostMessage,
+  canRefundOrder,
   canRespondToProposal,
+  canResumeLaunch,
+  canReviewLaunch,
   canSendProposal,
   canSignAgreement,
   canSwitchToRole,
   canViewCollab,
   canViewIdea,
+  canViewLaunchOrders,
+  canViewLaunchSetup,
+  canViewOwnEarnings,
   canViewProduct,
   canViewProposalTarget,
   canViewProposal,
@@ -35,6 +47,7 @@ import {
   PUBLIC_IDEA_STATUSES,
   PUBLIC_PRODUCT_STATUSES,
 } from "@/lib/auth/authz"
+import type { CollabStage, LaunchPausedBy, LaunchStatus } from "@/lib/db/schema/enums"
 
 import { authUser, OTHER_USER_ID } from "../../helpers/auth-users"
 
@@ -126,14 +139,70 @@ describe("collab rules", () => {
     expect(canViewCollab({ ...member, status: "suspended" }, collab)).toBe(false)
   })
 
-  it("only members edit a launch, and only while it is being set up", () => {
-    expect(canEditLaunch(member, { ...collab, status: "draft" })).toBe(true)
-    expect(canEditLaunch(member, { ...collab, status: "pending_approval" })).toBe(true)
-    expect(canEditLaunch(member, { ...collab, status: "live" })).toBe(false)
-    expect(canEditLaunch(outsider, { ...collab, status: "draft" })).toBe(false)
-    expect(canEditLaunch({ ...outsider, roles: ["admin"] }, { ...collab, status: "draft" })).toBe(
-      false,
-    )
+  it("only members edit a launch, while it is being set up or paused (§19.31)", () => {
+    const launch = (status: LaunchStatus, collabStage: CollabStage = "building") => ({
+      ...collab,
+      status,
+      collabStage,
+    })
+    expect(canEditLaunch(member, launch("draft"))).toBe(true)
+    expect(canEditLaunch(member, launch("pending_approval"))).toBe(true)
+    expect(canEditLaunch(member, launch("admin_review"))).toBe(true)
+    expect(canEditLaunch(member, launch("paused", "live"))).toBe(true)
+    expect(canEditLaunch(member, launch("live", "live"))).toBe(false)
+    expect(canEditLaunch(member, launch("ended", "live"))).toBe(false)
+    expect(canEditLaunch(member, launch("draft", "ended"))).toBe(false)
+    expect(canEditLaunch(outsider, launch("draft"))).toBe(false)
+    expect(canEditLaunch({ ...outsider, roles: ["admin"] }, launch("draft"))).toBe(false)
+    expect(canViewLaunchSetup({ ...outsider, roles: ["admin"] }, launch("draft"))).toBe(true)
+    expect(canViewLaunchSetup(outsider, launch("live"))).toBe(false)
+  })
+
+  it("approvals, review, pause, resume and end follow the launch contract (§19.31)", () => {
+    const admin = { ...outsider, roles: ["admin" as const] }
+    const launch = (status: LaunchStatus, approvedUserIds: string[] = []) => ({
+      ...collab,
+      status,
+      collabStage: "launch_review" as const,
+      approvedUserIds,
+    })
+    expect(canApproveLaunch(member, launch("draft"))).toBe(true)
+    expect(canApproveLaunch(member, launch("pending_approval", [member.id]))).toBe(false)
+    expect(canApproveLaunch(member, launch("admin_review"))).toBe(false)
+    expect(canApproveLaunch(admin, launch("draft"))).toBe(false)
+    expect(canReviewLaunch(admin, { status: "admin_review" })).toBe(true)
+    expect(canReviewLaunch(member, { status: "admin_review" })).toBe(false)
+    expect(canReviewLaunch(admin, { status: "pending_approval" })).toBe(false)
+    expect(canPauseLaunch(member, launch("live"))).toBe(true)
+    expect(canPauseLaunch(admin, launch("live"))).toBe(true)
+    expect(canPauseLaunch(outsider, launch("live"))).toBe(false)
+    expect(canPauseLaunch(member, launch("paused"))).toBe(false)
+    const paused = (pausedBy: LaunchPausedBy) => ({ ...launch("paused"), pausedBy })
+    expect(canResumeLaunch(member, paused("member"))).toBe(true)
+    expect(canResumeLaunch(member, paused("admin"))).toBe(false)
+    expect(canResumeLaunch(member, paused("dispute"))).toBe(false)
+    expect(canResumeLaunch(admin, paused("dispute"))).toBe(true)
+    expect(canEndLaunch(admin, { status: "live" })).toBe(true)
+    expect(canEndLaunch(member, { status: "live" })).toBe(false)
+    expect(canEndLaunch(admin, { status: "ended" })).toBe(false)
+  })
+
+  it("tracked links belong to members of live launches; money tools are admin-only", () => {
+    const admin = { ...outsider, roles: ["admin" as const] }
+    const live = { ...collab, status: "live" as const, collabStage: "live" as const }
+    expect(canCreateTrackedLink(member, live)).toBe(true)
+    expect(canCreateTrackedLink(member, { ...live, status: "draft" })).toBe(false)
+    expect(canCreateTrackedLink(admin, live)).toBe(false)
+    expect(canManageTrackedLink(member, { ...collab, ownerUserId: member.id })).toBe(true)
+    expect(canManageTrackedLink(member, { ...collab, ownerUserId: outsider.id })).toBe(false)
+    expect(canViewLaunchOrders(member, collab)).toBe(true)
+    expect(canViewLaunchOrders(outsider, collab)).toBe(false)
+    expect(canViewOwnEarnings(member)).toBe(true)
+    expect(canViewOwnEarnings({ ...member, roles: ["admin"] })).toBe(false)
+    expect(canRefundOrder(admin)).toBe(true)
+    expect(canRefundOrder(member)).toBe(false)
+    expect(canManagePayouts(admin)).toBe(true)
+    expect(canManagePayouts(member)).toBe(false)
   })
 })
 

@@ -6,6 +6,23 @@ import { dataDir } from "@/lib/services"
 import { isStripeFake } from "./client"
 import { createFakeStripeGateway } from "./fake"
 import { createLiveStripeGateway } from "./live"
+import type {
+  CreateCheckoutSessionInput,
+  StripeCharge,
+  StripeCheckoutSession,
+  StripePaymentIntent,
+} from "./checkout-shared"
+import type {
+  CreateRefundInput,
+  CreateTransferInput,
+  CreateTransferReversalInput,
+  StripeBalanceTransaction,
+  StripeDispute,
+  StripeRefund,
+  StripeTransfer,
+  StripeTransferReversal,
+} from "./money-shared"
+import type { CreatePromotionCodeInput, StripePromotionCode } from "./promotions-shared"
 import type { StripeAccount, StripeAccountLink, StripeLoginLink } from "./schemas"
 import type { CreateAccountLinkInput, CreateConnectedAccountInput } from "./shared"
 
@@ -13,6 +30,7 @@ export {
   ACCOUNT_LINK_TTL_SECONDS,
   connectedAccountParams,
   StripeGatewayError,
+  StripeGatewayNotBuiltError,
   type CreateAccountLinkInput,
   type CreateConnectedAccountInput,
   type StripeGatewayErrorCode,
@@ -27,13 +45,20 @@ export {
  * Every method returns objects parsed with the Zod schemas in `./schemas.ts` (Stripe's field
  * names, only the fields we use).
  *
- * Phase 1 covers Connect onboarding. Phases 4–5 extend the interface (and both implementations)
- * with checkout sessions, payment intents / balance transactions, transfers, transfer reversals
- * and refunds.
+ * The interface is split by topic (CLAUDE.md §19.31), each with a live and a fake file and one
+ * owner: Connect (Phase 1, `./live.ts` / `./fake.ts`), checkout (`./live-checkout.ts` /
+ * `./fake-checkout.ts`, the checkout builder), money (`./live-money.ts` / `./fake-money.ts`, the
+ * ledger builder) and promotion codes (`./live-promotions.ts` / `./fake-promotions.ts`, the launch
+ * builder). `StripeGateway` is their union.
  */
 
-export interface StripeGateway {
+export interface StripeGateway
+  extends ConnectGateway, CheckoutGateway, MoneyGateway, PromotionsGateway {
   readonly mode: "live" | "fake"
+}
+
+/** Connect onboarding (Phase 1). */
+export interface ConnectGateway {
   /**
    * Create a v1 connected account with controller properties (Express Dashboard, platform pays
    * fees and covers losses, Stripe collects requirements, `transfers` requested; §19.10).
@@ -49,6 +74,77 @@ export interface StripeGateway {
   createAccountLink(input: CreateAccountLinkInput): Promise<StripeAccountLink>
   /** A one-time link into the account's Express Dashboard (needs finished onboarding details). */
   createLoginLink(accountId: string): Promise<StripeLoginLink>
+}
+
+/** Checkout (Phase 4, the checkout builder; §7.2, §19.10). */
+export interface CheckoutGateway {
+  /**
+   * Create a Checkout Session with `checkoutSessionParams(input)` (./checkout-shared.ts).
+   * Idempotent per `idempotencyKey` (`checkout:<orderRef>`).
+   */
+  createCheckoutSession(
+    input: CreateCheckoutSessionInput,
+    options: { idempotencyKey: string },
+  ): Promise<StripeCheckoutSession>
+  /** The session as Stripe has it now (the success page and `checkout.session.completed`). */
+  retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>
+  /**
+   * The PaymentIntent with `latest_charge.balance_transaction` expanded, so the Stripe fee is known
+   * once the balance transaction exists (null while it is pending, §19.10).
+   */
+  retrievePaymentIntentWithBalanceTransaction(paymentIntentId: string): Promise<StripePaymentIntent>
+  /** A charge with `balance_transaction` expanded (`charge.updated` carries only its id). */
+  retrieveCharge(chargeId: string): Promise<StripeCharge>
+}
+
+/** Balance transactions, transfers, reversals, refunds and disputes (Phase 5, the ledger builder). */
+export interface MoneyGateway {
+  /** The real Stripe fee of a charge (§9 step 2). */
+  retrieveBalanceTransaction(balanceTransactionId: string): Promise<StripeBalanceTransaction>
+  /**
+   * One aggregated transfer to a connected account, without `source_transaction` (§19.10).
+   * Idempotency key `payout:<batchId>:<userId>`. Throws `StripeGatewayError`
+   * `balance_insufficient` when the platform balance is too low.
+   */
+  createTransfer(
+    input: CreateTransferInput,
+    options: { idempotencyKey: string },
+  ): Promise<StripeTransfer>
+  /** Transfers with this `transfer_group` (finds a transfer whose idempotency key expired). */
+  listTransfersByGroup(transferGroup: string): Promise<StripeTransfer[]>
+  /**
+   * Every platform transfer created at or after `createdFrom` (reconciliation, `ledger:check`:
+   * Stripe's side against ours, so a transfer we have no row for is found).
+   */
+  listTransfers(input: { createdFrom: Date }): Promise<StripeTransfer[]>
+  /**
+   * Reverse part of a transfer after a refund or lost chargeback (§9). Throws
+   * `StripeGatewayError` `balance_insufficient` when the connected balance is too low (§19.10:
+   * the negative entries then stay unpaid and are netted against future payouts).
+   */
+  createTransferReversal(
+    input: CreateTransferReversalInput,
+    options: { idempotencyKey: string },
+  ): Promise<StripeTransferReversal>
+  /** Refund (part of) a payment. Idempotency key `refund:<refunds.id>`. */
+  createRefund(input: CreateRefundInput, options: { idempotencyKey: string }): Promise<StripeRefund>
+  retrieveRefund(refundId: string): Promise<StripeRefund>
+  /** A dispute with its balance transactions (the disputed amount and the dispute fee). */
+  retrieveDispute(disputeId: string): Promise<StripeDispute>
+}
+
+/** Promotion codes for tracked-link discount codes (Phase 4, the launch builder; §10). */
+export interface PromotionsGateway {
+  /**
+   * A percent-off coupon plus its customer-facing promotion code. Idempotency key
+   * `promo:<trackedLinkId>`.
+   */
+  createPromotionCode(
+    input: CreatePromotionCodeInput,
+    options: { idempotencyKey: string },
+  ): Promise<StripePromotionCode>
+  /** Stop a code from being used (a disabled tracked link). */
+  deactivatePromotionCode(promotionCodeId: string): Promise<StripePromotionCode>
 }
 
 /**

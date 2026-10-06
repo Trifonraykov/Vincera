@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 import { NotificationPrefsForm } from "@/components/settings/notification-prefs-form"
 import { PageHeader } from "@/components/shared/page-header"
-import { canManageOwnAccount } from "@/lib/auth/authz"
+import { canManageOwnAccount, isAdmin } from "@/lib/auth/authz"
 import { authorizePage, requireOnboardedUser } from "@/lib/auth/session"
 import { getDb } from "@/lib/db/client"
 import { loadNotificationPrefs } from "@/lib/notifications/prefs"
@@ -25,7 +25,7 @@ export default async function NotificationSettingsPage() {
         title="Notifications"
         description="Choose how we tell you about things that need your attention."
       />
-      <NotificationPrefsForm prefs={prefs} />
+      <NotificationPrefsForm prefs={prefs} isAdmin={isAdmin(user)} />
       <p className="text-sm text-muted-foreground">
         Sign-in links and emails about money you earn or owe are always sent.
       </p>

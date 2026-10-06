@@ -5,7 +5,9 @@ import { eq } from "drizzle-orm"
 import { now } from "@/lib/clock"
 import { withTransaction, type DbOrTx } from "@/lib/db/client"
 import { audienceSnapshots, socialConnections, stripeAccounts } from "@/lib/db/schema"
+import { env } from "@/lib/env"
 import { track } from "@/lib/events/track"
+import { dataDir } from "@/lib/services"
 import { upsertOAuthConnection } from "@/lib/social/connections"
 import { recomputeSizeTier } from "@/lib/social/derived"
 import { githubRawSchema, youtubeRawSchema } from "@/lib/social/raw"
@@ -16,6 +18,9 @@ import {
   type SocialProviderId,
   type TokenSet,
 } from "@/lib/social/types"
+import { isStripeFake } from "@/lib/stripe/client"
+import { isPayoutCountry } from "@/lib/stripe/countries"
+import { completeFakeOnboarding, createFakeStripeGateway } from "@/lib/stripe/fake"
 
 import type { SeedBuilder, SeedCreator } from "./data"
 
@@ -235,19 +240,46 @@ export async function connectSeedAccount(
 }
 
 /**
- * A payouts-ready Stripe account row (a fake `acct_seed_…` id; the fake Stripe store has no file
- * for it, which pages tolerate: they only re-fetch accounts that are not ready yet).
+ * The connected account id for a seeded person. With fake Stripe the account is created in the
+ * fake store through the gateway and completed like the fake onboarding page completes it, so
+ * payout transfers to it work (the fake refuses transfers to unknown accounts, §19.33). With live
+ * Stripe the seed never calls Stripe: the row gets the placeholder `acct_seed_…` id, and payouts
+ * to it are refused (released and retried, §19.35), which is the honest outcome for demo data.
  */
+async function seedConnectedAccountId(input: {
+  userId: string
+  accountId: string
+  country: string
+}): Promise<string> {
+  if (!isStripeFake()) return input.accountId
+  const gateway = createFakeStripeGateway({
+    root: dataDir("fake-stripe"),
+    appUrl: env.NEXT_PUBLIC_APP_URL,
+  })
+  const account = await gateway.createConnectedAccount(
+    {
+      userId: input.userId,
+      country: isPayoutCountry(input.country) ? input.country : "DE",
+      email: null,
+    },
+    { idempotencyKey: `acct:${input.userId}` },
+  )
+  await completeFakeOnboarding(gateway.store, account.id, "enabled")
+  return account.id
+}
+
+/** A payouts-ready Stripe account row (see `seedConnectedAccountId` for the id). */
 export async function seedPayoutsAccount(
   database: DbOrTx,
   input: { userId: string; accountId: string; country: string },
 ): Promise<void> {
+  const stripeAccountId = await seedConnectedAccountId(input)
   await withTransaction(async (tx) => {
     const [row] = await tx
       .insert(stripeAccounts)
       .values({
         userId: input.userId,
-        stripeAccountId: input.accountId,
+        stripeAccountId,
         chargesEnabled: true,
         payoutsEnabled: true,
         detailsSubmitted: true,

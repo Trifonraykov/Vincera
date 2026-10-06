@@ -8,7 +8,8 @@ import { updateNotificationPrefsAction } from "@/lib/notifications/actions"
 import {
   NOTIFICATION_GROUPS,
   NOTIFICATION_TYPE_LABELS,
-  REQUIRED_EMAIL_TYPES,
+  isAdminNotificationType,
+  requiredEmailReason,
   type NotificationType,
 } from "@/lib/notifications/types"
 
@@ -19,9 +20,20 @@ export type NotificationPrefView = { type: NotificationType; email: boolean; inA
  * at least 44 px tall on touch screens), in the catalog's groups (Account, Proposals, Collabs).
  * Save sits in the sticky action bar on phones.
  */
-export function NotificationPrefsForm({ prefs }: { prefs: readonly NotificationPrefView[] }) {
+export function NotificationPrefsForm({
+  prefs,
+  isAdmin = false,
+}: {
+  prefs: readonly NotificationPrefView[]
+  /** Admin-only types (lib/notifications/types.ts) are listed for admins only. */
+  isAdmin?: boolean
+}) {
   const form = useFormAction(updateNotificationPrefsAction)
-  const byType = new Map(prefs.map((pref) => [pref.type, pref]))
+  const byType = new Map(
+    prefs
+      .filter((pref) => isAdmin || !isAdminNotificationType(pref.type))
+      .map((pref) => [pref.type, pref]),
+  )
   const emailChecked = new Set(
     form.valuesFor(
       "email",
@@ -50,7 +62,8 @@ export function NotificationPrefsForm({ prefs }: { prefs: readonly NotificationP
             <ul className="divide-y rounded-xl border bg-card shadow-xs">
               {rows.map((type) => {
                 const label = NOTIFICATION_TYPE_LABELS[type]
-                const required = REQUIRED_EMAIL_TYPES.includes(type)
+                const requiredReason = requiredEmailReason(type)
+                const required = requiredReason !== null
                 return (
                   <li
                     key={type}
@@ -62,7 +75,7 @@ export function NotificationPrefsForm({ prefs }: { prefs: readonly NotificationP
                       </span>
                       {required ? (
                         <span id={`pref-${type}-required`} className="block text-muted-foreground">
-                          Always emailed: it carries your signed agreement.
+                          {requiredReason}
                         </span>
                       ) : null}
                     </span>

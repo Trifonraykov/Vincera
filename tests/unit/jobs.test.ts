@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { inngest, isJobEventName, JOB_EVENT_NAMES } from "@/inngest/client"
+import { inngest, isJobEventName, JOB_EVENT_NAMES, jobEventSchemas } from "@/inngest/client"
 import { functions, jobs, jobsFor } from "@/inngest/functions"
 import { setClockForTests } from "@/lib/clock"
 import { enqueue, runJobsNow } from "@/lib/jobs/enqueue"
@@ -45,6 +45,31 @@ describe("job registry", () => {
     expect(byId.get("matching-nightly")?.cron).toEqual({ schedule: "30 5 * * *", data: {} })
     expect(byId.get("proposals-expire")?.cron).toEqual({ schedule: "5 * * * *", data: {} })
     expect(byId.get("reminders-stalled")?.cron).toEqual({ schedule: "50 8 * * *", data: {} })
+  })
+
+  it("registers the Phase 4–5 job ids and schedules of the W3 contract (CLAUDE.md §19.31)", async () => {
+    const byId = new Map(jobs.map((job) => [job.id, job]))
+    expect(Object.fromEntries([...byId].map(([id, job]) => [id, job.event]))).toMatchObject({
+      "orders-fulfilled": "orders/paid.requested",
+      "ledger-post-pending": "ledger/post-pending.requested",
+      "payouts-release": "payouts/release.requested",
+      "payouts-reverse": "payouts/reverse.requested",
+      "refunds-notify": "refunds/succeeded.requested",
+      "ledger-check": "ledger/check.requested",
+    })
+    expect(byId.get("payouts-release")?.cron).toEqual({ schedule: "0 6 * * *", data: {} })
+    expect(byId.get("ledger-check")?.cron).toEqual({ schedule: "15 7 * * *", data: {} })
+    expect(byId.get("ledger-post-pending")?.cron).toEqual({ schedule: "20 * * * *", data: {} })
+    // Payout run keys: a day of the job's clock, or an admin's manual run.
+    const release = byId.get("payouts-release")
+    const runKey = jobEventSchemas["payouts/release.requested"]
+    expect(runKey.safeParse({ runKey: "daily:2026-10-06" }).success).toBe(true)
+    expect(
+      runKey.safeParse({ runKey: `manual:${"0".repeat(8)}-0000-7000-8000-${"0".repeat(12)}` })
+        .success,
+    ).toBe(true)
+    // Refused before the handler (which needs a database) runs.
+    await expect(release?.runInline({ runKey: "weekly:1" })).rejects.toThrow()
   })
 
   it("runs a handler inline with a validated payload and pass-through steps", async () => {

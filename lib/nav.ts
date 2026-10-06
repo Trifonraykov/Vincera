@@ -339,8 +339,8 @@ export function shellBackHref(pathname: string, tabs: readonly MobileTab[]): str
  * gets the shell's "Coming soon" page (app/app/not-found.tsx). tests/unit/nav.test.ts compares this
  * list with the `page.tsx` files under app/, so a phase that adds a page must add it here.
  *
- * Phases 2–3 are built by parallel builders (CLAUDE.md §19.24): each adds its menu pages to its own
- * list below when the page exists, and touches no other list.
+ * Phases 2–5 are built by parallel builders (CLAUDE.md §19.24, §19.31): each adds its menu pages to
+ * its own list below when the page exists, and touches no other list.
  */
 const PHASE_1_ROUTES = [
   "/",
@@ -379,6 +379,13 @@ const DISCOVER_ROUTES: string[] = [
 const PROPOSALS_ROUTES: string[] = ["/app/proposals", "/app/messages", "/app/notifications"]
 /** "collab" (Phase 3): add "/app/collabs". */
 const COLLAB_ROUTES: string[] = ["/app/collabs"]
+/**
+ * "launch" (Phase 4, CLAUDE.md §19.31): add "/app/launches" and "/admin/launches" with their pages
+ * (`/app/launches/[id]/kit` and the collab's launch page are reached from them).
+ */
+const LAUNCH_ROUTES: string[] = ["/app/launches", "/admin/launches"]
+/** "payouts" (Phase 5, §19.35): the earnings overview and the payouts history. */
+const EARNINGS_ROUTES: string[] = ["/app/earnings", "/app/earnings/payouts"]
 
 const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...PHASE_1_ROUTES,
@@ -386,6 +393,8 @@ const BUILT_ROUTES: ReadonlySet<string> = new Set([
   ...DISCOVER_ROUTES,
   ...PROPOSALS_ROUTES,
   ...COLLAB_ROUTES,
+  ...LAUNCH_ROUTES,
+  ...EARNINGS_ROUTES,
 ])
 
 /** Whether the page at `href` (a menu path, without query or hash) exists in this build. */

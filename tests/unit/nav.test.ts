@@ -288,11 +288,15 @@ describe("navigation", () => {
     // Discover is built (Phase 2): its pages are not "coming soon".
     expect(plannedNavItem("/app/discover")).toBeNull()
     expect(plannedNavItem("/app/discover/briefs")).toBeNull()
-    expect(plannedNavItem("/app/launches/0190/kit")?.title).toBe("Launches")
+    expect(plannedNavItem("/app/launches/0190/kit")?.title).toBe(
+      isBuiltRoute("/app/launches") ? undefined : "Launches",
+    )
     expect(plannedNavItem("/app/collabs/0190/agreement")?.title).toBe(
       isBuiltRoute("/app/collabs") ? undefined : "Collabs",
     )
-    expect(plannedNavItem("/app/earnings/payouts")?.title).toBe("Earnings")
+    expect(plannedNavItem("/app/earnings/payouts")?.title).toBe(
+      isBuiltRoute("/app/earnings") ? undefined : "Earnings",
+    )
     expect(plannedNavItem("/admin/users")?.title).toBe("Users")
     // Built pages and unknown paths are not "coming soon".
     expect(plannedNavItem("/app")).toBeNull()

@@ -22,8 +22,8 @@ import { makePayoutsReady, makeTempDataDir, removeTempDataDir } from "./helpers"
 
 /**
  * The seed's "collabs" step (CLAUDE.md §19.24 "Seed", §19.28) on people shaped like the people
- * step's: three collabs made through the app's flow, at three points (awaiting signatures, half
- * signed, building with tasks and messages), and a second run that changes nothing.
+ * step's: four collabs made through the app's flow (half signed, ended before signing, and two
+ * building with tasks and messages), and a second run that changes nothing.
  */
 
 const mocks = vi.hoisted(() => ({ dir: "", db: null as unknown }))
@@ -91,13 +91,20 @@ describe("seed step: collabs", () => {
     expect(result).toMatchObject({ skipped: expect.stringContaining("people missing") })
   })
 
-  it("creates three collabs at three points, then changes nothing", async () => {
-    const pairs = [await seededPair(1), await seededPair(2), await seededPair(3)]
+  it("creates four collabs at four points, then changes nothing", async () => {
+    const pairs = [
+      await seededPair(1),
+      await seededPair(2),
+      await seededPair(3),
+      await seededPair(4),
+    ]
     const result = await seedCollabs.run({ db: testDb.db, now: NOW, log: () => undefined })
-    expect(result).toEqual({ created: 3 })
+    expect(result).toEqual({ created: 4 })
 
-    const [one, two, three] = await Promise.all(pairs.map((pair) => collabOf(pair.creator.user.id)))
-    // §15: three collabs in three different stages.
+    const [one, two, three, four] = await Promise.all(
+      pairs.map((pair) => collabOf(pair.creator.user.id)),
+    )
+    // §15: collabs in different stages.
     expect(one).toMatchObject({ stage: "agreement", agreement: { status: "awaiting_signatures" } })
     expect(
       await testDb.db
@@ -107,6 +114,8 @@ describe("seed step: collabs", () => {
     ).toMatchObject([{ userId: pairs[0]?.creator.user.id }])
     expect(two).toMatchObject({ stage: "ended", agreement: { status: "terminated" } })
     expect(three).toMatchObject({ stage: "building", agreement: { status: "signed" } })
+    // Pair 4 stays in `building` (no launch); the launches seed takes pair 3 live.
+    expect(four).toMatchObject({ stage: "building", agreement: { status: "signed" } })
     expect(new Set([one?.stage, two?.stage, three?.stage]).size).toBe(3)
     expect(three?.agreement?.pdfStorageKey).toBe(
       `agreements/${three?.id}/${three?.agreement?.id}.pdf`,
@@ -131,6 +140,6 @@ describe("seed step: collabs", () => {
     expect(await seedCollabs.run({ db: testDb.db, now: NOW, log: () => undefined })).toEqual({
       created: 0,
     })
-    expect(await testDb.db.select().from(collabs)).toHaveLength(3)
+    expect(await testDb.db.select().from(collabs)).toHaveLength(4)
   })
 })

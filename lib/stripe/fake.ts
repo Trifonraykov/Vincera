@@ -10,7 +10,10 @@ import { z } from "zod"
 import { now } from "@/lib/clock"
 import type { JsonObject, JsonValue } from "@/lib/db/schema"
 
-import type { StripeGateway } from "./gateway"
+import { createFakeCheckoutGateway } from "./fake-checkout"
+import { createFakeMoneyGateway } from "./fake-money"
+import { createFakePromotionsGateway } from "./fake-promotions"
+import type { ConnectGateway, StripeGateway } from "./gateway"
 import {
   jsonObjectSchema,
   STRIPE_ACCOUNT_ID_PATTERN,
@@ -41,8 +44,28 @@ export type FakeStripeOptions = {
   appUrl: string
 }
 
-/** Object types the fake stores (one directory each). */
-export type FakeObjectType = "account" | "account_link" | "event"
+/**
+ * Object types the fake stores (one directory each). Phase 1: account, account_link, event.
+ * Phases 4–5 (CLAUDE.md §19.31): checkout (checkout_session, payment_intent, charge), money
+ * (balance_transaction, transfer, transfer_reversal, refund, dispute) and promotions (coupon,
+ * promotion_code).
+ */
+export type FakeObjectType =
+  | "account"
+  | "account_link"
+  | "event"
+  | "checkout_session"
+  | "payment_intent"
+  | "charge"
+  | "balance_transaction"
+  | "transfer"
+  | "transfer_reversal"
+  | "refund"
+  | "dispute"
+  | "coupon"
+  | "promotion_code"
+  /** Fake balances (money, §19.33): `platform` and one per connected account id. */
+  | "balance"
 
 const FAKE_ID_PATTERN = /^[A-Za-z0-9_]{1,128}$/
 
@@ -94,11 +117,11 @@ function isNotFound(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT"
 }
 
-function unixSeconds(date: Date = now()): number {
+export function unixSeconds(date: Date = now()): number {
   return Math.floor(date.getTime() / 1000)
 }
 
-function randomId(prefix: string, bytes = 12): string {
+export function randomId(prefix: string, bytes = 12): string {
   return `${prefix}${randomBytes(bytes).toString("hex")}`
 }
 
@@ -212,7 +235,21 @@ export function createFakeStripeGateway(
   options: FakeStripeOptions,
 ): StripeGateway & { store: FakeStripeStore } {
   const store = createFakeStripeStore(options.root)
+  return {
+    mode: "fake",
+    store,
+    ...createFakeConnectGateway(store, options),
+    ...createFakeCheckoutGateway(store, options),
+    ...createFakeMoneyGateway(store, options),
+    ...createFakePromotionsGateway(store, options),
+  }
+}
 
+/** Connect onboarding (Phase 1). */
+function createFakeConnectGateway(
+  store: FakeStripeStore,
+  options: FakeStripeOptions,
+): ConnectGateway {
   async function readAccount(accountId: string): Promise<JsonObject> {
     const account = STRIPE_ACCOUNT_ID_PATTERN.test(accountId)
       ? await store.read("account", accountId)
@@ -222,9 +259,6 @@ export function createFakeStripeGateway(
   }
 
   return {
-    mode: "fake",
-    store,
-
     async createConnectedAccount(input, { idempotencyKey }) {
       const params = connectedAccountParams(input)
       const id = fakeAccountIdFor(idempotencyKey)

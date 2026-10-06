@@ -8,8 +8,9 @@ import { withTransaction, type DbOrTx } from "@/lib/db/client"
 import { stripeEvents, type JsonObject } from "@/lib/db/schema"
 import { reportError } from "@/lib/observability"
 
-import { stripeEventHandler } from "./handlers"
+import { stripeEventHandler, type AfterCommitTask } from "./handlers"
 import { jsonObjectSchema, stripeEventSchema, type StripeEvent } from "./schemas"
+import { redactStripePayload } from "./redact-payload"
 
 /**
  * Stripe webhooks (§7.2, §19.10, §19.11, §19.12): signature verification, idempotent processing
@@ -83,10 +84,17 @@ export async function processStripeEvent(
 ): Promise<ProcessStripeEventResult> {
   await database
     .insert(stripeEvents)
-    .values({ id: event.id, type: event.type, account: event.account ?? null, payload })
+    .values({
+      id: event.id,
+      type: event.type,
+      account: event.account ?? null,
+      // Stored without buyers' and account holders' personal data (CLAUDE.md §19.37).
+      payload: redactStripePayload(payload),
+    })
     .onConflictDoNothing({ target: stripeEvents.id })
 
-  return withTransaction(async (tx) => {
+  const afterCommitTasks: AfterCommitTask[] = []
+  const result = await withTransaction(async (tx): Promise<ProcessStripeEventResult> => {
     // The lock serialises concurrent deliveries of the same event: the second one waits, then
     // sees `processed_at` set.
     const [row] = await tx
@@ -98,11 +106,37 @@ export async function processStripeEvent(
     if (row.processedAt !== null) return { status: "duplicate" }
 
     const handler = stripeEventHandler(event.type)
-    if (handler) await handler(event, { tx, now: now() })
+    if (handler) {
+      await handler(event, {
+        tx,
+        now: now(),
+        afterCommit: (task) => {
+          afterCommitTasks.push(task)
+        },
+      })
+    }
 
     await tx.update(stripeEvents).set({ processedAt: now() }).where(eq(stripeEvents.id, event.id))
     return { status: handler ? "processed" : "ignored" }
   }, database)
+
+  // Only reached when the transaction committed (a throw above skips the queued tasks). When
+  // `database` is itself a transaction (tests), "committed" means its savepoint was released.
+  if (result.status === "processed") await runAfterCommit(afterCommitTasks, event)
+  return result
+}
+
+async function runAfterCommit(tasks: readonly AfterCommitTask[], event: StripeEvent) {
+  for (const task of tasks) {
+    try {
+      await task()
+    } catch (error) {
+      reportError(error, {
+        tags: { area: "stripe-webhook", stripe_event_type: event.type },
+        extra: { stripe_event_id: event.id, phase: "after_commit" },
+      })
+    }
+  }
 }
 
 /**

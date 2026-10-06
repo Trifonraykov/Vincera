@@ -89,10 +89,18 @@ export default async function CollabPage({ params }: Props) {
       title: "Build it together",
       body:
         taskCounts.open > 0
-          ? `${taskCounts.open} open ${taskCounts.open === 1 ? "task" : "tasks"}${yourTasks > 0 ? `, ${yourTasks} for you` : ""}. Launch setup comes once it's ready.`
+          ? `${taskCounts.open} open ${taskCounts.open === 1 ? "task" : "tasks"}${yourTasks > 0 ? `, ${yourTasks} for you` : ""}. Set up the launch in the Launch tab when it's ready.`
           : "Break the work into tasks and decide who does what.",
       href: `/app/collabs/${collab.id}/tasks`,
       label: "Open the tasks",
+    }
+  } else if (collab.stage === "launch_review" || collab.stage === "live") {
+    next = {
+      icon: Rocket,
+      title: COLLAB_STAGE_LABELS[collab.stage],
+      body: COLLAB_STAGE_DESCRIPTIONS[collab.stage],
+      href: `/app/collabs/${collab.id}/launch`,
+      label: "Open the launch",
     }
   } else {
     next = {

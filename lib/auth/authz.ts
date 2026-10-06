@@ -2,6 +2,8 @@ import type {
   AgreementStatus,
   CollabStage,
   IdeaStatus,
+  LaunchPausedBy,
+  LaunchStatus,
   ProductStatus,
   ProposalStatus,
   ThreadKind,
@@ -353,22 +355,138 @@ export function canPostMessage(user: AuthzUser, thread: ThreadAccess): boolean {
     : thread.parentStatus !== "ended"
 }
 
-// --- Launches (Phase 4) -----------------------------------------------------------------------
-
-/** Launch statuses in which members may still edit the launch setup page. */
-export const EDITABLE_LAUNCH_STATUSES = ["draft", "pending_approval"] as const
-
-export type LaunchAccess = CollabAccess & { status: string }
+// --- Launches (Phase 4; CLAUDE.md §19.31) -----------------------------------------------------
 
 /**
- * §12: either member edits the launch while it is being set up; saving resets approvals.
- * TODO(Phase 4): confirm whether members may edit a launch in `admin_review`, `live` or `paused`
- * (it would need re-approval); until then only setup statuses are editable.
+ * Launch statuses in which members may edit the launch setup page. Saving resets approvals
+ * (§12): `pending_approval` and `admin_review` go back to `draft`; a `paused` launch stays paused
+ * and needs both approvals again before it can resume. A `live` launch is paused first; an
+ * `ended` one is never edited.
+ */
+export const EDITABLE_LAUNCH_STATUSES = [
+  "draft",
+  "pending_approval",
+  "admin_review",
+  "paused",
+] as const satisfies readonly LaunchStatus[]
+
+/** Statuses in which a member may approve the current version. */
+export const APPROVABLE_LAUNCH_STATUSES = [
+  "draft",
+  "pending_approval",
+  "paused",
+] as const satisfies readonly LaunchStatus[]
+
+/** What launch rules need: the collab's members, the collab stage and the launch status. */
+export type LaunchAccess = CollabAccess & { status: LaunchStatus; collabStage: CollabStage }
+
+/** The launch setup page and its data: members and admins (admins read), like the collab (§6). */
+export function canViewLaunchSetup(user: AuthzUser, launch: LaunchAccess): boolean {
+  return canViewCollab(user, launch)
+}
+
+/**
+ * §12: either member edits the launch while it is being set up (or paused), while the collab has
+ * not ended. Admins never edit a launch; they review, pause or end it.
  */
 export function canEditLaunch(user: AuthzUser, launch: LaunchAccess): boolean {
   return (
     isActive(user) &&
     isCollabMember(user, launch) &&
+    launch.collabStage !== "ended" &&
     (EDITABLE_LAUNCH_STATUSES as readonly string[]).includes(launch.status)
   )
+}
+
+/**
+ * Approve the current version (§12): a member who has not approved it yet. The action also checks
+ * that the launch is complete (price, delivery and its content) and the collab is `building` or
+ * `launch_review` (or `live`, for resuming a paused launch).
+ */
+export function canApproveLaunch(
+  user: AuthzUser,
+  launch: LaunchAccess & { approvedUserIds: readonly string[] },
+): boolean {
+  return (
+    isActive(user) &&
+    isCollabMember(user, launch) &&
+    launch.collabStage !== "ended" &&
+    (APPROVABLE_LAUNCH_STATUSES as readonly string[]).includes(launch.status) &&
+    !launch.approvedUserIds.includes(user.id)
+  )
+}
+
+/** Approve or send back a launch waiting in `admin_review`: an admin. */
+export function canReviewLaunch(user: AuthzUser, launch: Pick<LaunchAccess, "status">): boolean {
+  return isAdmin(user) && launch.status === "admin_review"
+}
+
+/** Pause a live launch: a member or an admin. */
+export function canPauseLaunch(user: AuthzUser, launch: LaunchAccess): boolean {
+  return (
+    isActive(user) && launch.status === "live" && (isCollabMember(user, launch) || isAdmin(user))
+  )
+}
+
+/**
+ * Resume a paused launch: a member when a member paused it (the action also needs both approvals
+ * of the current version); only an admin when an admin or a chargeback paused it.
+ */
+export function canResumeLaunch(
+  user: AuthzUser,
+  launch: LaunchAccess & { pausedBy: LaunchPausedBy | null },
+): boolean {
+  if (!isActive(user) || launch.status !== "paused" || launch.collabStage === "ended") return false
+  if (launch.pausedBy === "member") return isCollabMember(user, launch) || isAdmin(user)
+  return isAdmin(user)
+}
+
+/** End sales for good (buyers keep their access): an admin; the collab ending ends it too. */
+export function canEndLaunch(user: AuthzUser, launch: Pick<LaunchAccess, "status">): boolean {
+  return isAdmin(user) && launch.status !== "ended"
+}
+
+/**
+ * Create tracked links (with an optional discount code) for a launch: a member while the launch
+ * is live or paused. Each link belongs to the member who made it.
+ */
+export function canCreateTrackedLink(user: AuthzUser, launch: LaunchAccess): boolean {
+  return (
+    isActive(user) &&
+    isCollabMember(user, launch) &&
+    (launch.status === "live" || launch.status === "paused")
+  )
+}
+
+/** Rename or disable a tracked link: its owner, while still a member of the launch's collab. */
+export function canManageTrackedLink(
+  user: AuthzUser,
+  link: CollabAccess & { ownerUserId: string },
+): boolean {
+  return isActive(user) && user.id === link.ownerUserId && isCollabMember(user, link)
+}
+
+// --- Money (Phase 5; CLAUDE.md §19.31) ---------------------------------------------------------
+
+/** `/app/earnings*`: the user's own ledger, payouts and sales (anyone active with an app role). */
+export function canViewOwnEarnings(user: Pick<AuthzUser, "roles" | "status">): boolean {
+  return isActive(user) && (hasRole(user, "creator") || hasRole(user, "builder"))
+}
+
+/** Orders of a launch (the analytics and sales lists): the collab's members and admins. */
+export function canViewLaunchOrders(user: AuthzUser, collab: CollabAccess): boolean {
+  return canViewCollab(user, collab)
+}
+
+/**
+ * Refund an order from the app: an admin (Phase 6 tools; v1 adds the buyer's request at
+ * `/access/[token]/refund`). Members ask an admin.
+ */
+export function canRefundOrder(user: AuthzUser): boolean {
+  return isAdmin(user)
+}
+
+/** Start a manual payout run or look at every batch: an admin. */
+export function canManagePayouts(user: AuthzUser): boolean {
+  return isAdmin(user)
 }

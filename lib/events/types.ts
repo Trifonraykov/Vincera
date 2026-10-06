@@ -8,6 +8,7 @@ import type {
   DisputeKind,
   EventContext,
   IdeaStatus,
+  LaunchPausedBy,
   ProductFormat,
   ProductStage,
   ProductStatus,
@@ -50,7 +51,10 @@ export const SUBJECT_TYPES = [
   "launch",
   "tracked_link",
   "order",
+  "refund",
+  "chargeback",
   "transfer",
+  "payout_batch",
   "dispute",
 ] as const
 export type SubjectType = (typeof SUBJECT_TYPES)[number]
@@ -77,7 +81,7 @@ export type SocialExpiryReason = "refresh_failed" | "unauthorized" | "revoked"
 export type ProfileEditSource = "onboarding" | "settings"
 
 /** Who paused a launch. */
-export type LaunchPausedBy = "member" | "admin" | "dispute"
+export type { LaunchPausedBy }
 
 type NoProperties = Record<string, never>
 
@@ -296,6 +300,29 @@ export interface EventCatalog {
     properties: { collab_id: string; price_cents: number; currency: string; auto_approved: boolean }
   }
   "launch.paused": { subject: "launch"; properties: { collab_id: string; by: LaunchPausedBy } }
+  /** Not in the §11 list (CLAUDE.md §19.31): a draft launch created for a collab in `building`. */
+  "launch.created": { subject: "launch"; properties: { collab_id: string } }
+  /** Not in the §11 list: a member saved the launch setup; `fields` are column names only. */
+  "launch.updated": {
+    subject: "launch"
+    properties: { collab_id: string; fields: string[]; approvals_reset: boolean }
+  }
+  /** Not in the §11 list: an admin sent the launch back to draft from `admin_review`. */
+  "launch.rejected": { subject: "launch"; properties: { collab_id: string } }
+  /** Not in the §11 list: a paused launch is live again. */
+  "launch.resumed": { subject: "launch"; properties: { collab_id: string; by: "member" | "admin" } }
+  /** Not in the §11 list: sales stopped for good (buyers keep their access). */
+  "launch.ended": {
+    subject: "launch"
+    properties: { collab_id: string; by: "admin" | "collab_ended" }
+  }
+  /** Not in the §11 list: a tracked link (the creator's default one when the launch goes live). */
+  "tracked_link.created": {
+    subject: "tracked_link"
+    properties: { launch_id: string; is_default: boolean; has_discount: boolean }
+  }
+  /** Not in the §11 list: a link stops attributing (and its promotion code is deactivated). */
+  "tracked_link.disabled": { subject: "tracked_link"; properties: { launch_id: string } }
 
   // Attribution & commerce (§10)
   "link.clicked": { subject: "tracked_link"; properties: { launch_id: string; is_bot: boolean } }
@@ -326,11 +353,76 @@ export interface EventCatalog {
     }
   }
   "order.disputed": { subject: "order"; properties: { launch_id: string } }
+  /**
+   * Not in the §11 list (CLAUDE.md §19.31): the sale's ledger entries were written once the Stripe
+   * fee was known (`postOrderLedger`). `order.paid` may come earlier with `stripe_fee_cents: 0`.
+   */
+  "order.ledger_posted": {
+    subject: "order"
+    properties: {
+      launch_id: string
+      stripe_fee_cents: number
+      platform_fee_cents: number
+      currency: string
+      entry_count: number
+    }
+  }
+  /** Not in the §11 list: the buyer opened /access/[token] (no actor: buyers have no account). */
+  "access.opened": {
+    subject: "order"
+    properties: { launch_id: string; delivery_type: DeliveryType }
+  }
+  /** Not in the §11 list: a refund row was created (by the app, or from a Stripe dashboard refund). */
+  "refund.created": {
+    subject: "refund"
+    properties: {
+      order_id: string
+      amount_cents: number
+      currency: string
+      source: "app" | "stripe"
+    }
+  }
+  /** Not in the §11 list: Stripe reported the refund failed or canceled (`order.refunded` never came). */
+  "refund.failed": {
+    subject: "refund"
+    properties: { order_id: string; amount_cents: number; currency: string }
+  }
+  /** Not in the §11 list: a chargeback closed; `lost` writes the mirror entries. */
+  "chargeback.closed": {
+    subject: "chargeback"
+    properties: {
+      order_id: string
+      outcome: "won" | "lost"
+      amount_cents: number
+      currency: string
+    }
+  }
 
   // Money & trust
   "payout.sent": {
     subject: "transfer"
     properties: { amount_cents: number; currency: string; entry_count: number }
+  }
+  /** Not in the §11 list: Stripe refused the transfer; its entries are released for a later batch. */
+  "payout.failed": {
+    subject: "transfer"
+    properties: { amount_cents: number; currency: string; failure_code: string }
+  }
+  /** Not in the §11 list: money already paid out was pulled back after a refund or chargeback. */
+  "payout.reversed": {
+    subject: "transfer"
+    properties: {
+      amount_cents: number
+      currency: string
+      cause: "refund" | "chargeback"
+      /** False when Stripe refused it: the negative entries stay and are netted later (§19.10). */
+      succeeded: boolean
+    }
+  }
+  /** Not in the §11 list: one run of the daily payout job finished. */
+  "payout.batch_completed": {
+    subject: "payout_batch"
+    properties: { transfer_count: number; total_cents: number; failed_count: number }
   }
   "dispute.opened": { subject: "dispute"; properties: { collab_id: string; kind: DisputeKind } }
   "dispute.resolved": { subject: "dispute"; properties: { collab_id: string; kind: DisputeKind } }
@@ -415,13 +507,28 @@ export const EVENT_TYPES = [
   "launch.approved",
   "launch.live",
   "launch.paused",
+  "launch.created",
+  "launch.updated",
+  "launch.rejected",
+  "launch.resumed",
+  "launch.ended",
+  "tracked_link.created",
+  "tracked_link.disabled",
   "link.clicked",
   "product_page.viewed",
   "checkout.started",
   "order.paid",
   "order.refunded",
   "order.disputed",
+  "order.ledger_posted",
+  "access.opened",
+  "refund.created",
+  "refund.failed",
+  "chargeback.closed",
   "payout.sent",
+  "payout.failed",
+  "payout.reversed",
+  "payout.batch_completed",
   "dispute.opened",
   "dispute.resolved",
   "ai.generated",

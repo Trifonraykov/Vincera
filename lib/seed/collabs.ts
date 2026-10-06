@@ -25,9 +25,9 @@ import type { SeedStep } from "./types"
  *   2. creator 02 × builder 02: stage `ended` (reason `cancelled`): the creator called it off
  *      before anyone signed, so its agreement is `terminated`;
  *   3. creator 03 × builder 03: signed by both (PDF stored and emailed by the finalize job), in
- *      `building`, with tasks (one done) and a few messages. Phase 4's launch seed takes it on.
- *
- * Three different stages (§15); `launch_review` and `live` come with Phase 4's launches seed.
+ *      `building`, with tasks (one done) and a few messages. Phase 4's launch seed takes it live.
+ *   4. creator 04 × builder 04: signed by both, in `building` with tasks and messages, and no
+ *      launch (§15's "different stages" with 03 live: agreement, building, live, plus ended).
  *
  * Signing needs both members payouts-ready, which the people step sets up. Idempotent: a pair
  * that already shares a collab is skipped; so is a pair whose people or open idea are missing.
@@ -70,6 +70,14 @@ const PLANS: readonly Plan[] = [
     scope: "A small tool that turns the creator's checklists into a printable, shareable planner.",
     creatorSplitPct: 50,
     timelineWeeks: 8,
+  },
+  {
+    pair: 4,
+    signers: ["creator", "builder"],
+    work: true,
+    scope: "An AI helper that drafts weekly lesson plans from the creator's teaching notes.",
+    creatorSplitPct: 45,
+    timelineWeeks: 5,
   },
 ]
 

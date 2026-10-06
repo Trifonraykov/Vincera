@@ -1,7 +1,11 @@
 import "server-only"
 
 import { accountHandlers } from "./account"
+import { checkoutHandlers } from "./checkout"
 import { registerStripeHandlers, type StripeEventHandler, type StripeHandlerGroup } from "./define"
+import { disputesHandlers } from "./disputes"
+import { refundsHandlers } from "./refunds"
+import { transfersHandlers } from "./transfers"
 
 export {
   eventTime,
@@ -9,6 +13,7 @@ export {
   type ParsedStripeEvent,
   type StripeEventHandler,
   type StripeHandlerGroup,
+  type AfterCommitTask,
   type StripeWebhookContext,
 } from "./define"
 
@@ -20,6 +25,11 @@ export {
  */
 const HANDLER_GROUPS: readonly StripeHandlerGroup[] = [
   accountHandlers, // account.updated, capability.updated (Phase 1)
+  // Phases 4–5 (CLAUDE.md §19.31): registered empty by the W3 prep; each owner fills its file.
+  checkoutHandlers, // checkout.session.*, charge.updated (checkout)
+  refundsHandlers, // refund.*, charge.refunded (payouts)
+  disputesHandlers, // charge.dispute.* (payouts)
+  transfersHandlers, // transfer.* (payouts)
 ]
 
 const HANDLERS = registerStripeHandlers(HANDLER_GROUPS)

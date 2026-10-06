@@ -242,9 +242,10 @@ describe("composer and settings", () => {
           email: true,
           inApp: type !== "task.assigned",
         })),
+        isAdmin: true,
       }),
     )
-    for (const group of ["Account", "Proposals", "Collabs"])
+    for (const group of ["Account", "Proposals", "Collabs", "Launches", "Money", "Admin"])
       expect(html).toContain(`>${group}</h2>`)
     // A required email (the signed agreement, CLAUDE.md §19.30) has no switch to turn off.
     expect(html.match(/name="email"/g)).toHaveLength(
@@ -252,5 +253,15 @@ describe("composer and settings", () => {
     )
     expect(html).toContain("Always emailed: it carries your signed agreement.")
     expect(html).toMatch(/name="inApp" value="task.assigned"(?![^>]*checked)/)
+    expect(html).toContain("Always emailed: it is the record of money paid to you.")
+
+    // Admin-only types are not offered to everyone else.
+    const member = renderToStaticMarkup(
+      createElement(NotificationPrefsForm, {
+        prefs: NOTIFICATION_TYPES.map((type) => ({ type, email: true, inApp: true })),
+      }),
+    )
+    expect(member).not.toContain(">Admin</h2>")
+    expect(member).not.toContain("admin.chargeback_opened")
   })
 })

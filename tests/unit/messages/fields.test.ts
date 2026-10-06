@@ -114,6 +114,9 @@ describe("notification wording", () => {
     target_title: "Budget app",
   }
   const agreement = { collab_id: ID, agreement_id: ID, collab_title: "Budget app" }
+  const launch = { collab_id: ID, launch_id: ID, launch_title: "Budget app" }
+  const order = { ...launch, order_id: ID, amount_cents: 2900, currency: "eur" }
+  const transfer = { transfer_id: ID, amount_cents: 4200, currency: "eur" }
   const samples: ParsedNotification[] = [
     { type: "social.expired", payload: { connection_id: ID, provider: "youtube" } },
     { type: "payouts.ready", payload: { stripe_account_id: "acct_1" } },
@@ -141,6 +144,18 @@ describe("notification wording", () => {
         assigned_by_name: "Ada",
       },
     },
+    { type: "launch.approval_requested", payload: { ...launch, approver_name: "Bo" } },
+    { type: "launch.rejected", payload: launch },
+    { type: "launch.live", payload: { ...launch, slug: "budget-app" } },
+    { type: "launch.paused", payload: { ...launch, paused_by: "admin" } },
+    { type: "launch.license_keys_low", payload: { ...launch, remaining: 0 } },
+    { type: "admin.launch_review_requested", payload: launch },
+    { type: "sale.made", payload: order },
+    { type: "payout.sent", payload: transfer },
+    { type: "payout.failed", payload: transfer },
+    { type: "order.refunded", payload: order },
+    { type: "order.disputed", payload: order },
+    { type: "admin.chargeback_opened", payload: { ...order, chargeback_id: ID } },
   ]
 
   it("has a title for every type, naming the person or the thing", () => {
@@ -148,7 +163,9 @@ describe("notification wording", () => {
     for (const sample of samples) {
       const text = describeNotification(sample)
       expect(text.title.length).toBeGreaterThan(0)
-      expect(`${text.title} ${text.detail ?? ""}`).toMatch(/Ada|Bo|Budget app|YouTube|payouts/)
+      expect(`${text.title} ${text.detail ?? ""}`).toMatch(
+        /Ada|Bo|Budget app|YouTube|payouts|€42\.00/,
+      )
     }
     expect(describeNotification(samples[2] as ParsedNotification).title).toBe(
       "Ada sent you a proposal",

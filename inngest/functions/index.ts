@@ -3,10 +3,16 @@ import type { Job } from "../define"
 
 import { agreementsFinalize } from "./agreements-finalize"
 import { embeddingsRefresh } from "./embeddings-refresh"
+import { ledgerCheck } from "./ledger-check"
+import { ledgerPostPending } from "./ledger-post-pending"
 import { matchingNightly } from "./matching-nightly"
 import { matchingRecompute } from "./matching-recompute"
 import { matchingTargetChanged } from "./matching-target-changed"
+import { ordersFulfilled } from "./orders-fulfilled"
+import { payoutsRelease } from "./payouts-release"
+import { payoutsReverse } from "./payouts-reverse"
 import { proposalsExpire } from "./proposals-expire"
+import { refundsNotify } from "./refunds-notify"
 import { remindersStalled } from "./reminders-stalled"
 import { socialDailySync } from "./social-daily-sync"
 import { socialSync } from "./social-sync"
@@ -17,8 +23,7 @@ import { systemPing } from "./system-ping"
  * Registry of every background job (§13). Add new jobs here: the list feeds both the Inngest
  * serve route and the inline runner used when jobs are fake.
  *
- * Phase 2–3 jobs are owned per area (CLAUDE.md §19.24). Planned later: payouts/release,
- * ledger/check.
+ * Phase 2–3 jobs are owned per area (CLAUDE.md §19.24), Phase 4–5 jobs too (§19.31).
  */
 export const jobs: readonly Job[] = [
   systemPing,
@@ -34,6 +39,13 @@ export const jobs: readonly Job[] = [
   proposalsExpire,
   remindersStalled,
   agreementsFinalize,
+  // Phases 4–5: checkout, ledger, payouts (registered by the W3 prep)
+  ordersFulfilled,
+  ledgerPostPending,
+  payoutsRelease,
+  payoutsReverse,
+  refundsNotify,
+  ledgerCheck,
 ]
 
 /** Inngest functions for `serve()`. */

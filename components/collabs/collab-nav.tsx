@@ -1,21 +1,22 @@
-import { FileSignature, LayoutDashboard, ListChecks, MessagesSquare } from "lucide-react"
+import { FileSignature, LayoutDashboard, ListChecks, MessagesSquare, Rocket } from "lucide-react"
 import Link from "next/link"
 
 import { cn } from "@/lib/utils"
 
-export type CollabSection = "overview" | "agreement" | "tasks" | "messages"
+export type CollabSection = "overview" | "agreement" | "tasks" | "messages" | "launch"
 
 const SECTIONS: { id: CollabSection; title: string; path: string; icon: typeof ListChecks }[] = [
   { id: "overview", title: "Overview", path: "", icon: LayoutDashboard },
   { id: "agreement", title: "Agreement", path: "/agreement", icon: FileSignature },
   { id: "tasks", title: "Tasks", path: "/tasks", icon: ListChecks },
   { id: "messages", title: "Messages", path: "/messages", icon: MessagesSquare },
+  { id: "launch", title: "Launch", path: "/launch", icon: Rocket },
 ]
 
 /**
  * The collab's sections (§12 `/app/collabs/[id]`, `/agreement`, `/tasks`, `/messages`) as links,
  * each with its own URL. On phones the row scrolls sideways inside itself (never the page) and
- * every link is a 44 px target. Launch and analytics join it in Phases 4 and 7.
+ * every link is a 44 px target. Launch joined it in Phase 4; analytics joins it in Phase 7.
  */
 export function CollabNav({
   collabId,

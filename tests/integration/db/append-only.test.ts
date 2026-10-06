@@ -16,11 +16,15 @@ import {
   proposalRevisions,
   socialConnections,
   trackedLinks,
-  transfers,
 } from "@/lib/db/schema"
 
 import { expectPgError, setupTestDatabase } from "../../helpers/db"
-import { insertLiveLaunch, insertOrder, insertUser } from "../../helpers/db-fixtures"
+import {
+  insertLiveLaunch,
+  insertOrder,
+  insertTransfer,
+  insertUser,
+} from "../../helpers/db-fixtures"
 
 const testDb = setupTestDatabase()
 const AO = PG_ERROR.appendOnlyViolation
@@ -178,14 +182,9 @@ describe("ledger_entries", () => {
         availableAt: new Date("2026-01-15T00:00:00Z"),
       })
       .returning()
-    const [transfer, otherTransfer] = await db
-      .insert(transfers)
-      .values([
-        { userId: creator.user.id, amountCents: 1000 },
-        { userId: creator.user.id, amountCents: 1000 },
-      ])
-      .returning()
-    if (!entry || !transfer || !otherTransfer) throw new Error("fixture setup failed")
+    const transfer = await insertTransfer(db, creator.user.id)
+    const otherTransfer = await insertTransfer(db, creator.user.id)
+    if (!entry) throw new Error("fixture setup failed")
     return { entry, transfer, otherTransfer }
   }
 

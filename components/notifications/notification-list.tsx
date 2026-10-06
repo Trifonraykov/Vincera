@@ -1,4 +1,4 @@
-import { Bell, Handshake, ListChecks, Send, type LucideIcon } from "lucide-react"
+import { Banknote, Bell, Handshake, ListChecks, Rocket, Send, type LucideIcon } from "lucide-react"
 
 import { openNotificationFormAction } from "@/lib/notifications/actions"
 import type { NotificationItem } from "@/lib/notifications/center"
@@ -11,6 +11,8 @@ const ICONS: Record<NotificationTone, LucideIcon> = {
   proposal: Send,
   collab: Handshake,
   task: ListChecks,
+  launch: Rocket,
+  money: Banknote,
 }
 
 /**

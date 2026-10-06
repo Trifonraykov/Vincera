@@ -24,7 +24,13 @@ export type CreateAccountLinkInput = {
   returnUrl: string
 }
 
-export type StripeGatewayErrorCode = "resource_missing" | "invalid_request"
+/**
+ * `resource_missing` / `invalid_request` (Phase 1); Phase 5 adds the money failures callers act on:
+ * `balance_insufficient` (platform balance too low for a transfer, or connected balance too low
+ * for a reversal) and `charge_already_refunded`.
+ */
+export type StripeGatewayErrorCode =
+  "resource_missing" | "invalid_request" | "balance_insufficient" | "charge_already_refunded"
 
 /** A Stripe request failed in a way callers may handle (the fake throws it like the API would). */
 export class StripeGatewayError extends Error {
@@ -34,6 +40,20 @@ export class StripeGatewayError extends Error {
     super(message)
     this.name = "StripeGatewayError"
     this.code = code
+  }
+}
+
+/**
+ * A gateway method a later builder still has to write (CLAUDE.md §19.31 lists the owner of each
+ * topic file). Thrown by the Phase 4–5 stubs so a premature call fails loudly instead of returning
+ * made-up data.
+ */
+export class StripeGatewayNotBuiltError extends Error {
+  constructor(method: string, owner: "launch" | "checkout" | "ledger") {
+    super(
+      `StripeGateway.${method} is not built yet (owner: the ${owner} builder, CLAUDE.md §19.31)`,
+    )
+    this.name = "StripeGatewayNotBuiltError"
   }
 }
 

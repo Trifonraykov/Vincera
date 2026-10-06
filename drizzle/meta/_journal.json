@@ -71,6 +71,13 @@
       "when": 1791236898340,
       "tag": "0009_w2_supply_collab",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791251545909,
+      "tag": "0010_w3_launch_money",
+      "breakpoints": true
     }
   ]
 }

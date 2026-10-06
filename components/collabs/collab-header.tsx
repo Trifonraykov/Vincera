@@ -33,6 +33,7 @@ export function CollabHeader({
     agreement: "Agreement",
     tasks: "Tasks",
     messages: "Messages",
+    launch: "Launch",
   }
   return (
     <div className="space-y-4">

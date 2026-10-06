@@ -51,6 +51,9 @@ export default defineConfig({
   // `next dev` compiles each route on its first request, which can take several seconds; a
   // navigation or redirect that triggers a compile would trip the default 5 s. Builds (CI) keep it.
   expect: { timeout: isCI ? 5_000 : 15_000 },
+  // A test that meets several cold routes under `next dev` (sign-up, onboarding, a redirect to
+  // `/app`) can spend most of the default 30 s compiling; builds (CI) keep the default.
+  timeout: isCI ? 30_000 : 60_000,
   use: {
     baseURL,
     trace: "retain-on-failure",

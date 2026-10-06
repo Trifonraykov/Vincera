@@ -14,6 +14,7 @@ import {
 } from "./collab"
 import {
   accessGrants,
+  chargebacks,
   launches,
   launchFiles,
   licenseKeys,
@@ -33,7 +34,7 @@ import {
   users,
 } from "./identity"
 import { matches, matchingConfig, savedItems } from "./matching"
-import { ledgerEntries, stripeAccounts, transfers } from "./money"
+import { ledgerEntries, payoutBatches, stripeAccounts, transferReversals, transfers } from "./money"
 import { audienceSnapshots, socialConnections } from "./social"
 import { ideas, products } from "./supply"
 import { adminAuditLog, disputes, notificationPrefs, notifications } from "./trust"
@@ -249,6 +250,7 @@ export const threadReadsRelations = relations(threadReads, ({ one }) => ({
 
 export const launchesRelations = relations(launches, ({ one, many }) => ({
   collab: one(collabs, { fields: [launches.collabId], references: [collabs.id] }),
+  reviewedBy: one(users, { fields: [launches.reviewedByUserId], references: [users.id] }),
   files: many(launchFiles),
   licenseKeys: many(licenseKeys),
   trackedLinks: many(trackedLinks),
@@ -286,6 +288,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   accessGrants: many(accessGrants),
   refunds: many(refunds),
+  chargebacks: many(chargebacks),
   ledgerEntries: many(ledgerEntries),
   licenseKey: one(licenseKeys),
 }))
@@ -296,7 +299,15 @@ export const accessGrantsRelations = relations(accessGrants, ({ one }) => ({
 
 export const refundsRelations = relations(refunds, ({ one, many }) => ({
   order: one(orders, { fields: [refunds.orderId], references: [orders.id] }),
+  requestedBy: one(users, { fields: [refunds.requestedByUserId], references: [users.id] }),
   ledgerEntries: many(ledgerEntries),
+  transferReversals: many(transferReversals),
+}))
+
+export const chargebacksRelations = relations(chargebacks, ({ one, many }) => ({
+  order: one(orders, { fields: [chargebacks.orderId], references: [orders.id] }),
+  ledgerEntries: many(ledgerEntries),
+  transferReversals: many(transferReversals),
 }))
 
 // --- Money -------------------------------------------------------------------------------------
@@ -305,14 +316,36 @@ export const stripeAccountsRelations = relations(stripeAccounts, ({ one }) => ({
   user: one(users, { fields: [stripeAccounts.userId], references: [users.id] }),
 }))
 
+export const payoutBatchesRelations = relations(payoutBatches, ({ many }) => ({
+  transfers: many(transfers),
+}))
+
 export const transfersRelations = relations(transfers, ({ one, many }) => ({
+  batch: one(payoutBatches, { fields: [transfers.batchId], references: [payoutBatches.id] }),
   user: one(users, { fields: [transfers.userId], references: [users.id] }),
   ledgerEntries: many(ledgerEntries),
+  reversals: many(transferReversals),
+}))
+
+export const transferReversalsRelations = relations(transferReversals, ({ one }) => ({
+  transfer: one(transfers, {
+    fields: [transferReversals.transferId],
+    references: [transfers.id],
+  }),
+  refund: one(refunds, { fields: [transferReversals.refundId], references: [refunds.id] }),
+  chargeback: one(chargebacks, {
+    fields: [transferReversals.chargebackId],
+    references: [chargebacks.id],
+  }),
 }))
 
 export const ledgerEntriesRelations = relations(ledgerEntries, ({ one }) => ({
   order: one(orders, { fields: [ledgerEntries.orderId], references: [orders.id] }),
   refund: one(refunds, { fields: [ledgerEntries.refundId], references: [refunds.id] }),
+  chargeback: one(chargebacks, {
+    fields: [ledgerEntries.chargebackId],
+    references: [chargebacks.id],
+  }),
   user: one(users, { fields: [ledgerEntries.userId], references: [users.id] }),
   transfer: one(transfers, { fields: [ledgerEntries.transferId], references: [transfers.id] }),
 }))

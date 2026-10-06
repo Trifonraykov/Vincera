@@ -8,7 +8,8 @@ import type { Db } from "@/lib/db/client"
  *   supply   matching  ideas and products in every status
  *   matches  matching  a `matching/recompute` per seeded user (real code path)
  *   collabs  collab    3 collabs in different stages (agreement, building, and one signed)
- *   launches Phase 4   1 live launch with orders
+ *   launches launch    collab 03's launch taken live (default tracked link)
+ *   orders   checkout  paid orders of that launch with their ledger (CLAUDE.md §19.31)
  *
  * Rules: idempotent (Docker runs the seed on every start; look rows up by their fixed emails
  * `seed-creator-01@example.com` … `seed-creator-10@example.com` and `seed-builder-01@example.com`
