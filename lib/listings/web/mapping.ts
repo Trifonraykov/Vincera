@@ -36,7 +36,10 @@ function formatOf(page: ParsedPage, finalUrl: URL): ProductFormat {
   const category = (page.structured.category ?? "").toLowerCase()
   const words = `${page.title ?? ""} ${page.description ?? ""} ${category}`.toLowerCase()
   if (/\b(template|notion|spreadsheet)\b/.test(words)) return "template"
-  if (/game|mobile/.test(category) || /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)) {
+  if (
+    /game|mobile/.test(category) ||
+    /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)
+  ) {
     return "app"
   }
   if (/\b(ai|gpt|llm)\b/.test(words)) return "ai_utility"

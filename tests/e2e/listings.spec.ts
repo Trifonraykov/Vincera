@@ -66,10 +66,13 @@ test("a builder imports apps and a web page; a creator finds them in the feed", 
   await expect(page.getByRole("heading", { level: 1, name: "For you" })).toBeVisible()
   const feed = page.getByRole("list", { name: "Products for you" })
   await expect(feed.getByRole("article").first()).toBeVisible()
-  const card = feed.getByRole("article", { name: /Word Sprint/ }).first()
-  for (let i = 0; i < 6 && !(await card.isVisible()); i += 1) {
-    await page.getByRole("button", { name: "Show more" }).click()
-  }
+  // The new builder's own copy of the app (seed builder 06 lists the same developer).
+  const card = feed.getByRole("article", { name: /Word Sprint/ }).filter({ hasText: `@${handle}` })
+  await expect(async () => {
+    await page.mouse.wheel(0, 4000)
+    await expect(card).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 60_000 })
+  await card.scrollIntoViewIfNeeded()
   await expect(card).toBeVisible()
   const heart = card.getByRole("button", { name: /^Save Word Sprint/ })
   await heart.click()

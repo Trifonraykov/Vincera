@@ -20,8 +20,18 @@
   },
   "routes": [
     { "host": "tasktide.example", "path": "/", "file": "tasktide.html" },
-    { "host": "www.tasktide.example", "path": "/", "status": 301, "location": "https://tasktide.example/" },
-    { "host": "go.tasktide.example", "path": "/", "status": 302, "location": "https://www.tasktide.example/" },
+    {
+      "host": "www.tasktide.example",
+      "path": "/",
+      "status": 301,
+      "location": "https://tasktide.example/"
+    },
+    {
+      "host": "go.tasktide.example",
+      "path": "/",
+      "status": 302,
+      "location": "https://www.tasktide.example/"
+    },
     {
       "host": "tasktide.example",
       "path": "/apple-touch-icon.png",

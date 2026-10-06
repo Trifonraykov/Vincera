@@ -14,13 +14,8 @@
       "apps": [
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -58,13 +53,8 @@
           "userRatingCountForCurrentVersion": 18342,
           "primaryGenreName": "Productivity",
           "primaryGenreId": 6007,
-          "genres": [
-            "Productivity",
-            "Education"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Productivity", "Education"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/focus-garden/id6450000101?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -74,23 +64,13 @@
           "currentVersionReleaseDate": "2026-09-21T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -128,13 +108,8 @@
           "userRatingCountForCurrentVersion": 5210,
           "primaryGenreName": "Health & Fitness",
           "primaryGenreId": 6007,
-          "genres": [
-            "Health & Fitness",
-            "Lifestyle"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Health & Fitness", "Lifestyle"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/habit-loop/id6450000102?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -144,23 +119,13 @@
           "currentVersionReleaseDate": "2026-08-30T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -198,13 +163,8 @@
           "userRatingCountForCurrentVersion": 9876,
           "primaryGenreName": "Finance",
           "primaryGenreId": 6007,
-          "genres": [
-            "Finance",
-            "Productivity"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Finance", "Productivity"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/pocket-budget/id6450000103?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -214,23 +174,13 @@
           "currentVersionReleaseDate": "2026-09-02T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -267,13 +217,8 @@
           "userRatingCountForCurrentVersion": 2304,
           "primaryGenreName": "Health & Fitness",
           "primaryGenreId": 6007,
-          "genres": [
-            "Health & Fitness",
-            "Music"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Health & Fitness", "Music"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/sleep-sounds-lite/id6450000104?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -283,12 +228,7 @@
           "currentVersionReleaseDate": "2026-07-15T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         }
       ]
@@ -306,13 +246,8 @@
       "apps": [
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -350,13 +285,8 @@
           "userRatingCountForCurrentVersion": 12650,
           "primaryGenreName": "Food & Drink",
           "primaryGenreId": 6007,
-          "genres": [
-            "Food & Drink",
-            "Lifestyle"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Food & Drink", "Lifestyle"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/recipe-box-meal-planner/id6460000201?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -366,23 +296,13 @@
           "currentVersionReleaseDate": "2026-09-28T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -420,13 +340,8 @@
           "userRatingCountForCurrentVersion": 3110,
           "primaryGenreName": "Lifestyle",
           "primaryGenreId": 6007,
-          "genres": [
-            "Lifestyle",
-            "Education"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Lifestyle", "Education"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/plant-pal/id6460000202?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -436,23 +351,13 @@
           "currentVersionReleaseDate": "2026-08-12T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -490,13 +395,8 @@
           "userRatingCountForCurrentVersion": 1870,
           "primaryGenreName": "Health & Fitness",
           "primaryGenreId": 6007,
-          "genres": [
-            "Health & Fitness",
-            "Medical"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Health & Fitness", "Medical"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/stretch-break/id6460000203?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -506,23 +406,13 @@
           "currentVersionReleaseDate": "2026-09-10T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         },
         {
           "isGameCenterEnabled": false,
-          "features": [
-            "iosUniversal"
-          ],
-          "supportedDevices": [
-            "iPhone15-iPhone15",
-            "iPadPro11M4-iPadPro11M4"
-          ],
+          "features": ["iosUniversal"],
+          "supportedDevices": ["iPhone15-iPhone15", "iPadPro11M4-iPadPro11M4"],
           "advisories": [],
           "kind": "software",
           "wrapperType": "software",
@@ -555,14 +445,8 @@
           "userRatingCountForCurrentVersion": 22094,
           "primaryGenreName": "Games",
           "primaryGenreId": 6007,
-          "genres": [
-            "Games",
-            "Word",
-            "Puzzle"
-          ],
-          "genreIds": [
-            "6007"
-          ],
+          "genres": ["Games", "Word", "Puzzle"],
+          "genreIds": ["6007"],
           "trackViewUrl": "https://apps.apple.com/us/app/word-sprint/id6460000204?uo=4",
           "trackContentRating": "4+",
           "contentAdvisoryRating": "4+",
@@ -572,12 +456,7 @@
           "currentVersionReleaseDate": "2026-09-25T07:00:00Z",
           "releaseNotes": "Bug fixes and small improvements.",
           "fileSizeBytes": "48211968",
-          "languageCodesISO2A": [
-            "EN",
-            "DE",
-            "ES",
-            "FR"
-          ],
+          "languageCodesISO2A": ["EN", "DE", "ES", "FR"],
           "isVppDeviceBasedLicensingEnabled": true
         }
       ]
