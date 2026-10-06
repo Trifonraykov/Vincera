@@ -4,6 +4,8 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The desktop app (desktop/) bundles a self-contained server; every other build is unchanged.
+  ...(process.env.NEXT_OUTPUT_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   // `next dev`'s route indicator sits in a corner, and on a phone every corner holds a control
   // (the tab bar's Home and More, the sidebar toggle, the theme switch), so it covered Home.
   // Compile and runtime errors are still shown (CLAUDE.md §19.19).

@@ -144,6 +144,8 @@ See LICENSE file.
 
 The repository root is also a Next.js app: a two-sided platform where creators and builders co-create and sell small digital products. The full build spec is [`CLAUDE.md`](./CLAUDE.md); decisions made during the build are in its §19. The legacy Vincera Bot above (`vincera/`, `dashboard/`, `supabase/`, Python tests) is separate: the platform's TypeScript, ESLint, Vitest and Next.js config ignore it.
 
+**Desktop app:** download the installer for macOS, Windows or Linux and double-click it: no Docker, terminal or database to install. See [`desktop/README.md`](./desktop/README.md).
+
 ## Prerequisites
 
 - Node.js 22+ and pnpm 10 (`corepack enable` picks the version pinned in `package.json`).

@@ -1,0 +1,82 @@
+{
+  "name": "vincera-desktop",
+  "productName": "Vincera",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vincera as a desktop app: the Creator x Builder platform with an embedded database.",
+  "author": "Vincera",
+  "main": "src/main.mjs",
+  "desktopName": "vincera.desktop",
+  "scripts": {
+    "build:app": "node scripts/build-app.mjs",
+    "start": "electron .",
+    "pack": "electron-builder --dir --publish never",
+    "dist": "npm run build:app && electron-builder --publish never"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "^0.0.9"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
+  },
+  "build": {
+    "appId": "app.vincera.desktop",
+    "productName": "Vincera",
+    "copyright": "Vincera",
+    "asar": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "app-bundle"
+    },
+    "files": [
+      "package.json",
+      "src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "app-bundle",
+        "to": "app-bundle",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "icon": "app-bundle/icon.png",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "differentialPackage": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "executableName": "vincera",
+      "syncDesktopName": true
+    },
+    "publish": null
+  }
+}

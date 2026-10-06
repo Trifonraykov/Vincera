@@ -69,5 +69,8 @@ export default defineConfig([
     "test-results/**",
     "coverage/**",
     ".data/**",
+    // Desktop app build output (desktop/README.md)
+    "desktop/app-bundle/**",
+    "desktop/release/**",
   ]),
 ])
