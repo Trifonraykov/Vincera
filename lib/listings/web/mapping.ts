@@ -33,15 +33,14 @@ export function listingKeyForUrl(url: URL): string {
 }
 
 function formatOf(page: ParsedPage, finalUrl: URL): ProductFormat {
-  if (page.structured.type === "product") return "other"
   const category = (page.structured.category ?? "").toLowerCase()
-  if (
-    /game|mobile/.test(category) ||
-    /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)
-  ) {
+  const words = `${page.title ?? ""} ${page.description ?? ""} ${category}`.toLowerCase()
+  if (/\b(template|notion|spreadsheet)\b/.test(words)) return "template"
+  if (/game|mobile/.test(category) || /apps\.apple\.com|play\.google\.com/.test(finalUrl.hostname)) {
     return "app"
   }
-  if (/template|notion/.test(`${page.title ?? ""} ${category}`.toLowerCase())) return "template"
+  if (/\b(ai|gpt|llm)\b/.test(words)) return "ai_utility"
+  if (page.structured.type === "product") return "other"
   return "tool"
 }
 
