@@ -106,6 +106,17 @@ async function findExisting(
   return row ?? null
 }
 
+/** JSON with sorted keys (jsonb hands objects back in its own key order). */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+        )
+      : inner,
+  )
+}
+
 function sameMedia(a: readonly ProductMediaItem[], b: readonly ProductMediaItem[]): boolean {
   return (
     a.length === b.length && a.every((item, i) => item.key === b[i]?.key && item.kind === b[i]?.kind)
@@ -246,7 +257,7 @@ export async function saveListingDraft(
       }
       if (!sameMedia(locked.media, copied.media)) fields.push("media")
       if (locked.sourceUrl !== draft.sourceUrl) fields.push("source_url")
-      if (JSON.stringify(locked.sourceMeta) !== JSON.stringify(draft.meta)) {
+      if (stableJson(locked.sourceMeta) !== stableJson(draft.meta)) {
         fields.push("source_meta")
       }
       const restored = locked.sourceRemovedAt !== null

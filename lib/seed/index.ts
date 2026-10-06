@@ -1,5 +1,6 @@
 import { seedCollabs } from "./collabs"
 import { seedLaunches } from "./launches"
+import { seedListings } from "./listings"
 import { seedMatches } from "./matches"
 import { seedMatchingHistory } from "./matching-history"
 import { seedOrders } from "./orders"
@@ -13,6 +14,7 @@ export type { SeedContext, SeedStep } from "./types"
 export const SEED_STEPS: readonly SeedStep[] = [
   seedPeople,
   seedSupply,
+  seedListings,
   seedMatches,
   seedCollabs,
   seedLaunches,
